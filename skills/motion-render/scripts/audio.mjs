@@ -1,6 +1,6 @@
 // ナレーション（Gemini TTS）と BGM（Lyria）を作り、ffmpeg で 1 本の音声に合成する。
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
@@ -8,16 +8,30 @@ const API = 'https://generativelanguage.googleapis.com/v1beta/models';
 const TIMEOUT_MS = 90_000; // a TTS request once hung for 15 minutes without this
 const RETRIES = 3;
 
+// ffmpeg-static downloads its binary in a postinstall script, which Claude Code's plugin dependency
+// install does not run: fetch it on first use instead.
+function bundledFfmpeg() {
+  const require = createRequire(import.meta.url);
+  let bin;
+  try {
+    bin = require('ffmpeg-static');
+  } catch {
+    return null; // package not installed
+  }
+  if (bin && existsSync(bin)) return bin;
+  const installer = join(dirname(require.resolve('ffmpeg-static')), 'install.js');
+  if (!existsSync(installer)) return null;
+  console.error('motion-render: downloading ffmpeg (first run only)...');
+  spawnSync(process.execPath, [installer], { stdio: ['ignore', 'inherit', 'inherit'], cwd: dirname(installer) });
+  return bin && existsSync(bin) ? bin : null;
+}
+
 export function findFfmpeg() {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
-  try {
-    const bundled = createRequire(import.meta.url)('ffmpeg-static');
-    if (bundled && existsSync(bundled)) return bundled;
-  } catch {
-    // ffmpeg-static could not provide a binary (e.g. its download was blocked): fall back to PATH.
-  }
+  const bundled = bundledFfmpeg();
+  if (bundled) return bundled;
   if (spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0) return 'ffmpeg';
-  throw new Error('ffmpeg not found: reinstall motion-render, install ffmpeg, or set FFMPEG_PATH');
+  throw new Error('ffmpeg not found: install ffmpeg or set FFMPEG_PATH');
 }
 
 export function runFfmpeg(args) {

@@ -28,13 +28,13 @@ Motion の Artifact 型は作成時に Style・Colors・Length を質問する�
 
 ## 0. 準備（毎回、最初に確かめる）
 
-このスキルは、描画と合成を `motion-render` コマンドで行う。コマンドは、このスキルのディレクトリ
-（Claude に渡される "Base directory for this skill"。以下 `<skill>`）の中身を npm でインストールしたもの。
+このスキルは、描画と合成を `motion-render` コマンドで行う。Claude Code のプラグインとして入れた場合は、
+プラグインが `motion-render` を用意するので、利用者は何もしなくてよい。skills CLI などでスキルだけを入れた場合は、
+このスキルのディレクトリ（Claude に渡される "Base directory for this skill"。以下 `<skill>`）から入れる。
 
-1. `motion-render --version` を実行し、`<skill>/package.json` の `version` と比べる
+1. `motion-render --version` を実行し、`<skill>/package.json` の `version` と比べる。同じなら次へ
 2. コマンドが無い、または版が違うときは `npm install -g "<skill>"` を実行する。権限や sandbox で失敗したら、
-   利用者に次の 1 行を打ってもらうよう、絶対パスを埋めて示し、待つ:
-   `! npm install -g "<skill の絶対パス>"`
+   Claude Code のプラグインとして入れ直すよう案内する（README の「インストール」。それで追加の作業は要らなくなる）
 3. `GEMINI_API_KEY` が無いと `narrate`・`bgm` が止まる。止まったら、キーを Google AI Studio で発行して
    シェルの設定に `export GEMINI_API_KEY=...` を足し、Claude Code を起動し直すよう案内する
 4. `motion-render stills` などで Chromium が `bootstrap_check_in ... Permission denied` で起動しないのは、

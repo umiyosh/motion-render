@@ -26,17 +26,9 @@ macOS・Linux・Windows で動きます。
 
 ## インストール
 
-### 1. スキルを入れる（どちらか一方）
+### 1. 入れる
 
-**A. skills CLI で入れる**（Claude Code のほか Codex・Cursor などにも入れられます）
-
-```sh
-npx skills add umiyosh/motion-render -g -a claude-code
-```
-
-使うときは `/motion-render <テーマ>` です。
-
-**B. Claude Code のプラグインとして入れる**（Claude Code の中で実行）
+**Claude Code の場合（推奨）: プラグインとして入れる**。Claude Code の中で実行します。
 
 ```
 /plugin install motion-render --marketplace umiyosh/motion-render
@@ -49,7 +41,17 @@ Claude Code 2.1.275 より前の版では、2 行に分けて実行します。
 /plugin install motion-render@motion-render
 ```
 
+描画用のコマンドと部品も一緒に入るので、ほかに入れるものはありません。
 プラグインのスキルは名前の前にプラグイン名が付くので、使うときは `/motion-render:motion-render <テーマ>` です。
+
+**ほかのエージェント（Codex・Cursor など）の場合: skills CLI で入れる**
+
+```sh
+npx skills add umiyosh/motion-render -g
+```
+
+スキルだけが入るので、初回に Claude（エージェント）が `motion-render` コマンドを `npm install -g` で入れます。
+sandbox などで入れられない環境では、Claude Code ならプラグインとして入れてください。
 
 ### 2. API キーを設定する
 
@@ -83,11 +85,12 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 ### 4. 最初の 1 本を作る
 
 ```
-/motion-render 〇〇を説明する 30 秒の動画つくって
+/motion-render:motion-render 〇〇を説明する 30 秒の動画つくって
 ```
 
-初回は、Claude がスキルの中身から `motion-render` コマンドを自動で入れ（`npm install -g`）、描画用の Chromium（約 210 MB）をダウンロードします。
-権限の都合で Claude が入れられないときは、打つべきコマンドが表示されるので、そのまま実行してください。
+（skills CLI で入れた場合は `/motion-render 〇〇を…`）
+
+初回は、描画用の Chromium（約 210 MB）と ffmpeg が自動でダウンロードされます。
 
 ## 使い方
 
@@ -151,6 +154,9 @@ B で入れた場合は、Claude Code の中で `/plugin uninstall motion-render
 .claude-plugin/
   marketplace.json        # Claude Code のプラグイン一覧（このリポジトリ自身を載せる）
   plugin.json             # プラグインの名札
+bin/motion-render         # プラグインが PATH に載せるコマンド（skills/motion-render の CLI を呼ぶ）
+package.json              # プラグインの依存。Claude Code がプラグインを入れるときに自動で入れる
+package-lock.json
 skills/motion-render/     # スキル本体（skills CLI とプラグインの両方がここを読む）
   SKILL.md                # Claude が読む手順（準備、絵コンテ・原稿・BGM の決め方を含む）
   package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static）

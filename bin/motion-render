@@ -1,0 +1,5 @@
+#!/bin/sh
+# Claude Code puts a plugin's bin/ on PATH, so the motion-render skill can run this by name.
+# The CLI lives in skills/motion-render; Node resolves its dependencies from the plugin root's node_modules.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec node "$here/../skills/motion-render/scripts/cli.mjs" "$@"
