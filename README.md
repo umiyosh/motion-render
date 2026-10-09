@@ -12,11 +12,11 @@ From that one line, Claude writes a storyboard and a narration script, generates
 
 ## Demo
 
-An introduction video made by motion-render itself (59 seconds, with sound; the narration is in Japanese).
+An introduction video made by motion-render itself (57 seconds, with sound).
 
 https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 
-![How motion-render works](docs/how-it-works.svg)
+![How motion-render works](docs/how-it-works.en.svg)
 
 - Look, length, voice and the mood of the music are chosen from the theme (anything you specify wins)
 - You can also pass the URL of an existing Motion film to get an MP4 with narration and BGM
@@ -178,5 +178,6 @@ skills/motion-render/     # The skill (read by both the skills CLI and the plugi
   scripts/audio.mjs       # Narration and BGM generation, audio mixing
   scripts/work.mjs        # script.json validation and scene timing
   scripts/render.mjs      # Rendering in the browser
-docs/how-it-works.svg     # Diagram used in the README (Japanese labels)
+docs/how-it-works.en.svg  # Diagram used in this README
+docs/how-it-works.svg     # Diagram used in the Japanese README
 ```
