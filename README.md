@@ -1,168 +1,182 @@
 # motion-render
 
-テーマを伝えるだけで、それを説明する**アニメーション動画を作り、ナレーションと BGM を付けて MP4 にする** Agent Skill です。
+English | [日本語](README.ja.md)
+
+An Agent Skill that turns a theme into an **animated explainer video with narration and background music, rendered to MP4**.
 
 ```
-/motion-render Workload Identity Federation による GitHub Actions から Google Cloud への認証の仕組みを説明する動画つくって
+/motion-render:motion-render Make a video that explains how GitHub Actions authenticates to Google Cloud with Workload Identity Federation
 ```
 
-この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、Claude の **Motion** でアニメーションを作り、手元の MP4 に書き出します。
+From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and BGM that fits the theme (Lyria), builds the animation with Claude **Motion**, and renders it to an MP4 on your machine.
 
-![motion-render の仕組み](docs/how-it-works.svg)
+## Demo
 
-- 見た目・長さ・声・BGM の雰囲気はテーマから自動で決まります（指定すればそれに従います）
-- 既存の Motion の動画の URL を渡して、ナレーションと BGM 付きの MP4 にすることもできます
-- 描画用のブラウザ（Chromium）と ffmpeg は自動で用意されるので、環境ごとの差が出ません
+An introduction video made by motion-render itself (59 seconds, with sound; the narration is in Japanese).
 
-## 必要なもの
+{{DEMO_VIDEO_URL}}
 
-| もの | 備考 |
-|------|------|
-| Claude Code | Artifact（Motion）を扱えるアカウント |
-| Node.js 18 以上 | `node -v` で確認 |
-| Gemini API キー | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します |
+![How motion-render works](docs/how-it-works.svg)
 
-macOS・Linux・Windows で動きます。
+- Look, length, voice and the mood of the music are chosen from the theme (anything you specify wins)
+- You can also pass the URL of an existing Motion film to get an MP4 with narration and BGM
+- The rendering browser (Chromium) and ffmpeg are set up automatically, so results don't depend on what is installed on your machine
 
-## インストール
+## Requirements
 
-### 1. 入れる
+| What | Notes |
+|------|-------|
+| Claude Code | An account that can use Artifacts (Motion) |
+| Node.js 18 or later | Check with `node -v` |
+| Gemini API key | Used for narration and BGM. Create one in [Google AI Studio](https://aistudio.google.com/apikey) |
 
-**Claude Code の場合（推奨）: プラグインとして入れる**。Claude Code の中で実行します。
+Works on macOS, Linux and Windows.
+
+## Install
+
+### 1. Install
+
+**Claude Code (recommended): install it as a plugin.** Run this inside Claude Code:
 
 ```
 /plugin install motion-render --marketplace umiyosh/motion-render
 ```
 
-Claude Code 2.1.275 より前の版では、2 行に分けて実行します。
+On Claude Code versions before 2.1.275, run it as two lines:
 
 ```
 /plugin marketplace add umiyosh/motion-render
 /plugin install motion-render@motion-render
 ```
 
-描画用のコマンドと部品も一緒に入るので、ほかに入れるものはありません。
-プラグインのスキルは名前の前にプラグイン名が付くので、使うときは `/motion-render:motion-render <テーマ>` です。
+The rendering command and its dependencies come with the plugin, so there is nothing else to install.
+Plugin skills are prefixed with the plugin name, so you call it as `/motion-render:motion-render <theme>`.
 
-**ほかのエージェント（Codex・Cursor など）の場合: skills CLI で入れる**
+**Other agents (Codex, Cursor, …): install with the skills CLI**
 
 ```sh
 npx skills add umiyosh/motion-render -g
 ```
 
-スキルだけが入るので、初回に Claude（エージェント）が `motion-render` コマンドを `npm install -g` で入れます。
-sandbox などで入れられない環境では、Claude Code ならプラグインとして入れてください。
+This installs the skill only. On first use, the agent installs the `motion-render` command with `npm install -g`.
+If your environment blocks that (a sandbox, for example) and you use Claude Code, install it as a plugin instead.
 
-### 2. API キーを設定する
+### 2. Set the API key
 
-シェルの設定ファイル（`~/.zshrc` など）に足して、Claude Code を起動し直します。
+Add this to your shell profile (`~/.zshrc` or similar) and restart Claude Code.
 
 ```sh
-export GEMINI_API_KEY="発行したキー"
+export GEMINI_API_KEY="your key"
 ```
 
-### 3. Claude Code の sandbox を使っている場合だけ: 設定を足す
+### 3. Only if you use the Claude Code sandbox: add settings
 
-sandbox の中では描画用のブラウザが起動できません。`~/.claude/settings.json` に次の 2 つを足し、`motion-render` だけを sandbox の外で動かします。
+Chromium cannot start inside the sandbox. Add these two entries to `~/.claude/settings.json` so that only `motion-render` runs outside it.
 
 ```jsonc
 {
   "sandbox": {
-    "excludedCommands": ["motion-render:*"]   // 既存の配列に追加
+    "excludedCommands": ["motion-render:*"]   // add to the existing array
   },
   "permissions": {
-    "allow": ["Bash(motion-render:*)"]        // 既存の配列に追加
+    "allow": ["Bash(motion-render:*)"]        // add to the existing array
   }
 }
 ```
 
-auto mode を使っていて、それでも実行が拒否される場合は、`autoMode.environment` に次の 1 行も足してください。
+If you use auto mode and runs are still refused, also add this line to `autoMode.environment`:
 
 ```jsonc
 "**Motion rendering**: rendering Motion films to MP4 with headless Chromium via the `motion-render` command, outside the Bash sandbox, is routine work requested by the user"
 ```
 
-### 4. 最初の 1 本を作る
+### 4. Make your first video
 
 ```
-/motion-render:motion-render 〇〇を説明する 30 秒の動画つくって
+/motion-render:motion-render Make a 30-second video that explains …
 ```
 
-（skills CLI で入れた場合は `/motion-render 〇〇を…`）
+(If you installed with the skills CLI: `/motion-render Make a …`)
 
-初回は、描画用の Chromium（約 210 MB）と ffmpeg が自動でダウンロードされます。
+On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automatically.
 
-## 使い方
+## Usage
 
-- 長さ・出力先・雰囲気などは、続けて書けば反映されます（例:「30 秒で」「`~/Movies` に出して」「BGM はニュース風」）
-- 出力先を言わなければ、`$MOTION_RENDER_OUT_DIR`、無ければカレントディレクトリに保存されます
-- できた後に「BGM を変えて」「ここの説明を短く」と頼めば、その部分だけ作り直します
-- 既存の Motion の動画なら、URL を渡して「MP4 にして」と頼みます。ナレーションと BGM も付きます
+- Add length, output location or mood in the same request (e.g. "30 seconds", "save it to `~/Movies`", "news-style BGM")
+- Without an output location, the video goes to `$MOTION_RENDER_OUT_DIR`, or the current directory
+- After it is done, ask "change the BGM" or "shorten this part" and only that part is redone
+- For an existing Motion film, pass its URL and ask for an MP4. Narration and BGM are added too
 
-### コマンド（Claude が内部で使うもの）
+### Commands (used by Claude under the hood)
 
-動画 1 本ごとに作業フォルダ（`<work>`）を 1 つ使います。中身と `script.json` の書き方は [SKILL.md](skills/motion-render/SKILL.md) にあります。
+Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md).
 
-| コマンド | やること |
-|----------|----------|
-| `motion-render narrate <work>` | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く |
-| `motion-render bgm <work>` | `script.json` の `bgm` の指示から BGM を作る |
-| `motion-render prepare <storeDir> <work>/film` | Motion から取得した映像データを、描画できる形に展開する |
-| `motion-render stills <filmDir> <outDir> 0,5,12` | 確認用の静止画を書き出す |
-| `motion-render build <work> [out.mp4]` | ナレーションと BGM を合成し、映像と合わせて MP4 にする（どちらかが無いと止まる） |
-| `motion-render --version` | 版を表示する |
+| Command | What it does |
+|---------|--------------|
+| `motion-render narrate <work>` | Generates narration from `script.json` and writes scene lengths to `timing.json` |
+| `motion-render bgm <work>` | Generates the BGM from the `bgm` prompt in `script.json` |
+| `motion-render prepare <storeDir> <work>/film` | Expands a Motion film's data into a directory it can render |
+| `motion-render stills <filmDir> <outDir> 0,5,12` | Writes still frames for checking |
+| `motion-render build <work> [out.mp4]` | Mixes narration and BGM and renders the MP4 (stops if either is missing) |
+| `motion-render --version` | Prints the version |
 
-| 環境変数 | 効果 |
-|----------|------|
-| `GEMINI_API_KEY` | ナレーションと BGM の生成に必要 |
-| `MOTION_RENDER_OUT_DIR` | `build` の出力先を省略したときの保存先 |
-| `CHROMIUM_PATH` | 同梱の Chromium の代わりに、手元の Chrome や Chromium を使う |
-| `FFMPEG_PATH` | 同梱の ffmpeg の代わりに、手元の ffmpeg を使う |
+| Environment variable | Effect |
+|----------------------|--------|
+| `GEMINI_API_KEY` | Required for narration and BGM |
+| `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path |
+| `CHROMIUM_PATH` | Use your own Chrome or Chromium instead of the bundled one |
+| `FFMPEG_PATH` | Use your own ffmpeg instead of the bundled one |
 
-## 困ったとき
+## Troubleshooting
 
-| 症状 | 原因と対処 |
-|------|------------|
-| `bootstrap_check_in ... Permission denied` でブラウザが起動しない | Claude Code の sandbox の中で動いています。インストールの手順 3 を確認してください。`motion-render` は単体で実行する必要があります（`\| grep` や `&&` でつなぐと sandbox の外に出ません） |
-| `GEMINI_API_KEY is not set` | インストールの手順 2 を確認し、Claude Code を起動し直してください |
-| ナレーションや BGM の生成が何度も失敗する | 1 回 90 秒で打ち切り、3 回まで再試行します。それでも失敗するなら、API キーの権限と利用上限を確認してください |
-| `motion-render` のインストールで ffmpeg のダウンロードが失敗する | 社内プロキシなどで GitHub からの取得が止められています。`npm install -g --ignore-scripts <スキルのフォルダ>` で入れ、手元の ffmpeg を `FFMPEG_PATH` で指定してください（PATH 上の `ffmpeg` も自動で使います） |
-| 初回の Chromium のダウンロードが失敗する | `CHROMIUM_PATH` に手元の Chrome か Chromium を指定してください |
-| 日本語の字形や改行位置が Motion のページと少し違う | 文字は OS のフォントで描かれます |
+| Symptom | Cause and fix |
+|---------|---------------|
+| The browser fails with `bootstrap_check_in ... Permission denied` | It is running inside the Claude Code sandbox. Check step 3 of the install. `motion-render` must run on its own (chaining it with `\| grep` or `&&` keeps it in the sandbox) |
+| `GEMINI_API_KEY is not set` | Check step 2 of the install and restart Claude Code |
+| Narration or BGM generation keeps failing | Each request times out after 90 seconds and is retried up to 3 times. If it still fails, check your API key's permissions and quota |
+| ffmpeg fails to download | A proxy is blocking downloads from GitHub. Install ffmpeg yourself (it is used from `PATH`) or point `FFMPEG_PATH` at it |
+| Chromium fails to download on first run | Point `CHROMIUM_PATH` at your own Chrome or Chromium |
+| Japanese glyphs or line breaks differ slightly from the Motion page | Text is drawn with your OS fonts |
 
-## アンインストール
+## Uninstall
+
+If you installed the plugin, run this inside Claude Code:
+
+```
+/plugin uninstall motion-render
+```
+
+If you used the skills CLI, run this in your shell:
 
 ```sh
+npx skills remove motion-render -g
 npm uninstall -g motion-render
-npx skills remove motion-render -g        # A で入れた場合
 ```
 
-B で入れた場合は、Claude Code の中で `/plugin uninstall motion-render` を実行します。
+The downloaded Chromium is in Playwright's cache (`~/Library/Caches/ms-playwright` on macOS, `~/.cache/ms-playwright` on Linux). Delete it if you no longer need it.
 
-ダウンロードした Chromium は Playwright のキャッシュ（macOS は `~/Library/Caches/ms-playwright`、Linux は `~/.cache/ms-playwright`）にあります。不要なら消してください。
+## Security
 
-## 安全性
+- While rendering, the film's code cannot reach the network or read files outside the film directory
+- Chromium starts with its own sandbox enabled (Playwright disables it by default, so it is turned on explicitly)
+- Only the `motion-render` command is taken out of the Claude Code sandbox
+- The API key is read from the environment only and is never written to files or videos
 
-- 描画中、動画のコードは外部への通信をすべて遮断され、映像データのフォルダの外のファイルも読めません
-- Chromium 自身の sandbox を有効にして起動します（Playwright は既定で無効にするため、明示的に有効にしています）
-- Claude Code の sandbox から外すのは `motion-render` コマンドだけです
-- API キーは環境変数から読むだけで、ファイルや動画には残しません
-
-## 構成
+## Layout
 
 ```
 .claude-plugin/
-  marketplace.json        # Claude Code のプラグイン一覧（このリポジトリ自身を載せる）
-  plugin.json             # プラグインの名札
-bin/motion-render         # プラグインが PATH に載せるコマンド（skills/motion-render の CLI を呼ぶ）
-package.json              # プラグインの依存。Claude Code がプラグインを入れるときに自動で入れる
+  marketplace.json        # Claude Code plugin catalog (lists this repository itself)
+  plugin.json             # Plugin manifest
+bin/motion-render         # Command the plugin puts on PATH (runs the CLI in skills/motion-render)
+package.json              # Plugin dependencies, installed by Claude Code with the plugin
 package-lock.json
-skills/motion-render/     # スキル本体（skills CLI とプラグインの両方がここを読む）
-  SKILL.md                # Claude が読む手順（準備、絵コンテ・原稿・BGM の決め方を含む）
-  package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static）
-  scripts/cli.mjs         # motion-render コマンド
-  scripts/audio.mjs       # ナレーションと BGM の生成、音声の合成
-  scripts/work.mjs        # script.json の検証と場面の秒数の計算
-  scripts/render.mjs      # ブラウザで描画する部分
-docs/how-it-works.svg     # README の図
+skills/motion-render/     # The skill (read by both the skills CLI and the plugin)
+  SKILL.md                # Instructions for Claude (setup, storyboard, script and BGM choices)
+  package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static)
+  scripts/cli.mjs         # The motion-render command
+  scripts/audio.mjs       # Narration and BGM generation, audio mixing
+  scripts/work.mjs        # script.json validation and scene timing
+  scripts/render.mjs      # Rendering in the browser
+docs/how-it-works.svg     # Diagram used in the README (Japanese labels)
 ```
