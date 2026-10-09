@@ -14,7 +14,7 @@
 
 motion-render 自身が作った紹介動画です（59 秒、音声あり）。
 
-{{DEMO_VIDEO_URL}}
+https://github.com/user-attachments/assets/eef24445-185a-4601-9503-3faf1c3bd559
 
 ![motion-render の仕組み](docs/how-it-works.svg)
 
