@@ -15,6 +15,8 @@ const DEFAULTS = {
 };
 
 const ID = /^[a-z][a-z0-9-]{0,31}$/;
+const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const NUMBERS = [['speed', 0.5, 2], ['bgmVolume', 0, 1], ['lead', 0, 5], ['tail', 0, 5], ['endHold', 0, 30]];
 
 export function loadScript(work) {
   const file = join(work, 'script.json');
@@ -30,7 +32,13 @@ export function loadScript(work) {
     seen.add(sc.id);
     if (typeof sc.narration !== 'string' || !sc.narration.trim()) fail(`scenes[${i}].narration is required (every scene is narrated)`);
   });
-  if (!(s.speed >= 0.5 && s.speed <= 2)) fail('"speed" must be between 0.5 and 2');
+  // These values are written into ffmpeg filter graphs and API URLs: accept plain numbers and names only.
+  for (const [key, min, max] of NUMBERS) {
+    if (typeof s[key] !== 'number' || !Number.isFinite(s[key]) || s[key] < min || s[key] > max) fail(`"${key}" must be a number between ${min} and ${max}`);
+  }
+  for (const key of ['voice', 'ttsModel', 'bgmModel']) {
+    if (typeof s[key] !== 'string' || !NAME.test(s[key])) fail(`"${key}" must match ${NAME}`);
+  }
   return s;
 }
 
