@@ -1,0 +1,14 @@
+{
+  "name": "motion-render",
+  "description": "motion-render: explainer videos with narration and BGM from a theme, via Claude Motion",
+  "owner": {
+    "name": "umiyosh"
+  },
+  "plugins": [
+    {
+      "name": "motion-render",
+      "source": "./",
+      "description": "Make an animated explainer video from a theme with Claude Motion, add narration and BGM, and render it to MP4."
+    }
+  ]
+}
