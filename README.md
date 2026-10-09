@@ -14,7 +14,7 @@ From that one line, Claude writes a storyboard and a narration script, generates
 
 An introduction video made by motion-render itself (59 seconds, with sound; the narration is in Japanese).
 
-https://github.com/user-attachments/assets/19187fdb-75d3-469c-b704-6ff844cff49e
+https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 
 ![How motion-render works](docs/how-it-works.svg)
 
