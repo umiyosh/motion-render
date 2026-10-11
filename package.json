@@ -5,10 +5,17 @@
   "description": "Claude Code plugin root for motion-render. Claude Code installs these dependencies when it installs the plugin; bin/motion-render runs the CLI in skills/motion-render.",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=22.18"
   },
   "dependencies": {
     "ffmpeg-static": "5.2.0",
     "playwright-core": "1.56.1"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.8.3"
   }
 }

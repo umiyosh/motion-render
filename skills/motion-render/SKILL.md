@@ -34,7 +34,8 @@ Motion の Artifact 型は作成時に Style・Colors・Length を質問する�
 
 1. `motion-render --version` を実行し、`<skill>/package.json` の `version` と比べる。同じなら次へ
 2. コマンドが無い、または版が違うときは `npm install -g "<skill>"` を実行する。権限や sandbox で失敗したら、
-   Claude Code のプラグインとして入れ直すよう案内する（README の「インストール」。それで追加の作業は要らなくなる）
+   Claude Code のプラグインとして入れ直すよう案内する（README の「インストール」。それで追加の作業は要らなくなる）。
+   `Unknown file extension ".ts"` で止まるのは Node が 22.18 より古いため。Node の更新を案内する
 3. `GEMINI_API_KEY` が無いと `narrate`・`bgm` が止まる。止まったら、キーを Google AI Studio で発行して
    シェルの設定に `export GEMINI_API_KEY=...` を足し、Claude Code を起動し直すよう案内する
 4. `motion-render stills` などで Chromium が `bootstrap_check_in ... Permission denied` で起動しないのは、
@@ -152,7 +153,8 @@ URL を渡された場合も音を付ける。映像データを取得し（手�
 
 ## ファイル
 
-- `scripts/cli.mjs`: `motion-render` コマンド
-- `scripts/audio.mjs`: Gemini TTS・Lyria の呼び出し（90 秒の上限と再試行付き）と音声の合成
-- `scripts/work.mjs`: `script.json` の検証と `timing.json` の計算
-- `scripts/render.mjs`: プレーヤーを開いてコマを返す。描画中は外部への通信を遮断し、Chromium の sandbox を有効にする
+- `scripts/cli.ts`: `motion-render` コマンド（TypeScript。Node 22.18 以上がそのまま実行する）
+- `scripts/audio.ts`: Gemini TTS・Lyria の呼び出し（90 秒の上限と再試行付き）と音声の合成
+- `scripts/work.ts`: `script.json` の検証と `timing.json` の計算
+- `scripts/render.ts`: プレーヤーを開いてコマを返す。描画中は外部への通信を遮断し、Chromium の sandbox を有効にする
+- `scripts/json.ts`: ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む

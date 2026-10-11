@@ -5,14 +5,14 @@
   "repository": "github:umiyosh/motion-render",
   "type": "module",
   "bin": {
-    "motion-render": "scripts/cli.mjs"
+    "motion-render": "scripts/cli.ts"
   },
   "files": [
     "SKILL.md",
     "scripts/"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22.18"
   },
   "dependencies": {
     "ffmpeg-static": "5.2.0",
