@@ -3,30 +3,44 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { errorMessage, field, readJson } from './json.ts';
+import type { Script } from './work.ts';
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models';
 const TIMEOUT_MS = 90_000; // a TTS request once hung for 15 minutes without this
 const RETRIES = 3;
 
+interface Audio {
+  mimeType: string;
+  data: Buffer;
+}
+
+// Where each scene's narration goes on the film timeline.
+export interface MixTiming {
+  scenes: { id: string; start: number }[];
+  total: number;
+}
+
 // ffmpeg-static downloads its binary in a postinstall script, which Claude Code's plugin dependency
 // install does not run: fetch it on first use instead.
-function bundledFfmpeg() {
+function bundledFfmpeg(): string | null {
   const require = createRequire(import.meta.url);
-  let bin;
+  let bin: unknown;
   try {
     bin = require('ffmpeg-static');
   } catch {
     return null; // package not installed
   }
-  if (bin && existsSync(bin)) return bin;
+  if (typeof bin !== 'string') return null;
+  if (existsSync(bin)) return bin;
   const installer = join(dirname(require.resolve('ffmpeg-static')), 'install.js');
   if (!existsSync(installer)) return null;
   console.error('motion-render: downloading ffmpeg (first run only)...');
   spawnSync(process.execPath, [installer], { stdio: ['ignore', 'inherit', 'inherit'], cwd: dirname(installer) });
-  return bin && existsSync(bin) ? bin : null;
+  return existsSync(bin) ? bin : null;
 }
 
-export function findFfmpeg() {
+export function findFfmpeg(): string {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
   const bundled = bundledFfmpeg();
   if (bundled) return bundled;
@@ -34,7 +48,7 @@ export function findFfmpeg() {
   throw new Error('ffmpeg not found: install ffmpeg or set FFMPEG_PATH');
 }
 
-export function runFfmpeg(args) {
+export function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((ok, fail) => {
     const ff = spawn(findFfmpeg(), ['-y', '-loglevel', 'error', ...args], { stdio: ['ignore', 'inherit', 'inherit'] });
     ff.on('error', fail);
@@ -42,11 +56,26 @@ export function runFfmpeg(args) {
   });
 }
 
-// Calls Gemini generateContent and returns the first inline audio part: { mimeType, data: Buffer }.
-async function generateAudio(model, body) {
+// Picks the first inline audio part out of a generateContent response.
+function audioPart(json: unknown): { mimeType: string; data: string } | null {
+  const candidates = field(json, 'candidates');
+  const first: unknown = Array.isArray(candidates) ? candidates[0] : undefined;
+  const list = field(field(first, 'content'), 'parts');
+  if (!Array.isArray(list)) return null;
+  for (const p of list) {
+    const inline = field(p, 'inlineData');
+    const mimeType = field(inline, 'mimeType');
+    const data = field(inline, 'data');
+    if (typeof mimeType === 'string' && typeof data === 'string') return { mimeType, data };
+  }
+  return null;
+}
+
+// Calls Gemini generateContent and returns the first inline audio part.
+async function generateAudio(model: string, body: object): Promise<Audio> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is not set (needed for narration and BGM)');
-  let last;
+  let last: unknown;
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
     try {
       const res = await fetch(`${API}/${model}:generateContent`, {
@@ -55,21 +84,24 @@ async function generateAudio(model, body) {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(`${model}: HTTP ${res.status} ${json.error?.message ?? ''}`.trim());
-      const part = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+      const json: unknown = await res.json();
+      if (!res.ok) {
+        const detail = field(field(json, 'error'), 'message');
+        throw new Error(`${model}: HTTP ${res.status} ${typeof detail === 'string' ? detail : ''}`.trim());
+      }
+      const part = audioPart(json);
       if (!part) throw new Error(`${model}: no audio in the response`);
-      return { mimeType: part.inlineData.mimeType, data: Buffer.from(part.inlineData.data, 'base64') };
+      return { mimeType: part.mimeType, data: Buffer.from(part.data, 'base64') };
     } catch (e) {
       last = e;
-      console.error(`motion-render: ${model} attempt ${attempt}/${RETRIES} failed: ${e.message}`);
+      console.error(`motion-render: ${model} attempt ${attempt}/${RETRIES} failed: ${errorMessage(e)}`);
     }
   }
   throw last;
 }
 
 // Gemini TTS returns WAV, or raw 16-bit PCM ("audio/L16;rate=24000") on some models: always store WAV.
-function toWav({ mimeType, data }) {
+function toWav({ mimeType, data }: Audio): Buffer {
   if (data.subarray(0, 4).toString() === 'RIFF') return data;
   const rate = Number(/rate=(\d+)/.exec(mimeType)?.[1] ?? 24000);
   const h = Buffer.alloc(44);
@@ -80,7 +112,7 @@ function toWav({ mimeType, data }) {
   return Buffer.concat([h, data]);
 }
 
-export function wavSeconds(file) {
+export function wavSeconds(file: string): number {
   const b = readFileSync(file);
   let rate = 0, align = 0, size = 0;
   for (let o = 12; o + 8 <= b.length; o += 8 + b.readUInt32LE(o + 4)) {
@@ -93,7 +125,7 @@ export function wavSeconds(file) {
 }
 
 // Writes audio/<scene id>.wav for each scene. A scene is regenerated only when its narration text changed.
-export async function narrate(work, script) {
+export async function narrate(work: string, script: Script): Promise<void> {
   const dir = join(work, 'audio');
   mkdirSync(dir, { recursive: true });
   for (const s of script.scenes) {
@@ -110,7 +142,7 @@ export async function narrate(work, script) {
 }
 
 // Writes audio/bgm.<ext> from the script's BGM prompt, asking for a little more than the film's length.
-export async function bgm(work, script, seconds) {
+export async function bgm(work: string, script: Script, seconds: number): Promise<string> {
   const dir = join(work, 'audio');
   mkdirSync(dir, { recursive: true });
   const prompt = `${script.bgm}\n\nInstrumental only, no vocals. About ${Math.ceil(seconds) + 10} seconds long. Keep a steady level so it can sit under a voice-over.`;
@@ -122,15 +154,17 @@ export async function bgm(work, script, seconds) {
   return file;
 }
 
-export function bgmFile(work) {
+export function bgmFile(work: string): string {
   const meta = join(work, 'audio', 'bgm.json');
   if (!existsSync(meta)) throw new Error(`no BGM yet: run "motion-render bgm ${work}"`);
-  return join(work, 'audio', JSON.parse(readFileSync(meta, 'utf8')).file);
+  const file = field(readJson(meta), 'file');
+  if (typeof file !== 'string') throw new Error(`${meta} is malformed: run "motion-render bgm ${work}" again`);
+  return join(work, 'audio', file);
 }
 
 // Narration at each scene's start + lead, BGM at a constant level underneath (ducking made it pump).
-export async function mix(work, script, timing, out) {
-  const inputs = [], chains = [], labels = [];
+export async function mix(work: string, script: Script, timing: MixTiming, out: string): Promise<void> {
+  const inputs: string[] = [], chains: string[] = [], labels: string[] = [];
   timing.scenes.forEach((s, i) => {
     inputs.push('-i', join(work, 'audio', `${s.id}.wav`));
     const ms = Math.round((s.start + script.lead) * 1000);

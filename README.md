@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 | What | Notes |
 |------|-------|
 | Claude Code | An account that can use Artifacts (Motion) |
-| Node.js 18 or later | Check with `node -v` |
+| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly |
 | Gemini API key | Used for narration and BGM. Create one in [Google AI Studio](https://aistudio.google.com/apikey) |
 
 Works on macOS, Linux and Windows.
@@ -136,6 +136,7 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | Narration or BGM generation keeps failing | Each request times out after 90 seconds and is retried up to 3 times. If it still fails, check your API key's permissions and quota |
 | ffmpeg fails to download | A proxy is blocking downloads from GitHub. Install ffmpeg yourself (it is used from `PATH`) or point `FFMPEG_PATH` at it |
 | Chromium fails to download on first run | Point `CHROMIUM_PATH` at your own Chrome or Chromium |
+| `Unknown file extension ".ts"` when running `motion-render` | Node is older than 22.18. Update Node |
 | Japanese glyphs or line breaks differ slightly from the Motion page | Text is drawn with your OS fonts |
 
 ## Uninstall
@@ -169,15 +170,17 @@ The downloaded Chromium is in Playwright's cache (`~/Library/Caches/ms-playwrigh
   marketplace.json        # Claude Code plugin catalog (lists this repository itself)
   plugin.json             # Plugin manifest
 bin/motion-render         # Command the plugin puts on PATH (runs the CLI in skills/motion-render)
-package.json              # Plugin dependencies, installed by Claude Code with the plugin
+package.json              # Plugin dependencies, installed by Claude Code with the plugin. `npm run typecheck` checks the scripts
 package-lock.json
+tsconfig.json             # TypeScript settings (type check only; Node runs the .ts files directly)
 skills/motion-render/     # The skill (read by both the skills CLI and the plugin)
   SKILL.md                # Instructions for Claude (setup, storyboard, script and BGM choices)
   package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static)
-  scripts/cli.mjs         # The motion-render command
-  scripts/audio.mjs       # Narration and BGM generation, audio mixing
-  scripts/work.mjs        # script.json validation and scene timing
-  scripts/render.mjs      # Rendering in the browser
+  scripts/cli.ts          # The motion-render command
+  scripts/audio.ts        # Narration and BGM generation, audio mixing
+  scripts/work.ts         # script.json validation and scene timing
+  scripts/render.ts       # Rendering in the browser
+  scripts/json.ts         # Reading JSON from files, APIs and the player without trusting its shape
 docs/how-it-works.en.svg  # Diagram used in this README
 docs/how-it-works.svg     # Diagram used in the Japanese README
 ```

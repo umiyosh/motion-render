@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 | もの | 備考 |
 |------|------|
 | Claude Code | Artifact（Motion）を扱えるアカウント |
-| Node.js 18 以上 | `node -v` で確認 |
+| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します |
 | Gemini API キー | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します |
 
 macOS・Linux・Windows で動きます。
@@ -136,6 +136,7 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | ナレーションや BGM の生成が何度も失敗する | 1 回 90 秒で打ち切り、3 回まで再試行します。それでも失敗するなら、API キーの権限と利用上限を確認してください |
 | `motion-render` のインストールで ffmpeg のダウンロードが失敗する | 社内プロキシなどで GitHub からの取得が止められています。`npm install -g --ignore-scripts <スキルのフォルダ>` で入れ、手元の ffmpeg を `FFMPEG_PATH` で指定してください（PATH 上の `ffmpeg` も自動で使います） |
 | 初回の Chromium のダウンロードが失敗する | `CHROMIUM_PATH` に手元の Chrome か Chromium を指定してください |
+| `motion-render` の実行で `Unknown file extension ".ts"` が出る | Node が 22.18 より古いです。Node を更新してください |
 | 日本語の字形や改行位置が Motion のページと少し違う | 文字は OS のフォントで描かれます |
 
 ## アンインストール
@@ -169,14 +170,16 @@ npm uninstall -g motion-render
   marketplace.json        # Claude Code のプラグイン一覧（このリポジトリ自身を載せる）
   plugin.json             # プラグインの名札
 bin/motion-render         # プラグインが PATH に載せるコマンド（skills/motion-render の CLI を呼ぶ）
-package.json              # プラグインの依存。Claude Code がプラグインを入れるときに自動で入れる
+package.json              # プラグインの依存。Claude Code がプラグインを入れるときに自動で入れる。`npm run typecheck` で型を検査する
 package-lock.json
+tsconfig.json             # TypeScript の設定（型の検査用。実行時は Node が .ts をそのまま動かす）
 skills/motion-render/     # スキル本体（skills CLI とプラグインの両方がここを読む）
   SKILL.md                # Claude が読む手順（準備、絵コンテ・原稿・BGM の決め方を含む）
   package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static）
-  scripts/cli.mjs         # motion-render コマンド
-  scripts/audio.mjs       # ナレーションと BGM の生成、音声の合成
-  scripts/work.mjs        # script.json の検証と場面の秒数の計算
-  scripts/render.mjs      # ブラウザで描画する部分
+  scripts/cli.ts          # motion-render コマンド
+  scripts/audio.ts        # ナレーションと BGM の生成、音声の合成
+  scripts/work.ts         # script.json の検証と場面の秒数の計算
+  scripts/render.ts       # ブラウザで描画する部分
+  scripts/json.ts         # ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
 docs/how-it-works.svg     # README の図
 ```

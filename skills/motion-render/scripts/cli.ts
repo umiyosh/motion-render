@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // motion-render: テーマから作った Claude Motion の動画に、ナレーションと BGM を付けて MP4 にする CLI。
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { join, resolve, basename, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { parseArgs } from 'node:util';
-import { openFilm, checkFilmDir } from './render.mjs';
-import { narrate, bgm, bgmFile, mix, findFfmpeg } from './audio.mjs';
-import { loadScript, writeTiming, loadTiming } from './work.mjs';
+import { fileURLToPath } from 'node:url';
+import { openFilm, checkFilmDir, type Film, type FilmMeta } from './render.ts';
+import { narrate, bgm, bgmFile, mix, findFfmpeg } from './audio.ts';
+import { loadScript, writeTiming, loadTiming, type Script, type Timing } from './work.ts';
+import { errorMessage, field, readJson } from './json.ts';
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
@@ -26,26 +28,40 @@ env:
   CHROMIUM_PATH          use this Chrome/Chromium instead of the bundled one
   FFMPEG_PATH            use this ffmpeg instead of the bundled one`;
 
-const die = (msg, code = 1) => { console.error(`motion-render: ${msg}`); process.exit(code); };
+function die(msg: string, code = 1): never {
+  console.error(`motion-render: ${msg}`);
+  process.exit(code);
+}
 
-function prepare(storeDir, filmDir) {
-  const doc = (p) => { const d = JSON.parse(readFileSync(p, 'utf8')); return d.data ?? d; };
+// A Motion store document is { data: {...} } or the bare object; returns the string field `key`.
+function storeField(file: string, key: string): string | null {
+  const d = readJson(file);
+  const v = field(field(d, 'data') ?? d, key);
+  return typeof v === 'string' ? v : null;
+}
+
+function prepare(storeDir: string, filmDir: string): void {
   const modsDir = join(storeDir, 'modules');
   const mods = existsSync(modsDir) ? readdirSync(modsDir).filter((n) => n.endsWith('.json')) : [];
   if (!mods.length) die(`no modules under ${modsDir}`);
   mkdirSync(join(filmDir, 'modules'), { recursive: true });
-  for (const n of mods) writeFileSync(join(filmDir, 'modules', n.slice(0, -5)), doc(join(modsDir, n)).text);
+  for (const n of mods) {
+    const file = join(modsDir, n);
+    const text = storeField(file, 'text') ?? die(`${file} has no "text"`);
+    writeFileSync(join(filmDir, 'modules', n.slice(0, -5)), text);
+  }
   const script = join(storeDir, 'film', 'script.json');
-  writeFileSync(join(filmDir, 'cut.js'), existsSync(script) ? doc(script).code : 'window.CUT = kit.scenes();');
+  const cut = existsSync(script) ? (storeField(script, 'code') ?? die(`${script} has no "code"`)) : 'window.CUT = kit.scenes();';
+  writeFileSync(join(filmDir, 'cut.js'), cut);
   const assetsDir = join(storeDir, 'assets');
   const blobs = existsSync(assetsDir)
-    ? readdirSync(assetsDir).filter((n) => n.endsWith('.json') && !String(doc(join(assetsDir, n)).ref).startsWith('data:')).map((n) => n.slice(0, -5))
+    ? readdirSync(assetsDir).filter((n) => n.endsWith('.json') && !String(storeField(join(assetsDir, n), 'ref')).startsWith('data:')).map((n) => n.slice(0, -5))
     : [];
   if (blobs.length) console.error(`warning: put these uploaded assets into ${join(filmDir, 'assets')}: ${blobs.join(', ')}`);
   console.log(`modules: ${mods.map((n) => n.slice(0, -5)).join(', ')}`);
 }
 
-async function stills(filmDir, outDir, list) {
+async function stills(filmDir: string, outDir: string, list: string): Promise<void> {
   const times = list.split(',').map(Number);
   if (times.some((t) => !Number.isFinite(t))) die(`times must be numbers: ${list}`);
   mkdirSync(outDir, { recursive: true });
@@ -59,7 +75,7 @@ async function stills(filmDir, outDir, list) {
   console.log(`done: ${times.length} stills in ${outDir}`);
 }
 
-async function runNarrate(work) {
+async function runNarrate(work: string): Promise<void> {
   const script = loadScript(work);
   await narrate(work, script);
   const timing = writeTiming(work, script);
@@ -67,19 +83,19 @@ async function runNarrate(work) {
   console.log(`total: ${timing.total}s -> ${join(work, 'timing.json')}`);
 }
 
-async function runBgm(work) {
+async function runBgm(work: string): Promise<void> {
   const file = await bgm(work, loadScript(work), loadTiming(work).total);
   console.log(`bgm: ${file}`);
 }
 
 // Pipes rendered frames straight into ffmpeg (no temp files) and muxes the mixed audio.
-async function encode(film, fps, audio, out) {
+async function encode(film: Film, fps: number, audio: string, out: string): Promise<number> {
   const count = Math.round(film.meta.duration * fps);
   const args = ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-i', '-', '-i', audio,
     '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'medium',
     '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out];
   const ff = spawn(findFfmpeg(), args, { stdio: ['pipe', 'inherit', 'inherit'] });
-  const finished = new Promise((ok, fail) => {
+  const finished = new Promise<void>((ok, fail) => {
     ff.on('error', fail);
     ff.on('close', (code) => (code === 0 ? ok() : fail(new Error(`ffmpeg exited with code ${code}`))));
   });
@@ -98,18 +114,18 @@ async function encode(film, fps, audio, out) {
 
 // Narration goes where each scene actually starts in the film (matched by scene id), so a film whose
 // scene lengths differ from timing.json still stays in sync.
-function placeOnFilm(timing, meta, script) {
-  const parts = new Map((meta.parts ?? []).map((p) => [p.key, p]));
+function placeOnFilm(timing: Timing, meta: FilmMeta, script: Script) {
+  const parts = new Map(meta.parts.map((p) => [p.key, p]));
   const unknown = timing.scenes.filter((s) => !parts.has(s.id)).map((s) => s.id);
   if (unknown.length) die(`these script.json scenes are not in the film: ${unknown.join(', ')} (scene ids must match)`);
   return timing.scenes.map((s) => {
-    const p = parts.get(s.id);
+    const p = parts.get(s.id) ?? die(`scene "${s.id}" is not in the film`);
     if (s.speech + script.lead > p.dur + 0.05) console.error(`warning: narration of "${s.id}" (${s.speech}s) runs past its scene (${p.dur}s)`);
     return { ...s, start: p.a0 };
   });
 }
 
-async function build(work, out, fps) {
+async function build(work: string, out: string, fps: number): Promise<void> {
   if (!Number.isFinite(fps) || fps <= 0) die('--fps must be a positive number');
   const script = loadScript(work);
   const timing = loadTiming(work);
@@ -133,27 +149,33 @@ async function build(work, out, fps) {
   }
 }
 
-async function main() {
+function version(): string {
+  const v = field(readJson(fileURLToPath(new URL('../package.json', import.meta.url))), 'version');
+  return typeof v === 'string' ? v : 'unknown';
+}
+
+async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: { fps: { type: 'string', default: '30' }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' } },
   });
   const [cmd, ...rest] = positionals;
   if (values.version) {
-    console.log(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+    console.log(version());
     return;
   }
   if (values.help || !cmd) { console.log(USAGE); return; }
-  if (cmd === 'narrate' && rest.length === 1) return runNarrate(resolve(rest[0]));
-  if (cmd === 'bgm' && rest.length === 1) return runBgm(resolve(rest[0]));
-  if (cmd === 'prepare' && rest.length === 2) return prepare(rest[0], rest[1]);
-  if (cmd === 'stills' && rest.length === 3) return stills(rest[0], rest[1], rest[2]);
-  if (cmd === 'build' && (rest.length === 1 || rest.length === 2)) {
-    const work = resolve(rest[0]);
-    const out = resolve(rest[1] ?? join(process.env.MOTION_RENDER_OUT_DIR || process.cwd(), `${basename(work)}.mp4`));
+  const [a, b, c] = rest;
+  if (cmd === 'narrate' && a && rest.length === 1) return runNarrate(resolve(a));
+  if (cmd === 'bgm' && a && rest.length === 1) return runBgm(resolve(a));
+  if (cmd === 'prepare' && a && b && rest.length === 2) return prepare(a, b);
+  if (cmd === 'stills' && a && b && c && rest.length === 3) return stills(a, b, c);
+  if (cmd === 'build' && a && (rest.length === 1 || rest.length === 2)) {
+    const work = resolve(a);
+    const out = resolve(b ?? join(process.env.MOTION_RENDER_OUT_DIR || process.cwd(), `${basename(work)}.mp4`));
     return build(work, out, Number(values.fps));
   }
   die(`unknown command or wrong arguments\n\n${USAGE}`, 2);
 }
 
-main().catch((e) => die(e.message));
+main().catch((e: unknown) => die(errorMessage(e)));
