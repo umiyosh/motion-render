@@ -24,11 +24,11 @@ https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 
 ## Requirements
 
-| What | Notes |
-|------|-------|
-| Claude Code | An account that can use Artifacts (Motion) |
-| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly |
-| Gemini API key | Used for narration and BGM. Create one in [Google AI Studio](https://aistudio.google.com/apikey) |
+| What                   | Notes                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| Claude Code            | An account that can use Artifacts (Motion)                                                       |
+| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                |
+| Gemini API key         | Used for narration and BGM. Create one in [Google AI Studio](https://aistudio.google.com/apikey) |
 
 Works on macOS, Linux and Windows.
 
@@ -111,33 +111,33 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 
 Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md).
 
-| Command | What it does |
-|---------|--------------|
-| `motion-render narrate <work>` | Generates narration from `script.json` and writes scene lengths to `timing.json` |
-| `motion-render bgm <work>` | Generates the BGM from the `bgm` prompt in `script.json` |
-| `motion-render prepare <storeDir> <work>/film` | Expands a Motion film's data into a directory it can render |
-| `motion-render stills <filmDir> <outDir> 0,5,12` | Writes still frames for checking |
-| `motion-render build <work> [out.mp4]` | Mixes narration and BGM and renders the MP4 (stops if either is missing) |
-| `motion-render --version` | Prints the version |
+| Command                                          | What it does                                                                     |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `motion-render narrate <work>`                   | Generates narration from `script.json` and writes scene lengths to `timing.json` |
+| `motion-render bgm <work>`                       | Generates the BGM from the `bgm` prompt in `script.json`                         |
+| `motion-render prepare <storeDir> <work>/film`   | Expands a Motion film's data into a directory it can render                      |
+| `motion-render stills <filmDir> <outDir> 0,5,12` | Writes still frames for checking                                                 |
+| `motion-render build <work> [out.mp4]`           | Mixes narration and BGM and renders the MP4 (stops if either is missing)         |
+| `motion-render --version`                        | Prints the version                                                               |
 
-| Environment variable | Effect |
-|----------------------|--------|
-| `GEMINI_API_KEY` | Required for narration and BGM |
-| `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path |
-| `CHROMIUM_PATH` | Use your own Chrome or Chromium instead of the bundled one |
-| `FFMPEG_PATH` | Use your own ffmpeg instead of the bundled one |
+| Environment variable    | Effect                                                     |
+| ----------------------- | ---------------------------------------------------------- |
+| `GEMINI_API_KEY`        | Required for narration and BGM                             |
+| `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path  |
+| `CHROMIUM_PATH`         | Use your own Chrome or Chromium instead of the bundled one |
+| `FFMPEG_PATH`           | Use your own ffmpeg instead of the bundled one             |
 
 ## Troubleshooting
 
-| Symptom | Cause and fix |
-|---------|---------------|
-| The browser fails with `bootstrap_check_in ... Permission denied` | It is running inside the Claude Code sandbox. Check step 3 of the install. `motion-render` must run on its own (chaining it with `\| grep` or `&&` keeps it in the sandbox) |
-| `GEMINI_API_KEY is not set` | Check step 2 of the install and restart Claude Code |
-| Narration or BGM generation keeps failing | Each request times out after 90 seconds and is retried up to 3 times. If it still fails, check your API key's permissions and quota |
-| ffmpeg fails to download | A proxy is blocking downloads from GitHub. Install ffmpeg yourself (it is used from `PATH`) or point `FFMPEG_PATH` at it |
-| Chromium fails to download on first run | Point `CHROMIUM_PATH` at your own Chrome or Chromium |
-| `Unknown file extension ".ts"` when running `motion-render` | Node is older than 22.18. Update Node |
-| Japanese glyphs or line breaks differ slightly from the Motion page | Text is drawn with your OS fonts |
+| Symptom                                                             | Cause and fix                                                                                                                                                               |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The browser fails with `bootstrap_check_in ... Permission denied`   | It is running inside the Claude Code sandbox. Check step 3 of the install. `motion-render` must run on its own (chaining it with `\| grep` or `&&` keeps it in the sandbox) |
+| `GEMINI_API_KEY is not set`                                         | Check step 2 of the install and restart Claude Code                                                                                                                         |
+| Narration or BGM generation keeps failing                           | Each request times out after 90 seconds and is retried up to 3 times. If it still fails, check your API key's permissions and quota                                         |
+| ffmpeg fails to download                                            | A proxy is blocking downloads from GitHub. Install ffmpeg yourself (it is used from `PATH`) or point `FFMPEG_PATH` at it                                                    |
+| Chromium fails to download on first run                             | Point `CHROMIUM_PATH` at your own Chrome or Chromium                                                                                                                        |
+| `Unknown file extension ".ts"` when running `motion-render`         | Node is older than 22.18. Update Node                                                                                                                                       |
+| Japanese glyphs or line breaks differ slightly from the Motion page | Text is drawn with your OS fonts                                                                                                                                            |
 
 ## Uninstall
 
@@ -163,6 +163,12 @@ The downloaded Chromium is in Playwright's cache (`~/Library/Caches/ms-playwrigh
 - Only the `motion-render` command is taken out of the Claude Code sandbox
 - The API key is read from the environment only and is never written to files or videos
 
+## Development
+
+Run `npm install`, then `make check` before opening a pull request. It runs the same checks as CI: ESLint, Prettier, the TypeScript type check, the quality gate tests, and the quality baseline gate.
+
+The quality baseline lists the current ESLint warnings and Knip findings. A pull request that adds one or makes one worse fails. After fixing one, run `make quality-baseline` to record the improvement (it refuses to record a regression).
+
 ## Layout
 
 ```
@@ -183,4 +189,9 @@ skills/motion-render/     # The skill (read by both the skills CLI and the plugi
   scripts/json.ts         # Reading JSON from files, APIs and the player without trusting its shape
 docs/how-it-works.en.svg  # Diagram used in this README
 docs/how-it-works.svg     # Diagram used in the Japanese README
+.github/workflows/ci.yml  # CI: the checks below on every pull request
+Makefile                  # Development commands (`make help`)
+eslint.config.js, .prettierrc, knip.json
+quality-baseline.json     # Known ESLint warnings and Knip findings to pay back; CI fails if they grow
+scripts/quality-gate*.mjs # Compares the current findings with the baseline
 ```

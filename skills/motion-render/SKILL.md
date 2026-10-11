@@ -15,13 +15,13 @@ argument-hint: "<動画のテーマ。長さ・出力先などの指定があれ
 
 テーマ以外は Claude が決める。利用者が指定したものだけ従う。質問で止めない。
 
-| 項目 | 既定 |
-|------|------|
-| 長さ | 約 60 秒（6〜9 場面）。ナレーションの長さで最終的に決まる |
-| 見た目・配色 | テーマに合わせて決める。利用者の組織に既定のデザインシステムがあればその配色 |
-| 声・話速 | `Kore`、1.1 倍速 |
-| BGM | テーマの雰囲気から Lyria への指示文を書く（下の「BGM」） |
-| 出力先 | 指定が無ければ `$MOTION_RENDER_OUT_DIR`、無ければカレントディレクトリ。カレントが git リポジトリなら `~/Movies` など作業用でない場所にする |
+| 項目         | 既定                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 長さ         | 約 60 秒（6〜9 場面）。ナレーションの長さで最終的に決まる                                                                                  |
+| 見た目・配色 | テーマに合わせて決める。利用者の組織に既定のデザインシステムがあればその配色                                                               |
+| 声・話速     | `Kore`、1.1 倍速                                                                                                                           |
+| BGM          | テーマの雰囲気から Lyria への指示文を書く（下の「BGM」）                                                                                   |
+| 出力先       | 指定が無ければ `$MOTION_RENDER_OUT_DIR`、無ければカレントディレクトリ。カレントが git リポジトリなら `~/Movies` など作業用でない場所にする |
 
 Motion の Artifact 型は作成時に Style・Colors・Length を質問するよう求めるが、このスキルでは利用者が
 「決めて任せる」と頼んだものとして扱い、質問せずに決める。
@@ -134,12 +134,12 @@ motion-render build <work> [<出力.mp4>]
 
 `script.json` の `bgm` に、テーマの雰囲気に合う英語の指示文を書く。楽器・テンポ・気分を具体的に。
 
-| テーマの種類 | 指示の例 |
-|--------------|----------|
-| 技術の仕組み・セキュリティ | calm focused electronic, soft pulsing synth, light percussion, ~100 BPM |
-| ニュース・発表 | modern news broadcast theme, driving synth arpeggio, tight electronic drums, ~120 BPM |
-| 製品紹介・明るい話題 | warm upbeat, marimba and electric piano, light shaker, ~110 BPM |
-| 振り返り・しっとり | gentle ambient piano, soft pads, slow |
+| テーマの種類               | 指示の例                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| 技術の仕組み・セキュリティ | calm focused electronic, soft pulsing synth, light percussion, ~100 BPM               |
+| ニュース・発表             | modern news broadcast theme, driving synth arpeggio, tight electronic drums, ~120 BPM |
+| 製品紹介・明るい話題       | warm upbeat, marimba and electric piano, light shaker, ~110 BPM                       |
+| 振り返り・しっとり         | gentle ambient piano, soft pads, slow                                                 |
 
 利用者が BGM を「ださい」などと言ったら、`bgm` を書き直して `motion-render bgm` → `motion-render build` をやり直す。
 映像の描き直しは要らない（`build` は毎回描画するが、Motion 側の変更は不要）。
