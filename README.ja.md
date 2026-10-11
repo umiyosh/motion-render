@@ -139,6 +139,20 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | `motion-render` の実行で `Unknown file extension ".ts"` が出る    | Node が 22.18 より古いです。Node を更新してください                                                                                                                                                           |
 | 日本語の字形や改行位置が Motion のページと少し違う                | 文字は OS のフォントで描かれます                                                                                                                                                                              |
 
+## 更新
+
+プラグインとして入れた場合は、Claude Code の中で `/plugin` を開き、**Installed** で motion-render を選んで **Update now** を選びます。新しい版は Claude Code を起動し直すと読み込まれます。
+
+Claude Code が自動で更新するのは、Anthropic 公式のマーケットプレイスだけです。motion-render の新しい版を毎回の操作なしで受け取るには、`/plugin` の **Marketplaces** で motion-render を選び、**Enable auto-update** を選びます。以後は Claude Code の起動時に更新されます。
+
+シェルからは `claude plugin update motion-render@motion-render` で **Update now** と同じことができます。
+
+skills CLI で入れた場合は、シェルで実行します。
+
+```sh
+npx skills update motion-render -g
+```
+
 ## アンインストール
 
 プラグインとして入れた場合は、Claude Code の中で実行します。

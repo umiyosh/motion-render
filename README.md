@@ -139,6 +139,20 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | `Unknown file extension ".ts"` when running `motion-render`         | Node is older than 22.18. Update Node                                                                                                                                       |
 | Japanese glyphs or line breaks differ slightly from the Motion page | Text is drawn with your OS fonts                                                                                                                                            |
 
+## Update
+
+If you installed the plugin, open `/plugin` inside Claude Code, go to **Installed**, select motion-render and choose **Update now**. Restart Claude Code to load the new version.
+
+Claude Code updates only Anthropic's official marketplaces automatically. To get new versions of motion-render without doing this each time, open `/plugin`, go to **Marketplaces**, select motion-render and choose **Enable auto-update**. Claude Code then updates it when it starts.
+
+From a shell, `claude plugin update motion-render@motion-render` does the same as **Update now**.
+
+If you used the skills CLI, run this in your shell:
+
+```sh
+npx skills update motion-render -g
+```
+
 ## Uninstall
 
 If you installed the plugin, run this inside Claude Code:
