@@ -24,11 +24,11 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ## 必要なもの
 
-| もの | 備考 |
-|------|------|
-| Claude Code | Artifact（Motion）を扱えるアカウント |
-| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します |
-| Gemini API キー | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します |
+| もの               | 備考                                                                                               |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| Claude Code        | Artifact（Motion）を扱えるアカウント                                                               |
+| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                               |
+| Gemini API キー    | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します |
 
 macOS・Linux・Windows で動きます。
 
@@ -111,33 +111,33 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 
 動画 1 本ごとに作業フォルダ（`<work>`）を 1 つ使います。中身と `script.json` の書き方は [SKILL.md](skills/motion-render/SKILL.md) にあります。
 
-| コマンド | やること |
-|----------|----------|
-| `motion-render narrate <work>` | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く |
-| `motion-render bgm <work>` | `script.json` の `bgm` の指示から BGM を作る |
-| `motion-render prepare <storeDir> <work>/film` | Motion から取得した映像データを、描画できる形に展開する |
-| `motion-render stills <filmDir> <outDir> 0,5,12` | 確認用の静止画を書き出す |
-| `motion-render build <work> [out.mp4]` | ナレーションと BGM を合成し、映像と合わせて MP4 にする（どちらかが無いと止まる） |
-| `motion-render --version` | 版を表示する |
+| コマンド                                         | やること                                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `motion-render narrate <work>`                   | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く    |
+| `motion-render bgm <work>`                       | `script.json` の `bgm` の指示から BGM を作る                                     |
+| `motion-render prepare <storeDir> <work>/film`   | Motion から取得した映像データを、描画できる形に展開する                          |
+| `motion-render stills <filmDir> <outDir> 0,5,12` | 確認用の静止画を書き出す                                                         |
+| `motion-render build <work> [out.mp4]`           | ナレーションと BGM を合成し、映像と合わせて MP4 にする（どちらかが無いと止まる） |
+| `motion-render --version`                        | 版を表示する                                                                     |
 
-| 環境変数 | 効果 |
-|----------|------|
-| `GEMINI_API_KEY` | ナレーションと BGM の生成に必要 |
-| `MOTION_RENDER_OUT_DIR` | `build` の出力先を省略したときの保存先 |
-| `CHROMIUM_PATH` | 同梱の Chromium の代わりに、手元の Chrome や Chromium を使う |
-| `FFMPEG_PATH` | 同梱の ffmpeg の代わりに、手元の ffmpeg を使う |
+| 環境変数                | 効果                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| `GEMINI_API_KEY`        | ナレーションと BGM の生成に必要                              |
+| `MOTION_RENDER_OUT_DIR` | `build` の出力先を省略したときの保存先                       |
+| `CHROMIUM_PATH`         | 同梱の Chromium の代わりに、手元の Chrome や Chromium を使う |
+| `FFMPEG_PATH`           | 同梱の ffmpeg の代わりに、手元の ffmpeg を使う               |
 
 ## 困ったとき
 
-| 症状 | 原因と対処 |
-|------|------------|
-| `bootstrap_check_in ... Permission denied` でブラウザが起動しない | Claude Code の sandbox の中で動いています。インストールの手順 3 を確認してください。`motion-render` は単体で実行する必要があります（`\| grep` や `&&` でつなぐと sandbox の外に出ません） |
-| `GEMINI_API_KEY is not set` | インストールの手順 2 を確認し、Claude Code を起動し直してください |
-| ナレーションや BGM の生成が何度も失敗する | 1 回 90 秒で打ち切り、3 回まで再試行します。それでも失敗するなら、API キーの権限と利用上限を確認してください |
-| `motion-render` のインストールで ffmpeg のダウンロードが失敗する | 社内プロキシなどで GitHub からの取得が止められています。`npm install -g --ignore-scripts <スキルのフォルダ>` で入れ、手元の ffmpeg を `FFMPEG_PATH` で指定してください（PATH 上の `ffmpeg` も自動で使います） |
-| 初回の Chromium のダウンロードが失敗する | `CHROMIUM_PATH` に手元の Chrome か Chromium を指定してください |
-| `motion-render` の実行で `Unknown file extension ".ts"` が出る | Node が 22.18 より古いです。Node を更新してください |
-| 日本語の字形や改行位置が Motion のページと少し違う | 文字は OS のフォントで描かれます |
+| 症状                                                              | 原因と対処                                                                                                                                                                                                    |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap_check_in ... Permission denied` でブラウザが起動しない | Claude Code の sandbox の中で動いています。インストールの手順 3 を確認してください。`motion-render` は単体で実行する必要があります（`\| grep` や `&&` でつなぐと sandbox の外に出ません）                     |
+| `GEMINI_API_KEY is not set`                                       | インストールの手順 2 を確認し、Claude Code を起動し直してください                                                                                                                                             |
+| ナレーションや BGM の生成が何度も失敗する                         | 1 回 90 秒で打ち切り、3 回まで再試行します。それでも失敗するなら、API キーの権限と利用上限を確認してください                                                                                                  |
+| `motion-render` のインストールで ffmpeg のダウンロードが失敗する  | 社内プロキシなどで GitHub からの取得が止められています。`npm install -g --ignore-scripts <スキルのフォルダ>` で入れ、手元の ffmpeg を `FFMPEG_PATH` で指定してください（PATH 上の `ffmpeg` も自動で使います） |
+| 初回の Chromium のダウンロードが失敗する                          | `CHROMIUM_PATH` に手元の Chrome か Chromium を指定してください                                                                                                                                                |
+| `motion-render` の実行で `Unknown file extension ".ts"` が出る    | Node が 22.18 より古いです。Node を更新してください                                                                                                                                                           |
+| 日本語の字形や改行位置が Motion のページと少し違う                | 文字は OS のフォントで描かれます                                                                                                                                                                              |
 
 ## アンインストール
 
@@ -163,6 +163,12 @@ npm uninstall -g motion-render
 - Claude Code の sandbox から外すのは `motion-render` コマンドだけです
 - API キーは環境変数から読むだけで、ファイルや動画には残しません
 
+## 開発
+
+`npm install` の後、PR を出す前に `make check` を実行してください。CI と同じ検査（ESLint、Prettier、TypeScript の型検査、品質ゲートのテスト、品質ベースラインの検査）をまとめて行います。
+
+品質ベースラインには、今ある ESLint の警告と Knip の指摘が載っています。新しく増やしたり悪化させたりした PR は落ちます。直したら `make quality-baseline` で改善を記録してください（悪化は記録できません）。
+
 ## 構成
 
 ```
@@ -182,4 +188,9 @@ skills/motion-render/     # スキル本体（skills CLI とプラグインの�
   scripts/render.ts       # ブラウザで描画する部分
   scripts/json.ts         # ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
 docs/how-it-works.svg     # README の図
+.github/workflows/ci.yml  # CI: 下の検査を PR ごとに実行する
+Makefile                  # 開発用のコマンド（`make help` で一覧）
+eslint.config.js, .prettierrc, knip.json
+quality-baseline.json     # 返済対象の ESLint の警告と Knip の指摘。増えると CI が落ちる
+scripts/quality-gate*.mjs # 今の指摘をベースラインと比べる
 ```

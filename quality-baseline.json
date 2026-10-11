@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "policy": "Every current quality violation is a repayment target. The baseline exists to prevent increases and track reductions.",
+  "thresholds": {},
+  "issues": [
+    {
+      "id": "eslint|complexity|skills/motion-render/scripts/cli.ts|210|1",
+      "tool": "eslint",
+      "category": "complexity",
+      "path": "skills/motion-render/scripts/cli.ts",
+      "line": 210,
+      "column": 1,
+      "detail": "Async function 'main' has a complexity of 25. Maximum allowed is 20.",
+      "metric": {
+        "name": "complexity",
+        "value": 25,
+        "limit": 20,
+        "direction": "lowerIsBetter"
+      },
+      "stableKey": "eslint|complexity|skills/motion-render/scripts/cli.ts|function:main"
+    }
+  ]
+}
