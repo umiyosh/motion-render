@@ -238,3 +238,14 @@ export async function mix(
     out,
   ]);
 }
+
+// ffmpeg arguments that read PNG frames from stdin and mux them with the mixed audio into an MP4.
+export function encodeArgs(fps: number, audio: string, out: string): string[] {
+  return [
+    ["-y", "-loglevel", "error"],
+    ["-f", "image2pipe", "-framerate", String(fps), "-i", "-", "-i", audio],
+    ["-map", "0:v", "-map", "1:a"],
+    ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"],
+    ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out],
+  ].flat();
+}

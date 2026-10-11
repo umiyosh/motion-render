@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // motion-render: テーマから作った Claude Motion の動画に、ナレーションと BGM を付けて MP4 にする CLI。
-import { writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve, basename, dirname } from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { openFilm, checkFilmDir, type Film, type FilmMeta } from "./render.ts";
-import { narrate, bgm, bgmFile, mix, findFfmpeg } from "./audio.ts";
-import { loadScript, writeTiming, loadTiming, type Script, type Timing } from "./work.ts";
+import { openFilm, checkFilmDir, type Film } from "./render.ts";
+import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs } from "./audio.ts";
+import { loadScript, writeTiming, loadTiming, placeOnFilm } from "./work.ts";
+import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
@@ -33,43 +34,13 @@ function die(msg: string, code = 1): never {
   process.exit(code);
 }
 
-// A Motion store document is { data: {...} } or the bare object; returns the string field `key`.
-function storeField(file: string, key: string): string | null {
-  const d = readJson(file);
-  const v = field(field(d, "data") ?? d, key);
-  return typeof v === "string" ? v : null;
-}
-
-function prepare(storeDir: string, filmDir: string): void {
-  const modsDir = join(storeDir, "modules");
-  const mods = existsSync(modsDir) ? readdirSync(modsDir).filter((n) => n.endsWith(".json")) : [];
-  if (!mods.length) die(`no modules under ${modsDir}`);
-  mkdirSync(join(filmDir, "modules"), { recursive: true });
-  for (const n of mods) {
-    const file = join(modsDir, n);
-    const text = storeField(file, "text") ?? die(`${file} has no "text"`);
-    writeFileSync(join(filmDir, "modules", n.slice(0, -5)), text);
-  }
-  const script = join(storeDir, "film", "script.json");
-  const cut = existsSync(script)
-    ? (storeField(script, "code") ?? die(`${script} has no "code"`))
-    : "window.CUT = kit.scenes();";
-  writeFileSync(join(filmDir, "cut.js"), cut);
-  const assetsDir = join(storeDir, "assets");
-  const blobs = existsSync(assetsDir)
-    ? readdirSync(assetsDir)
-        .filter(
-          (n) =>
-            n.endsWith(".json") &&
-            !String(storeField(join(assetsDir, n), "ref")).startsWith("data:")
-        )
-        .map((n) => n.slice(0, -5))
-    : [];
+function runPrepare(storeDir: string, filmDir: string): void {
+  const { modules, blobs } = prepare(storeDir, filmDir);
   if (blobs.length)
     console.error(
       `warning: put these uploaded assets into ${join(filmDir, "assets")}: ${blobs.join(", ")}`
     );
-  console.log(`modules: ${mods.map((n) => n.slice(0, -5)).join(", ")}`);
+  console.log(`modules: ${modules.join(", ")}`);
 }
 
 async function stills(filmDir: string, outDir: string, list: string): Promise<void> {
@@ -103,39 +74,7 @@ async function runBgm(work: string): Promise<void> {
 // Pipes rendered frames straight into ffmpeg (no temp files) and muxes the mixed audio.
 async function encode(film: Film, fps: number, audio: string, out: string): Promise<number> {
   const count = Math.round(film.meta.duration * fps);
-  const args = [
-    "-y",
-    "-loglevel",
-    "error",
-    "-f",
-    "image2pipe",
-    "-framerate",
-    String(fps),
-    "-i",
-    "-",
-    "-i",
-    audio,
-    "-map",
-    "0:v",
-    "-map",
-    "1:a",
-    "-c:v",
-    "libx264",
-    "-pix_fmt",
-    "yuv420p",
-    "-crf",
-    "18",
-    "-preset",
-    "medium",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-shortest",
-    "-movflags",
-    "+faststart",
-    out,
-  ];
+  const args = encodeArgs(fps, audio, out);
   const ff = spawn(findFfmpeg(), args, { stdio: ["pipe", "inherit", "inherit"] });
   const finished = new Promise<void>((ok, fail) => {
     ff.on("error", fail);
@@ -156,25 +95,6 @@ async function encode(film: Film, fps: number, audio: string, out: string): Prom
   return count;
 }
 
-// Narration goes where each scene actually starts in the film (matched by scene id), so a film whose
-// scene lengths differ from timing.json still stays in sync.
-function placeOnFilm(timing: Timing, meta: FilmMeta, script: Script) {
-  const parts = new Map(meta.parts.map((p) => [p.key, p]));
-  const unknown = timing.scenes.filter((s) => !parts.has(s.id)).map((s) => s.id);
-  if (unknown.length)
-    die(
-      `these script.json scenes are not in the film: ${unknown.join(", ")} (scene ids must match)`
-    );
-  return timing.scenes.map((s) => {
-    const p = parts.get(s.id) ?? die(`scene "${s.id}" is not in the film`);
-    if (s.speech + script.lead > p.dur + 0.05)
-      console.error(
-        `warning: narration of "${s.id}" (${s.speech}s) runs past its scene (${p.dur}s)`
-      );
-    return { ...s, start: p.a0 };
-  });
-}
-
 async function build(work: string, out: string, fps: number): Promise<void> {
   if (!Number.isFinite(fps) || fps <= 0) die("--fps must be a positive number");
   const script = loadScript(work);
@@ -190,7 +110,7 @@ async function build(work: string, out: string, fps: number): Promise<void> {
 
   const film = await openFilm(filmDir);
   try {
-    const scenes = placeOnFilm(timing, film.meta, script);
+    const scenes = placeOnFilm(timing, film.meta, script, (w) => console.error(`warning: ${w}`));
     const audio = join(work, "audio", "mix.m4a");
     await mix(work, script, { scenes, total: film.meta.duration }, audio);
     mkdirSync(dirname(out), { recursive: true });
@@ -228,7 +148,7 @@ async function main(): Promise<void> {
   const [a, b, c] = rest;
   if (cmd === "narrate" && a && rest.length === 1) return runNarrate(resolve(a));
   if (cmd === "bgm" && a && rest.length === 1) return runBgm(resolve(a));
-  if (cmd === "prepare" && a && b && rest.length === 2) return prepare(a, b);
+  if (cmd === "prepare" && a && b && rest.length === 2) return runPrepare(a, b);
   if (cmd === "stills" && a && b && c && rest.length === 3) return stills(a, b, c);
   if (cmd === "build" && a && (rest.length === 1 || rest.length === 2)) {
     const work = resolve(a);

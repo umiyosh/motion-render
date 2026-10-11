@@ -69,7 +69,7 @@ interface FilmPart {
   dur: number;
 }
 
-export interface FilmMeta {
+interface FilmMeta {
   duration: number;
   parts: FilmPart[];
 }

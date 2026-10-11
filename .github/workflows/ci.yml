@@ -31,6 +31,14 @@ jobs:
         run: make fmt-check
       - name: TypeScript typecheck
         run: make typecheck
+      - name: Install Chromium for the render smoke tests
+        run: node node_modules/playwright-core/cli.js install --with-deps chromium
+      # Ubuntu 24.04 blocks the unprivileged user namespaces that Chromium's own sandbox needs, and
+      # motion-render keeps that sandbox on (render.ts), so lift the AppArmor restriction on the runner.
+      - name: Allow the Chromium sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Unit and render smoke tests with the coverage gate
+        run: make test-coverage
       - name: Quality gate core tests
         run: make quality-test
       - name: TypeScript quality baseline gate

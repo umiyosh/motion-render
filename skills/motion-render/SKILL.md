@@ -155,6 +155,7 @@ URL を渡された場合も音を付ける。映像データを取得し（手�
 
 - `scripts/cli.ts`: `motion-render` コマンド（TypeScript。Node 22.18 以上がそのまま実行する）
 - `scripts/audio.ts`: Gemini TTS・Lyria の呼び出し（90 秒の上限と再試行付き）と音声の合成
-- `scripts/work.ts`: `script.json` の検証と `timing.json` の計算
+- `scripts/work.ts`: `script.json` の検証、`timing.json` の計算、ナレーションを動画の場面の開始時刻に置く処理
 - `scripts/render.ts`: プレーヤーを開いてコマを返す。描画中は外部への通信を遮断し、Chromium の sandbox を有効にする
 - `scripts/json.ts`: ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
+- `scripts/store.ts`: Motion の store（ArtifactData の保存先）を映像データのフォルダに展開する（`prepare`）

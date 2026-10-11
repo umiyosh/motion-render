@@ -165,7 +165,7 @@ npm uninstall -g motion-render
 
 ## 開発
 
-`npm install` の後、PR を出す前に `make check` を実行してください。CI と同じ検査（ESLint、Prettier、TypeScript の型検査、品質ゲートのテスト、品質ベースラインの検査）をまとめて行います。
+`npm install` の後、PR を出す前に `make check` を実行してください。CI と同じ検査（ESLint、Prettier、TypeScript の型検査、ユニットテストと描画のスモークテスト（カバレッジ 80% の基準つき）、品質ゲートのテスト、品質ベースラインの検査）をまとめて行います。スモークテストは `tests/fixtures` の Motion プレーヤーの代役を headless Chromium で開くので、API キーは要りません。
 
 品質ベースラインには、今ある ESLint の警告と Knip の指摘が載っています。新しく増やしたり悪化させたりした PR は落ちます。直したら `make quality-baseline` で改善を記録してください（悪化は記録できません）。
 
@@ -187,10 +187,13 @@ skills/motion-render/     # スキル本体（skills CLI とプラグインの�
   scripts/work.ts         # script.json の検証と場面の秒数の計算
   scripts/render.ts       # ブラウザで描画する部分
   scripts/json.ts         # ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
+  scripts/store.ts        # Motion の store を映像データのフォルダに展開する
 docs/how-it-works.svg     # README の図
 .github/workflows/ci.yml  # CI: 下の検査を PR ごとに実行する
 Makefile                  # 開発用のコマンド（`make help` で一覧）
 eslint.config.js, .prettierrc, knip.json
 quality-baseline.json     # 返済対象の ESLint の警告と Knip の指摘。増えると CI が落ちる
 scripts/quality-gate*.mjs # 今の指摘をベースラインと比べる
+tests/                    # Vitest のユニットテストと描画のスモークテスト（フィクスチャの store と代役のプレーヤー）
+vitest.config.ts          # テストの設定とカバレッジ 80% の基準
 ```

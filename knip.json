@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["skills/motion-render/scripts/cli.ts", "scripts/*.mjs"],
-  "project": ["skills/motion-render/scripts/**/*.ts", "scripts/**/*.mjs"],
+  "project": ["skills/motion-render/scripts/**/*.ts", "scripts/**/*.mjs", "tests/**/*.ts"],
   "ignoreBinaries": ["ffmpeg"]
 }
