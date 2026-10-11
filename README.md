@@ -165,7 +165,7 @@ The downloaded Chromium is in Playwright's cache (`~/Library/Caches/ms-playwrigh
 
 ## Development
 
-Run `npm install`, then `make check` before opening a pull request. It runs the same checks as CI: ESLint, Prettier, the TypeScript type check, the quality gate tests, and the quality baseline gate.
+Run `npm install`, then `make check` before opening a pull request. It runs the same checks as CI: ESLint, Prettier, the TypeScript type check, the unit and render smoke tests with the 80% coverage gate, the quality gate tests, and the quality baseline gate. The smoke tests start headless Chromium against a stub of the Motion player in `tests/fixtures`, so no API key is needed.
 
 The quality baseline lists the current ESLint warnings and Knip findings. A pull request that adds one or makes one worse fails. After fixing one, run `make quality-baseline` to record the improvement (it refuses to record a regression).
 
@@ -187,6 +187,7 @@ skills/motion-render/     # The skill (read by both the skills CLI and the plugi
   scripts/work.ts         # script.json validation and scene timing
   scripts/render.ts       # Rendering in the browser
   scripts/json.ts         # Reading JSON from files, APIs and the player without trusting its shape
+  scripts/store.ts        # Expanding a Motion store into a film directory
 docs/how-it-works.en.svg  # Diagram used in this README
 docs/how-it-works.svg     # Diagram used in the Japanese README
 .github/workflows/ci.yml  # CI: the checks below on every pull request
@@ -194,4 +195,6 @@ Makefile                  # Development commands (`make help`)
 eslint.config.js, .prettierrc, knip.json
 quality-baseline.json     # Known ESLint warnings and Knip findings to pay back; CI fails if they grow
 scripts/quality-gate*.mjs # Compares the current findings with the baseline
+tests/                    # Vitest unit tests and render smoke tests (fixture store and a stub player)
+vitest.config.ts          # Test settings and the 80% coverage gate
 ```

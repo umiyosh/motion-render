@@ -21,5 +21,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["skills/motion-render/scripts"]
+  "include": ["skills/motion-render/scripts", "tests", "vitest.config.ts"]
 }

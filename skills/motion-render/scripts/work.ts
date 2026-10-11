@@ -152,3 +152,35 @@ export function loadTiming(work: string): Timing {
   const scenes = raw.scenes.map((row: unknown) => parseTimingScene(row) ?? broken());
   return { total: raw.total, scenes };
 }
+
+// Where a scene of the film starts and how long it lasts, as the player laid it out.
+interface FilmScene {
+  key: string;
+  a0: number;
+  dur: number;
+}
+
+// Narration goes where each scene actually starts in the film (matched by scene id), so a film whose
+// scene lengths differ from timing.json still stays in sync. Narration longer than its scene is reported.
+export function placeOnFilm(
+  timing: Timing,
+  meta: { parts: FilmScene[] },
+  script: Pick<Script, "lead">,
+  warn: (msg: string) => void
+): TimingScene[] {
+  const parts = new Map(meta.parts.map((p) => [p.key, p]));
+  const unknown = timing.scenes.filter((s) => !parts.has(s.id)).map((s) => s.id);
+  if (unknown.length) {
+    throw new Error(
+      `these script.json scenes are not in the film: ${unknown.join(", ")} (scene ids must match)`
+    );
+  }
+  return timing.scenes.flatMap((s) => {
+    const p = parts.get(s.id);
+    if (!p) return [];
+    if (s.speech + script.lead > p.dur + 0.05) {
+      warn(`narration of "${s.id}" (${s.speech}s) runs past its scene (${p.dur}s)`);
+    }
+    return [{ ...s, start: p.a0 }];
+  });
+}

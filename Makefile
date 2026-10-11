@@ -2,7 +2,7 @@ NPM ?= npm
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint fmt fmt-check typecheck quality-test lint-quality lint-quality-ts quality-baseline check
+.PHONY: help install lint fmt fmt-check typecheck test test-coverage quality-test lint-quality lint-quality-ts quality-baseline check
 
 help: ## Show the available targets.
 	@perl -ne 'if (/^([A-Za-z0-9_.-]+):.*?##\s*(.+)$$/) { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -22,6 +22,12 @@ fmt-check: ## Check the formatting with Prettier.
 typecheck: ## Type-check TypeScript.
 	$(NPM) run typecheck
 
+test: ## Run the unit and render smoke tests (Vitest; the smoke tests start headless Chromium).
+	$(NPM) run test:run
+
+test-coverage: ## Run the tests with the 80% coverage gate.
+	$(NPM) run test:coverage
+
 quality-test: ## Test the quality baseline logic.
 	$(NPM) run quality:test
 
@@ -34,4 +40,4 @@ lint-quality-ts: ## Check the TypeScript quality baseline.
 quality-baseline: ## Update the quality baseline from the current violations (refuses to grow it).
 	$(NPM) run quality:update-baseline
 
-check: lint fmt-check typecheck quality-test lint-quality-ts ## Run every check that CI runs.
+check: lint fmt-check typecheck test-coverage quality-test lint-quality-ts ## Run every check that CI runs.
