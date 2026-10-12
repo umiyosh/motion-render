@@ -8,7 +8,7 @@
 /motion-render:motion-render Workload Identity Federation による GitHub Actions から Google Cloud への認証の仕組みを説明する動画つくって
 ```
 
-この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、Claude の **Motion** でアニメーションを作り、手元の MP4 に書き出します。
+この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、[Claude **Motion**](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) でアニメーションを作り、手元の MP4 に書き出します。
 
 ## デモ動画
 
@@ -24,11 +24,11 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ## 必要なもの
 
-| もの               | 備考                                                                                                     |
-| ------------------ | -------------------------------------------------------------------------------------------------------- |
-| Claude Code        | Artifact（Motion）を扱えるアカウント。Claude Code 専用です（Codex・Cursor などには Motion がありません） |
-| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                     |
-| Gemini API キー    | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します       |
+| もの               | 備考                                                                                                                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code        | [Claude Motion](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) を使えるアカウント。Claude Code 専用です（Codex・Cursor などには Motion がありません） |
+| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                                                                                                                      |
+| Gemini API キー    | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）                                                                                                          |
 
 macOS・Linux・Windows で動きます。
 
@@ -63,7 +63,7 @@ sandbox などで入れられない環境では、プラグインとして入れ
 
 ### 2. API キーを設定する
 
-シェルの設定ファイル（`~/.zshrc` など）に足して、Claude Code を起動し直します。
+Google AI Studio で Gemini API キーを発行します（[発行の手順](docs/api-key.ja.md)）。発行したキーをシェルの設定ファイル（`~/.zshrc` など）に足して、Claude Code を起動し直します。
 
 ```sh
 export GEMINI_API_KEY="発行したキー"
