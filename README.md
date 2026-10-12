@@ -8,7 +8,7 @@ An Agent Skill that turns a theme into an **animated explainer video with narrat
 /motion-render:motion-render Make a video that explains how GitHub Actions authenticates to Google Cloud with Workload Identity Federation
 ```
 
-From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and BGM that fits the theme (Lyria), builds the animation with Claude **Motion**, and renders it to an MP4 on your machine.
+From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and BGM that fits the theme (Lyria), builds the animation with [Claude **Motion**](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion), and renders it to an MP4 on your machine.
 
 ## Demo
 
@@ -24,11 +24,11 @@ https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 
 ## Requirements
 
-| What                   | Notes                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| Claude Code            | An account that can use Artifacts (Motion)                                                       |
-| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                |
-| Gemini API key         | Used for narration and BGM. Create one in [Google AI Studio](https://aistudio.google.com/apikey) |
+| What                   | Notes                                                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code            | An account that can use [Claude Motion](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion). Claude Code only: other agents such as Codex or Cursor have no Motion |
+| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                                                                                                              |
+| Gemini API key         | Used for narration and BGM. Create one in Google AI Studio ([step by step](docs/api-key.md))                                                                                                   |
 
 Works on macOS, Linux and Windows.
 
@@ -36,7 +36,7 @@ Works on macOS, Linux and Windows.
 
 ### 1. Install
 
-**Claude Code (recommended): install it as a plugin.** Run this inside Claude Code:
+**Recommended: install it as a plugin.** Run this inside Claude Code:
 
 ```
 /plugin install motion-render --marketplace umiyosh/motion-render
@@ -52,18 +52,18 @@ On Claude Code versions before 2.1.275, run it as two lines:
 The rendering command and its dependencies come with the plugin, so there is nothing else to install.
 Plugin skills are prefixed with the plugin name, so you call it as `/motion-render:motion-render <theme>`.
 
-**Other agents (Codex, Cursor, …): install with the skills CLI**
+**Without the plugin system: install with the skills CLI**
 
 ```sh
 npx skills add umiyosh/motion-render -g
 ```
 
-This installs the skill only. On first use, the agent installs the `motion-render` command with `npm install -g`.
-If your environment blocks that (a sandbox, for example) and you use Claude Code, install it as a plugin instead.
+This installs the skill only. On first use, Claude installs the `motion-render` command with `npm install -g`.
+If your environment blocks that (a sandbox, for example), install it as a plugin instead.
 
 ### 2. Set the API key
 
-Add this to your shell profile (`~/.zshrc` or similar) and restart Claude Code.
+Create a Gemini API key in Google AI Studio ([step by step](docs/api-key.md)). Then add this to your shell profile (`~/.zshrc` or similar) and restart Claude Code.
 
 ```sh
 export GEMINI_API_KEY="your key"
@@ -138,6 +138,20 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | Chromium fails to download on first run                             | Point `CHROMIUM_PATH` at your own Chrome or Chromium                                                                                                                        |
 | `Unknown file extension ".ts"` when running `motion-render`         | Node is older than 22.18. Update Node                                                                                                                                       |
 | Japanese glyphs or line breaks differ slightly from the Motion page | Text is drawn with your OS fonts                                                                                                                                            |
+
+## Update
+
+If you installed the plugin, open `/plugin` inside Claude Code, go to **Installed**, select motion-render and choose **Update now**. Restart Claude Code to load the new version.
+
+Claude Code updates only Anthropic's official marketplaces automatically. To get new versions of motion-render without doing this each time, open `/plugin`, go to **Marketplaces**, select motion-render and choose **Enable auto-update**. Claude Code then updates it when it starts.
+
+From a shell, `claude plugin update motion-render@motion-render` does the same as **Update now**.
+
+If you used the skills CLI, run this in your shell:
+
+```sh
+npx skills update motion-render -g
+```
 
 ## Uninstall
 

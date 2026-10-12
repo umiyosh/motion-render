@@ -8,7 +8,7 @@
 /motion-render:motion-render Workload Identity Federation による GitHub Actions から Google Cloud への認証の仕組みを説明する動画つくって
 ```
 
-この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、Claude の **Motion** でアニメーションを作り、手元の MP4 に書き出します。
+この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、[Claude **Motion**](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) でアニメーションを作り、手元の MP4 に書き出します。
 
 ## デモ動画
 
@@ -24,11 +24,11 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ## 必要なもの
 
-| もの               | 備考                                                                                               |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| Claude Code        | Artifact（Motion）を扱えるアカウント                                                               |
-| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                               |
-| Gemini API キー    | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します |
+| もの               | 備考                                                                                                                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code        | [Claude Motion](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) を使えるアカウント。Claude Code 専用です（Codex・Cursor などには Motion がありません） |
+| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                                                                                                                      |
+| Gemini API キー    | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）                                                                                                          |
 
 macOS・Linux・Windows で動きます。
 
@@ -36,7 +36,7 @@ macOS・Linux・Windows で動きます。
 
 ### 1. 入れる
 
-**Claude Code の場合（推奨）: プラグインとして入れる**。Claude Code の中で実行します。
+**推奨: プラグインとして入れる**。Claude Code の中で実行します。
 
 ```
 /plugin install motion-render --marketplace umiyosh/motion-render
@@ -52,18 +52,18 @@ Claude Code 2.1.275 より前の版では、2 行に分けて実行します。
 描画用のコマンドと部品も一緒に入るので、ほかに入れるものはありません。
 プラグインのスキルは名前の前にプラグイン名が付くので、使うときは `/motion-render:motion-render <テーマ>` です。
 
-**ほかのエージェント（Codex・Cursor など）の場合: skills CLI で入れる**
+**プラグインを使わない場合: skills CLI で入れる**
 
 ```sh
 npx skills add umiyosh/motion-render -g
 ```
 
-スキルだけが入るので、初回に Claude（エージェント）が `motion-render` コマンドを `npm install -g` で入れます。
-sandbox などで入れられない環境では、Claude Code ならプラグインとして入れてください。
+スキルだけが入るので、初回に Claude が `motion-render` コマンドを `npm install -g` で入れます。
+sandbox などで入れられない環境では、プラグインとして入れてください。
 
 ### 2. API キーを設定する
 
-シェルの設定ファイル（`~/.zshrc` など）に足して、Claude Code を起動し直します。
+Google AI Studio で Gemini API キーを発行します（[発行の手順](docs/api-key.ja.md)）。発行したキーをシェルの設定ファイル（`~/.zshrc` など）に足して、Claude Code を起動し直します。
 
 ```sh
 export GEMINI_API_KEY="発行したキー"
@@ -138,6 +138,20 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | 初回の Chromium のダウンロードが失敗する                          | `CHROMIUM_PATH` に手元の Chrome か Chromium を指定してください                                                                                                                                                |
 | `motion-render` の実行で `Unknown file extension ".ts"` が出る    | Node が 22.18 より古いです。Node を更新してください                                                                                                                                                           |
 | 日本語の字形や改行位置が Motion のページと少し違う                | 文字は OS のフォントで描かれます                                                                                                                                                                              |
+
+## 更新
+
+プラグインとして入れた場合は、Claude Code の中で `/plugin` を開き、**Installed** で motion-render を選んで **Update now** を選びます。新しい版は Claude Code を起動し直すと読み込まれます。
+
+Claude Code が自動で更新するのは、Anthropic 公式のマーケットプレイスだけです。motion-render の新しい版を毎回の操作なしで受け取るには、`/plugin` の **Marketplaces** で motion-render を選び、**Enable auto-update** を選びます。以後は Claude Code の起動時に更新されます。
+
+シェルからは `claude plugin update motion-render@motion-render` で **Update now** と同じことができます。
+
+skills CLI で入れた場合は、シェルで実行します。
+
+```sh
+npx skills update motion-render -g
+```
 
 ## アンインストール
 
