@@ -24,11 +24,11 @@ https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 
 ## Requirements
 
-| What                   | Notes                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| Claude Code            | An account that can use Artifacts (Motion)                                                       |
-| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                |
-| Gemini API key         | Used for narration and BGM. Create one in [Google AI Studio](https://aistudio.google.com/apikey) |
+| What                   | Notes                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Claude Code            | An account that can use Artifacts (Motion). Claude Code only: other agents such as Codex or Cursor have no Motion |
+| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                                 |
+| Gemini API key         | Used for narration and BGM. Create one in [Google AI Studio](https://aistudio.google.com/apikey)                  |
 
 Works on macOS, Linux and Windows.
 
@@ -36,7 +36,7 @@ Works on macOS, Linux and Windows.
 
 ### 1. Install
 
-**Claude Code (recommended): install it as a plugin.** Run this inside Claude Code:
+**Recommended: install it as a plugin.** Run this inside Claude Code:
 
 ```
 /plugin install motion-render --marketplace umiyosh/motion-render
@@ -52,14 +52,14 @@ On Claude Code versions before 2.1.275, run it as two lines:
 The rendering command and its dependencies come with the plugin, so there is nothing else to install.
 Plugin skills are prefixed with the plugin name, so you call it as `/motion-render:motion-render <theme>`.
 
-**Other agents (Codex, Cursor, …): install with the skills CLI**
+**Without the plugin system: install with the skills CLI**
 
 ```sh
 npx skills add umiyosh/motion-render -g
 ```
 
-This installs the skill only. On first use, the agent installs the `motion-render` command with `npm install -g`.
-If your environment blocks that (a sandbox, for example) and you use Claude Code, install it as a plugin instead.
+This installs the skill only. On first use, Claude installs the `motion-render` command with `npm install -g`.
+If your environment blocks that (a sandbox, for example), install it as a plugin instead.
 
 ### 2. Set the API key
 

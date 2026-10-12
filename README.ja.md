@@ -24,11 +24,11 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ## 必要なもの
 
-| もの               | 備考                                                                                               |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| Claude Code        | Artifact（Motion）を扱えるアカウント                                                               |
-| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                               |
-| Gemini API キー    | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します |
+| もの               | 備考                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| Claude Code        | Artifact（Motion）を扱えるアカウント。Claude Code 専用です（Codex・Cursor などには Motion がありません） |
+| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                     |
+| Gemini API キー    | ナレーションと BGM に使います。[Google AI Studio](https://aistudio.google.com/apikey) で発行します       |
 
 macOS・Linux・Windows で動きます。
 
@@ -36,7 +36,7 @@ macOS・Linux・Windows で動きます。
 
 ### 1. 入れる
 
-**Claude Code の場合（推奨）: プラグインとして入れる**。Claude Code の中で実行します。
+**推奨: プラグインとして入れる**。Claude Code の中で実行します。
 
 ```
 /plugin install motion-render --marketplace umiyosh/motion-render
@@ -52,14 +52,14 @@ Claude Code 2.1.275 より前の版では、2 行に分けて実行します。
 描画用のコマンドと部品も一緒に入るので、ほかに入れるものはありません。
 プラグインのスキルは名前の前にプラグイン名が付くので、使うときは `/motion-render:motion-render <テーマ>` です。
 
-**ほかのエージェント（Codex・Cursor など）の場合: skills CLI で入れる**
+**プラグインを使わない場合: skills CLI で入れる**
 
 ```sh
 npx skills add umiyosh/motion-render -g
 ```
 
-スキルだけが入るので、初回に Claude（エージェント）が `motion-render` コマンドを `npm install -g` で入れます。
-sandbox などで入れられない環境では、Claude Code ならプラグインとして入れてください。
+スキルだけが入るので、初回に Claude が `motion-render` コマンドを `npm install -g` で入れます。
+sandbox などで入れられない環境では、プラグインとして入れてください。
 
 ### 2. API キーを設定する
 
