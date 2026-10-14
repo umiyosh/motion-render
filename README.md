@@ -10,6 +10,9 @@ An Agent Skill that turns a theme into an **animated explainer video with narrat
 
 From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and BGM that fits the theme (Lyria), builds the animation with [Claude **Motion**](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion), and renders it to an MP4 on your machine.
 
+> [!NOTE]
+> Claude Motion is in beta and available only on Team and Enterprise plans (as of October 2026). motion-render needs an account on one of those plans.
+
 ## Demo
 
 An introduction video made by motion-render itself (57 seconds, with sound).
@@ -24,11 +27,11 @@ https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 
 ## Requirements
 
-| What                   | Notes                                                                                                                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code            | An account that can use [Claude Motion](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion). Claude Code only: other agents such as Codex or Cursor have no Motion |
-| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                                                                                                              |
-| Gemini API key         | Used for narration and BGM. Create one in Google AI Studio ([step by step](docs/api-key.md))                                                                                                   |
+| What                   | Notes                                                                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code            | An account that can use [Claude Motion](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) (beta, Team and Enterprise plans only). Claude Code only: other agents such as Codex or Cursor have no Motion |
+| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                                                                                                                                                     |
+| Gemini API key         | Used for narration and BGM. Create one in Google AI Studio ([step by step](docs/api-key.md))                                                                                                                                          |
 
 Works on macOS, Linux and Windows.
 
