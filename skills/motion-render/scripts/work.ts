@@ -52,7 +52,7 @@ const DEFAULTS = {
   ttsModel: "gemini-3.8-flash-tts",
   bgmModel: "lyria-3.5",
   bgmVolume: 0.15,
-  sfxVolume: 0.5,
+  sfxVolume: 1, // 1 = leveled 4 dB under the narration (sfx.ts)
   lead: 0.25, // silence before each scene's narration
   tail: 0.35, // silence after it
   endHold: 3, // the last scene holds this long after its narration

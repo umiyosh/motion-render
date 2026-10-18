@@ -16,10 +16,12 @@ import type { Script, SfxCue } from "./work.ts";
 const API = "https://api.elevenlabs.io/v1/sound-generation?output_format=mp3_44100_128"; // the best format pay-as-you-go allows
 const MODEL = "eleven_text_to_sound_v2";
 const SILENT_DB = -60; // a peak below this means the effect came back silent
-// Generated effects differ in level by 30 dB or more: each is brought to TARGET_MEAN_DB on average,
-// unless that would push its peak past TARGET_PEAK_DB.
-const TARGET_MEAN_DB = -20;
-const TARGET_PEAK_DB = -1;
+// Generated effects differ in level by 30 dB or more, so each is leveled against the narration: on
+// average UNDER_NARRATION_DB below it (chosen by ear; 10 dB under was masked by the speech), times its
+// volume, without letting its peak pass PEAK_DB.
+const UNDER_NARRATION_DB = 4;
+const PEAK_DB = -1;
+const NARRATION_DB = -16; // Gemini TTS's usual average level, for when there is no narration yet
 const PREVIEW_GAP = 0.6;
 
 interface Level {
@@ -129,15 +131,30 @@ function level(work: string, prompt: string, duration: number): Level {
   return { mean, max };
 }
 
-// An effect ready for mixing: its file, its time and the gain that levels it, times its own volume.
-export function sfxTrack(work: string, cue: SfxCue): SfxTrack {
+// The narration's average level in dBFS over the scenes narrated so far: what the effects are leveled against.
+export async function narrationLevel(work: string, script: Script): Promise<number> {
+  const files = script.scenes
+    .map((s) => join(work, "audio", `${s.id}.wav`))
+    .filter((f) => existsSync(f));
+  if (!files.length) return NARRATION_DB;
+  let sum = 0;
+  for (const f of files) sum += (await volumeStats(f)).mean;
+  return sum / files.length;
+}
+
+// An effect ready for mixing: its file, its time and the gain that puts it UNDER_NARRATION_DB below
+// `narration` (dBFS), lowered by its own volume, with the peak capped.
+export function sfxTrack(work: string, cue: SfxCue, narration: number): SfxTrack {
   const { mean, max } = level(work, cue.prompt, cue.duration);
-  const db = Math.min(TARGET_MEAN_DB - mean, TARGET_PEAK_DB - max);
+  const db = Math.min(
+    narration - UNDER_NARRATION_DB - mean + 20 * Math.log10(cue.volume),
+    PEAK_DB - max
+  );
   return {
     file: sfxFile(work, cue.prompt, cue.duration, "mp3"),
     start: cue.start,
     duration: cue.duration,
-    gain: cue.volume * 10 ** (db / 20),
+    gain: 10 ** (db / 20),
   };
 }
 
@@ -156,12 +173,13 @@ export async function previewSfx(
 ): Promise<{ file: string; list: PreviewEntry[] } | null> {
   const all = allSfx(script);
   if (!all.length) return null;
+  const narration = await narrationLevel(work, script);
   let offset = 0;
   const list: PreviewEntry[] = [],
     inputs: string[] = [],
     graph: string[] = [];
   all.forEach((fx, i) => {
-    const t = sfxTrack(work, { ...fx, start: 0 });
+    const t = sfxTrack(work, { ...fx, start: 0 }, narration);
     inputs.push("-i", t.file);
     graph.push(sfxChain(i, t, `s${i}`), `[s${i}]apad=pad_dur=${PREVIEW_GAP}[p${i}]`);
     list.push({

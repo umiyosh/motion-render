@@ -83,7 +83,7 @@ Motion の Artifact 型は作成時に Style・Colors・Length を質問する�
 - `id` は英小文字・数字・`-`。Motion の場面の id と同じにする
 - `narration` は TTS に読ませる文。英語の固有名詞・略語はカタカナで書く（`GitHub Actions` → `ギットハブアクションズ`）。
   画面の文字は元の表記のまま
-- 任意: `voice`・`speed`・`bgmVolume`（既定 0.15）・`sfxVolume`（既定 0.5）・`lead`・`tail`・`endHold`
+- 任意: `voice`・`speed`・`bgmVolume`（既定 0.15）・`sfxVolume`（既定 1）・`lead`・`tail`・`endHold`
 - 任意: 場面ごとの `sfx`。`at` は場面の頭からの秒、`duration` は 0.5〜10 秒（既定 1.5）、`volume` は 0〜1（既定 `sfxVolume`）
 
 ## 手順
@@ -179,8 +179,9 @@ motion-render build <work> [<出力.mp4>]
 | 段が光る・強調     | gentle glassy chime              | 1.0        |
 | 完了・成功         | soft positive notification chime | 1.2        |
 
-`build` は、効果音ごとに音量を一定の水準にそろえ（生成される音は 30 dB 以上ばらつく）、`duration` で切り、
-両端をフェードしてからナレーションの下に混ぜる。無音で返ってきた効果音は `sfx` が作り直し、3 回とも無音なら止まる。
+`build` は、効果音ごとに音量をナレーションの平均より 4 dB 下にそろえ（生成される音は 30 dB 以上ばらつく）、
+`volume` を掛け、`duration` で切り、両端をフェードしてから混ぜる。`volume` を下げすぎると話し声に埋もれて聞こえない
+（10 dB 下で聞こえなくなった）。無音で返ってきた効果音は `sfx` が作り直し、3 回とも無音なら止まる。
 
 **表記**: 月額プランなしで作った効果音は、商用に使えず、公開するときは題名に `elevenlabs.io` か `11.ai` を入れる
 （ElevenLabs のヘルプ「Can I publish the content I generate on the platform?」）。効果音を付けた動画では、

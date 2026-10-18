@@ -28,7 +28,7 @@ describe("loadScript", () => {
       ttsModel: "gemini-3.8-flash-tts",
       bgmModel: "lyria-3.5",
       bgmVolume: 0.15,
-      sfxVolume: 0.5,
+      sfxVolume: 1,
       lead: 0.25,
       tail: 0.35,
       endHold: 3,

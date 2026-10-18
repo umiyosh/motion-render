@@ -27,7 +27,7 @@ vi.mock("node:child_process", async (importOriginal) => {
   };
 });
 
-const { checkSfx, makeSfx, previewSfx, sfxKey, sfxTrack } =
+const { checkSfx, makeSfx, narrationLevel, previewSfx, sfxKey, sfxTrack } =
   await import("../skills/motion-render/scripts/sfx.ts");
 const { volumeStats } = await import("../skills/motion-render/scripts/audio.ts");
 const { loadScript } = await import("../skills/motion-render/scripts/work.ts");
@@ -154,25 +154,55 @@ describe("sfxTrack", () => {
       JSON.stringify({ prompt, duration, mean, max })
     );
 
-  it("brings a quiet effect up to the common average level", async () => {
+  it("brings a quiet effect to 4 dB under the narration's average level", async () => {
     const dir = workDir(SFX_SCRIPT);
     await makeSfx(dir, loadScript(dir));
     meta(dir, "soft UI pop", 0.8, -50, -32);
-    const t = sfxTrack(dir, { ...pop, volume: 0.5, start: 3 });
+    const t = sfxTrack(dir, { ...pop, volume: 1, start: 3 }, -16);
     expect(t).toMatchObject({
       file: sfxPath(dir, "soft UI pop", 0.8, "mp3"),
       start: 3,
       duration: 0.8,
     });
-    expect(t.gain).toBeCloseTo(0.5 * 10 ** (30 / 20), 6); // +30 dB to reach -20 dB on average
+    expect(t.gain).toBeCloseTo(10 ** (30 / 20), 6); // -50 dB -> -20 dB
   });
 
-  it("stops short of clipping a loud effect", async () => {
+  it("lowers an effect by its volume", async () => {
+    const dir = workDir(SFX_SCRIPT);
+    await makeSfx(dir, loadScript(dir));
+    meta(dir, "soft UI pop", 0.8, -50, -32);
+    const t = sfxTrack(dir, { ...pop, volume: 0.5, start: 0 }, -10);
+    expect(t.gain).toBeCloseTo(0.5 * 10 ** (36 / 20), 6); // -50 dB -> -14 dB, then halved
+  });
+
+  it("stops short of clipping a loud effect, and still lowers it by its volume", async () => {
     const dir = workDir(SFX_SCRIPT);
     await makeSfx(dir, loadScript(dir));
     meta(dir, "quick airy whoosh", 1.5, -21.5, 0);
-    const t = sfxTrack(dir, { ...whoosh, duration: 1.5, volume: 1, start: 0 });
-    expect(t.gain).toBeCloseTo(10 ** (-1 / 20), 6); // peak held at -1 dB
+    const loud = { ...whoosh, duration: 1.5, start: 0 };
+    expect(sfxTrack(dir, { ...loud, volume: 1 }, -16).gain).toBeCloseTo(10 ** (-1 / 20), 6); // peak held at -1 dB
+    expect(sfxTrack(dir, { ...loud, volume: 0.1 }, -16).gain).toBeCloseTo(
+      0.1 * 10 ** (1.5 / 20),
+      6
+    );
+  });
+});
+
+describe("narrationLevel", () => {
+  it("averages the narration's level over the scenes", async () => {
+    ffmpeg.log = "mean_volume: -14.0 dB\nmax_volume: -1.0 dB\n";
+    const dir = workDir(SFX_SCRIPT, { intro: 1, flow: 1 });
+    expect(await narrationLevel(dir, loadScript(dir))).toBe(-14);
+    expect(ffmpeg.calls.map((a) => a[a.indexOf("-i") + 1])).toEqual([
+      join(dir, "audio", "intro.wav"),
+      join(dir, "audio", "flow.wav"),
+    ]);
+  });
+
+  it("assumes Gemini TTS's usual level before there is any narration", async () => {
+    const dir = workDir(SFX_SCRIPT);
+    expect(await narrationLevel(dir, loadScript(dir))).toBe(-16);
+    expect(ffmpeg.calls).toEqual([]);
   });
 });
 

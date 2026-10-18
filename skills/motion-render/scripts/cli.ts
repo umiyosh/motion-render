@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { openFilm, checkFilmDir, type Film } from "./render.ts";
 import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs } from "./audio.ts";
 import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx } from "./work.ts";
-import { checkSfx, makeSfx, previewSfx, sfxTrack } from "./sfx.ts";
+import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.ts";
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 
@@ -129,7 +129,8 @@ async function build(work: string, out: string, fps: number): Promise<void> {
   try {
     const warn = (w: string) => console.error(`warning: ${w}`);
     const scenes = placeOnFilm(timing, film.meta, script, warn);
-    const sfx = placeSfx(script, film.meta.parts, warn).map((c) => sfxTrack(work, c));
+    const narration = await narrationLevel(work, script);
+    const sfx = placeSfx(script, film.meta.parts, warn).map((c) => sfxTrack(work, c, narration));
     const audio = join(work, "audio", "mix.m4a");
     await mix(work, script, { scenes, total: film.meta.duration, sfx }, audio);
     mkdirSync(dirname(out), { recursive: true });
