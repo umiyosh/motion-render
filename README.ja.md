@@ -22,16 +22,18 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 ![motion-render の仕組み](docs/how-it-works.svg)
 
 - 見た目・長さ・声・BGM の雰囲気はテーマから自動で決まります（指定すればそれに従います）
+- ElevenLabs の API キーがあれば、カードが現れる・流れ図が光るといった動きに合わせて効果音も付きます
 - 既存の Motion の動画の URL を渡して、ナレーションと BGM 付きの MP4 にすることもできます
 - 描画用のブラウザ（Chromium）と ffmpeg は自動で用意されるので、環境ごとの差が出ません
 
 ## 必要なもの
 
-| もの               | 備考                                                                                                                                                                                                                                               |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code        | [Claude Motion](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) を使えるアカウント（ベータ版。Team・Enterprise プランのみ）。Claude Code 専用です（Codex・Cursor などには Motion がありません） |
-| Node.js 22.18 以上 | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                                                                                                                                                               |
-| Gemini API キー    | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）                                                                                                                                                   |
+| もの                | 備考                                                                                                                                                                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code         | [Claude Motion](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) を使えるアカウント（ベータ版。Team・Enterprise プランのみ）。Claude Code 専用です（Codex・Cursor などには Motion がありません） |
+| Node.js 22.18 以上  | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                                                                                                                                                               |
+| Gemini API キー     | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）                                                                                                                                                   |
+| ElevenLabs API キー | 任意。効果音に使います。月額プランなしの従量課金で作れます（[作成の手順](docs/elevenlabs-key.ja.md)）                                                                                                                                              |
 
 macOS・Linux・Windows で動きます。
 
@@ -71,6 +73,14 @@ Google AI Studio で Gemini API キーを発行します（[発行の手順](doc
 ```sh
 export GEMINI_API_KEY="発行したキー"
 ```
+
+効果音も付けたい場合は、ElevenLabs のキーも足します（[作成の手順](docs/elevenlabs-key.ja.md)）。無ければ効果音なしで作ります。
+
+```sh
+export ELEVENLABS_API_KEY="作成したキー"
+```
+
+月額プランなしで作った効果音は商用に使えず、公開するときは題名に `11.ai` などの表記が要ります。motion-render は効果音を付けた動画のタイトルに `🎧:11.ai` を入れます。
 
 ### 3. Claude Code の sandbox を使っている場合だけ: 設定を足す
 
@@ -118,14 +128,16 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | ------------------------------------------------ | -------------------------------------------------------------------------------- |
 | `motion-render narrate <work>`                   | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く    |
 | `motion-render bgm <work>`                       | `script.json` の `bgm` の指示から BGM を作る                                     |
+| `motion-render sfx <work>`                       | `script.json` の `sfx` から効果音を作り、全部を順に聞ける `preview.m4a` を書く   |
 | `motion-render prepare <storeDir> <work>/film`   | Motion から取得した映像データを、描画できる形に展開する                          |
 | `motion-render stills <filmDir> <outDir> 0,5,12` | 確認用の静止画を書き出す                                                         |
-| `motion-render build <work> [out.mp4]`           | ナレーションと BGM を合成し、映像と合わせて MP4 にする（どちらかが無いと止まる） |
+| `motion-render build <work> [out.mp4]`           | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする（足りないと止まる） |
 | `motion-render --version`                        | 版を表示する                                                                     |
 
 | 環境変数                | 効果                                                         |
 | ----------------------- | ------------------------------------------------------------ |
 | `GEMINI_API_KEY`        | ナレーションと BGM の生成に必要                              |
+| `ELEVENLABS_API_KEY`    | 効果音の生成に必要（無ければ効果音を付けない）               |
 | `MOTION_RENDER_OUT_DIR` | `build` の出力先を省略したときの保存先                       |
 | `CHROMIUM_PATH`         | 同梱の Chromium の代わりに、手元の Chrome や Chromium を使う |
 | `FFMPEG_PATH`           | 同梱の ffmpeg の代わりに、手元の ffmpeg を使う               |
@@ -136,6 +148,9 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bootstrap_check_in ... Permission denied` でブラウザが起動しない | Claude Code の sandbox の中で動いています。インストールの手順 3 を確認してください。`motion-render` は単体で実行する必要があります（`\| grep` や `&&` でつなぐと sandbox の外に出ません）                     |
 | `GEMINI_API_KEY is not set`                                       | インストールの手順 2 を確認し、Claude Code を起動し直してください                                                                                                                                             |
+| `ELEVENLABS_API_KEY is not set`                                   | 効果音のキーがありません。[作成の手順](docs/elevenlabs-key.ja.md)で作るか、効果音なしで作るよう Claude に伝えてください                                                                                       |
+| 効果音の生成が `HTTP 401` などで失敗する                          | キーで Sound Effects が許可されていないか、残高が足りません。エラーに続く理由を見て、ElevenLabs の Developers で確認してください                                                                              |
+| `came back silent` で効果音の生成が止まる                         | 3 回とも無音が返りました。`prompt` を具体的な音の説明に書き換えてやり直してください                                                                                                                           |
 | ナレーションや BGM の生成が何度も失敗する                         | 1 回 90 秒で打ち切り、3 回まで再試行します。それでも失敗するなら、API キーの権限と利用上限を確認してください                                                                                                  |
 | `motion-render` のインストールで ffmpeg のダウンロードが失敗する  | 社内プロキシなどで GitHub からの取得が止められています。`npm install -g --ignore-scripts <スキルのフォルダ>` で入れ、手元の ffmpeg を `FFMPEG_PATH` で指定してください（PATH 上の `ffmpeg` も自動で使います） |
 | 初回の Chromium のダウンロードが失敗する                          | `CHROMIUM_PATH` に手元の Chrome か Chromium を指定してください                                                                                                                                                |
@@ -201,6 +216,7 @@ skills/motion-render/     # スキル本体（skills CLI とプラグインの�
   package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static）
   scripts/cli.ts          # motion-render コマンド
   scripts/audio.ts        # ナレーションと BGM の生成、音声の合成
+  scripts/sfx.ts          # 効果音の生成（ElevenLabs）、音量のそろえ方、試聴用ファイル
   scripts/work.ts         # script.json の検証と場面の秒数の計算
   scripts/render.ts       # ブラウザで描画する部分
   scripts/json.ts         # ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む

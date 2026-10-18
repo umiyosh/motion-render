@@ -22,6 +22,7 @@ https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 ![How motion-render works](docs/how-it-works.en.svg)
 
 - Look, length, voice and the mood of the music are chosen from the theme (anything you specify wins)
+- With an ElevenLabs API key, sound effects follow the animation too: a card appearing, a step of a flow lighting up
 - You can also pass the URL of an existing Motion film to get an MP4 with narration and BGM
 - The rendering browser (Chromium) and ffmpeg are set up automatically, so results don't depend on what is installed on your machine
 
@@ -32,6 +33,7 @@ https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 | Claude Code            | An account that can use [Claude Motion](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) (beta, Team and Enterprise plans only). Claude Code only: other agents such as Codex or Cursor have no Motion |
 | Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                                                                                                                                                     |
 | Gemini API key         | Used for narration and BGM. Create one in Google AI Studio ([step by step](docs/api-key.md))                                                                                                                                          |
+| ElevenLabs API key     | Optional, for sound effects. Pay-as-you-go works without a subscription ([step by step](docs/elevenlabs-key.md))                                                                                                                      |
 
 Works on macOS, Linux and Windows.
 
@@ -71,6 +73,14 @@ Create a Gemini API key in Google AI Studio ([step by step](docs/api-key.md)). T
 ```sh
 export GEMINI_API_KEY="your key"
 ```
+
+For sound effects, add an ElevenLabs key as well ([step by step](docs/elevenlabs-key.md)). Without it, videos are made without sound effects.
+
+```sh
+export ELEVENLABS_API_KEY="your key"
+```
+
+Sound effects made without a subscription are for non-commercial use only and must be credited in the title (for example with `11.ai`) when published. motion-render puts `🎧:11.ai` on the title of a video with sound effects.
 
 ### 3. Only if you use the Claude Code sandbox: add settings
 
@@ -114,18 +124,20 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 
 Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md).
 
-| Command                                          | What it does                                                                     |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `motion-render narrate <work>`                   | Generates narration from `script.json` and writes scene lengths to `timing.json` |
-| `motion-render bgm <work>`                       | Generates the BGM from the `bgm` prompt in `script.json`                         |
-| `motion-render prepare <storeDir> <work>/film`   | Expands a Motion film's data into a directory it can render                      |
-| `motion-render stills <filmDir> <outDir> 0,5,12` | Writes still frames for checking                                                 |
-| `motion-render build <work> [out.mp4]`           | Mixes narration and BGM and renders the MP4 (stops if either is missing)         |
-| `motion-render --version`                        | Prints the version                                                               |
+| Command                                          | What it does                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `motion-render narrate <work>`                   | Generates narration from `script.json` and writes scene lengths to `timing.json`     |
+| `motion-render bgm <work>`                       | Generates the BGM from the `bgm` prompt in `script.json`                             |
+| `motion-render sfx <work>`                       | Generates the sound effects in `script.json` and a `preview.m4a` of them in order    |
+| `motion-render prepare <storeDir> <work>/film`   | Expands a Motion film's data into a directory it can render                          |
+| `motion-render stills <filmDir> <outDir> 0,5,12` | Writes still frames for checking                                                     |
+| `motion-render build <work> [out.mp4]`           | Mixes narration, BGM and sound effects and renders the MP4 (stops if any is missing) |
+| `motion-render --version`                        | Prints the version                                                                   |
 
 | Environment variable    | Effect                                                     |
 | ----------------------- | ---------------------------------------------------------- |
 | `GEMINI_API_KEY`        | Required for narration and BGM                             |
+| `ELEVENLABS_API_KEY`    | Required for sound effects (none are added without it)     |
 | `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path  |
 | `CHROMIUM_PATH`         | Use your own Chrome or Chromium instead of the bundled one |
 | `FFMPEG_PATH`           | Use your own ffmpeg instead of the bundled one             |
@@ -136,6 +148,9 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The browser fails with `bootstrap_check_in ... Permission denied`   | It is running inside the Claude Code sandbox. Check step 3 of the install. `motion-render` must run on its own (chaining it with `\| grep` or `&&` keeps it in the sandbox) |
 | `GEMINI_API_KEY is not set`                                         | Check step 2 of the install and restart Claude Code                                                                                                                         |
+| `ELEVENLABS_API_KEY is not set`                                     | There is no key for sound effects. Create one ([step by step](docs/elevenlabs-key.md)) or ask Claude to make the video without sound effects                                |
+| Sound effect generation fails with `HTTP 401` or similar            | The key does not allow Sound Effects, or the balance has run out. Read the reason after the status and check Developers in ElevenLabs                                       |
+| Sound effect generation stops with `came back silent`               | Silence came back three times. Rewrite the `prompt` as a more concrete sound and try again                                                                                  |
 | Narration or BGM generation keeps failing                           | Each request times out after 90 seconds and is retried up to 3 times. If it still fails, check your API key's permissions and quota                                         |
 | ffmpeg fails to download                                            | A proxy is blocking downloads from GitHub. Install ffmpeg yourself (it is used from `PATH`) or point `FFMPEG_PATH` at it                                                    |
 | Chromium fails to download on first run                             | Point `CHROMIUM_PATH` at your own Chrome or Chromium                                                                                                                        |
@@ -201,6 +216,7 @@ skills/motion-render/     # The skill (read by both the skills CLI and the plugi
   package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static)
   scripts/cli.ts          # The motion-render command
   scripts/audio.ts        # Narration and BGM generation, audio mixing
+  scripts/sfx.ts          # Sound effect generation (ElevenLabs), leveling and the listening file
   scripts/work.ts         # script.json validation and scene timing
   scripts/render.ts       # Rendering in the browser
   scripts/json.ts         # Reading JSON from files, APIs and the player without trusting its shape
