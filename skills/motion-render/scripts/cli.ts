@@ -8,7 +8,8 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { openFilm, checkFilmDir, type Film } from "./render.ts";
 import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs } from "./audio.ts";
-import { loadScript, writeTiming, loadTiming, placeOnFilm } from "./work.ts";
+import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx } from "./work.ts";
+import { checkSfx, makeSfx, previewSfx, sfxTrack } from "./sfx.ts";
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 
@@ -16,15 +17,18 @@ const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
                                           and write the scene lengths to <work>/timing.json.
   motion-render bgm <work>                Make the BGM from script.json's "bgm" prompt (Lyria).
+  motion-render sfx <work>                Make the scenes' sound effects (ElevenLabs) and write
+                                          <work>/audio/sfx/preview.m4a to listen to them all in order.
   motion-render prepare <storeDir> <work>/film
                                           Expand a Motion film's store (ArtifactData out_dir) into a film dir.
   motion-render stills <filmDir> <outDir> <t1,t2,...>
                                           Write PNG stills at the given seconds.
-  motion-render build <work> [out.mp4]    Mix narration + BGM and render <work>/film to MP4.
+  motion-render build <work> [out.mp4]    Mix narration + BGM + sound effects and render <work>/film to MP4.
                                           Without out.mp4: $MOTION_RENDER_OUT_DIR or the current dir, <work name>.mp4.
 
 env:
   GEMINI_API_KEY         required by narrate and bgm
+  ELEVENLABS_API_KEY     required by sfx
   MOTION_RENDER_OUT_DIR  default output directory for build
   CHROMIUM_PATH          use this Chrome/Chromium instead of the bundled one
   FFMPEG_PATH            use this ffmpeg instead of the bundled one`;
@@ -71,6 +75,18 @@ async function runBgm(work: string): Promise<void> {
   console.log(`bgm: ${file}`);
 }
 
+async function runSfx(work: string): Promise<void> {
+  const script = loadScript(work);
+  const made = await makeSfx(work, script);
+  const preview = await previewSfx(work, script);
+  if (!preview) {
+    console.log("no sound effects in script.json");
+    return;
+  }
+  for (const e of preview.list) console.log(`${e.offset}s\t${e.scene} +${e.at}s\t${e.prompt}`);
+  console.log(`made ${made} new, listen to all of them: ${preview.file}`);
+}
+
 // Pipes rendered frames straight into ffmpeg (no temp files) and muxes the mixed audio.
 async function encode(film: Film, fps: number, audio: string, out: string): Promise<number> {
   const count = Math.round(film.meta.duration * fps);
@@ -105,22 +121,33 @@ async function build(work: string, out: string, fps: number): Promise<void> {
   if (missing.length)
     die(`narration missing for: ${missing.join(", ")} (run "motion-render narrate ${work}")`);
   bgmFile(work);
+  checkSfx(work, script);
   const filmDir = join(work, "film");
   checkFilmDir(filmDir);
 
   const film = await openFilm(filmDir);
   try {
-    const scenes = placeOnFilm(timing, film.meta, script, (w) => console.error(`warning: ${w}`));
+    const warn = (w: string) => console.error(`warning: ${w}`);
+    const scenes = placeOnFilm(timing, film.meta, script, warn);
+    const sfx = placeSfx(script, film.meta.parts, warn).map((c) => sfxTrack(work, c));
     const audio = join(work, "audio", "mix.m4a");
-    await mix(work, script, { scenes, total: film.meta.duration }, audio);
+    await mix(work, script, { scenes, total: film.meta.duration, sfx }, audio);
     mkdirSync(dirname(out), { recursive: true });
     const count = await encode(film, fps, audio, out);
     for (const w of await film.warnings()) console.error("runner", w);
-    console.log(`done: ${out} (${film.meta.duration}s, ${count} frames, narration + BGM)`);
+    const extra = sfx.length ? ` + ${sfx.length} sound effects` : "";
+    console.log(`done: ${out} (${film.meta.duration}s, ${count} frames, narration + BGM${extra})`);
   } finally {
     await film.close();
   }
 }
+
+// Commands that take just the work dir.
+const WORK_COMMANDS = new Map<string, (work: string) => Promise<void>>([
+  ["narrate", runNarrate],
+  ["bgm", runBgm],
+  ["sfx", runSfx],
+]);
 
 function version(): string {
   const v = field(readJson(fileURLToPath(new URL("../package.json", import.meta.url))), "version");
@@ -146,8 +173,8 @@ async function main(): Promise<void> {
     return;
   }
   const [a, b, c] = rest;
-  if (cmd === "narrate" && a && rest.length === 1) return runNarrate(resolve(a));
-  if (cmd === "bgm" && a && rest.length === 1) return runBgm(resolve(a));
+  const onWork = WORK_COMMANDS.get(cmd);
+  if (onWork && a && rest.length === 1) return onWork(resolve(a));
   if (cmd === "prepare" && a && b && rest.length === 2) return runPrepare(a, b);
   if (cmd === "stills" && a && b && c && rest.length === 3) return stills(a, b, c);
   if (cmd === "build" && a && (rest.length === 1 || rest.length === 2)) {

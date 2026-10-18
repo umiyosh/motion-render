@@ -4,16 +4,16 @@
   "thresholds": {},
   "issues": [
     {
-      "id": "eslint|complexity|skills/motion-render/scripts/cli.ts|210|1",
+      "id": "eslint|complexity|skills/motion-render/scripts/cli.ts|157|1",
       "tool": "eslint",
       "category": "complexity",
       "path": "skills/motion-render/scripts/cli.ts",
-      "line": 210,
+      "line": 157,
       "column": 1,
-      "detail": "Async function 'main' has a complexity of 25. Maximum allowed is 20.",
+      "detail": "Async function 'main' has a complexity of 22. Maximum allowed is 20.",
       "metric": {
         "name": "complexity",
-        "value": 25,
+        "value": 22,
         "limit": 20,
         "direction": "lowerIsBetter"
       },

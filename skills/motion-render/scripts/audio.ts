@@ -7,7 +7,7 @@ import { errorMessage, field, readJson } from "./json.ts";
 import type { Script } from "./work.ts";
 
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
-const TIMEOUT_MS = 90_000; // a TTS request once hung for 15 minutes without this
+export const TIMEOUT_MS = 90_000; // a TTS request once hung for 15 minutes without this
 const RETRIES = 3;
 
 interface Audio {
@@ -15,10 +15,19 @@ interface Audio {
   data: Buffer;
 }
 
-// Where each scene's narration goes on the film timeline.
+// One sound effect on the film timeline. `gain` multiplies its volume (it already holds the leveling).
+export interface SfxTrack {
+  file: string;
+  start: number;
+  duration: number;
+  gain: number;
+}
+
+// Where each scene's narration and each sound effect go on the film timeline.
 export interface MixTiming {
   scenes: { id: string; start: number }[];
   total: number;
+  sfx?: SfxTrack[];
 }
 
 // ffmpeg-static downloads its binary in a postinstall script, which Claude Code's plugin dependency
@@ -51,7 +60,7 @@ export function findFfmpeg(): string {
   throw new Error("ffmpeg not found: install ffmpeg or set FFMPEG_PATH");
 }
 
-function runFfmpeg(args: string[]): Promise<void> {
+export function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((ok, fail) => {
     const ff = spawn(findFfmpeg(), ["-y", "-loglevel", "error", ...args], {
       stdio: ["ignore", "inherit", "inherit"],
@@ -61,6 +70,44 @@ function runFfmpeg(args: string[]): Promise<void> {
       code === 0 ? ok() : fail(new Error(`ffmpeg exited with code ${code}`))
     );
   });
+}
+
+// Average and peak level of an audio file in dBFS (ffmpeg's volumedetect). Silence reads as -91 dB or lower.
+export function volumeStats(file: string): Promise<{ mean: number; max: number }> {
+  return new Promise((ok, fail) => {
+    const args = ["-hide_banner", "-nostats", "-i", file, "-af", "volumedetect", "-f", "null", "-"];
+    const ff = spawn(findFfmpeg(), args, { stdio: ["ignore", "ignore", "pipe"] });
+    let log = "";
+    ff.stderr?.on("data", (d: Buffer) => (log += d.toString()));
+    ff.on("error", fail);
+    ff.on("close", (code) => {
+      const level = (name: string): number => {
+        const v = new RegExp(`${name}: (-?[\\d.]+|-inf) dB`).exec(log)?.[1];
+        return v === "-inf" ? -120 : Number(v ?? NaN);
+      };
+      const mean = level("mean_volume"),
+        max = level("max_volume");
+      if (code !== 0 || !Number.isFinite(mean) || !Number.isFinite(max))
+        return fail(
+          new Error(`could not measure the level of ${file} (ffmpeg exited with ${code})`)
+        );
+      ok({ mean, max });
+    });
+  });
+}
+
+// Runs `attempt` up to RETRIES times, logging each failure under `label`, and rethrows the last error.
+export async function withRetries<T>(label: string, attempt: () => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (let i = 1; i <= RETRIES; i++) {
+    try {
+      return await attempt();
+    } catch (e) {
+      last = e;
+      console.error(`motion-render: ${label} attempt ${i}/${RETRIES} failed: ${errorMessage(e)}`);
+    }
+  }
+  throw last;
 }
 
 // Picks the first inline audio part out of a generateContent response.
@@ -82,33 +129,24 @@ function audioPart(json: unknown): { mimeType: string; data: string } | null {
 async function generateAudio(model: string, body: object): Promise<Audio> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY is not set (needed for narration and BGM)");
-  let last: unknown;
-  for (let attempt = 1; attempt <= RETRIES; attempt++) {
-    try {
-      const res = await fetch(`${API}/${model}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      const json: unknown = await res.json();
-      if (!res.ok) {
-        const detail = field(field(json, "error"), "message");
-        throw new Error(
-          `${model}: HTTP ${res.status} ${typeof detail === "string" ? detail : ""}`.trim()
-        );
-      }
-      const part = audioPart(json);
-      if (!part) throw new Error(`${model}: no audio in the response`);
-      return { mimeType: part.mimeType, data: Buffer.from(part.data, "base64") };
-    } catch (e) {
-      last = e;
-      console.error(
-        `motion-render: ${model} attempt ${attempt}/${RETRIES} failed: ${errorMessage(e)}`
+  return withRetries(model, async () => {
+    const res = await fetch(`${API}/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const json: unknown = await res.json();
+    if (!res.ok) {
+      const detail = field(field(json, "error"), "message");
+      throw new Error(
+        `${model}: HTTP ${res.status} ${typeof detail === "string" ? detail : ""}`.trim()
       );
     }
-  }
-  throw last;
+    const part = audioPart(json);
+    if (!part) throw new Error(`${model}: no audio in the response`);
+    return { mimeType: part.mimeType, data: Buffer.from(part.data, "base64") };
+  });
 }
 
 // Gemini TTS returns WAV, or raw 16-bit PCM ("audio/L16;rate=24000") on some models: always store WAV.
@@ -198,7 +236,24 @@ export function bgmFile(work: string): string {
   return join(work, "audio", file);
 }
 
-// Narration at each scene's start + lead, BGM at a constant level underneath (ducking made it pump).
+const round = (n: number): number => Math.round(n * 1000) / 1000;
+
+// One sound effect as a filter chain from input `input` to [label]: cut to its length (generated audio can
+// run long), leveled by `gain`, faded at both ends so it cannot click, and delayed to its start.
+export function sfxChain(input: number, t: SfxTrack, label: string): string {
+  const fade = Math.min(0.25, t.duration / 3);
+  return [
+    `[${input}:a]atrim=0:${t.duration},asetpts=PTS-STARTPTS,aresample=44100`,
+    "aformat=channel_layouts=stereo",
+    `volume=${t.gain.toFixed(4)}`,
+    "afade=t=in:d=0.01",
+    `afade=t=out:st=${round(t.duration - fade)}:d=${round(fade)}`,
+    `adelay=${Math.round(t.start * 1000)}:all=1[${label}]`,
+  ].join(",");
+}
+
+// Narration at each scene's start + lead, BGM at a constant level underneath (ducking made it pump),
+// and the sound effects at their times.
 export async function mix(
   work: string,
   script: Script,
@@ -217,11 +272,17 @@ export async function mix(
   const b = timing.scenes.length,
     total = timing.total;
   inputs.push("-stream_loop", "-1", "-i", bgmFile(work));
+  const sfx = timing.sfx ?? [];
+  const fx = sfx.map((t, i) => {
+    inputs.push("-i", t.file);
+    return { chain: sfxChain(b + 1 + i, t, `s${i}`), label: `[s${i}]` };
+  });
   const graph = [
     ...chains,
     `${labels.join("")}amix=inputs=${labels.length}:normalize=0,aresample=44100,pan=stereo|c0=c0|c1=c0,apad=whole_dur=${total}[nar]`, // full level on both sides (an automatic upmix drops mono speech by 3 dB)
     `[${b}:a]atrim=0:${total},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,volume=${script.bgmVolume},afade=t=in:d=0.8,afade=t=out:st=${Math.max(0, total - 3)}:d=3[bgm]`,
-    "[nar][bgm]amix=inputs=2:normalize=0,alimiter=limit=0.95[out]",
+    ...fx.map((f) => f.chain),
+    `[nar][bgm]${fx.map((f) => f.label).join("")}amix=inputs=${2 + fx.length}:normalize=0,alimiter=limit=0.95[out]`,
   ].join(";");
   await runFfmpeg([
     ...inputs,

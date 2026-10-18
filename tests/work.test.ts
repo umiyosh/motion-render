@@ -5,11 +5,19 @@ import {
   loadScript,
   loadTiming,
   placeOnFilm,
+  placeSfx,
   writeTiming,
+  type Sfx,
 } from "../skills/motion-render/scripts/work.ts";
 import { SCRIPT, tempDir, workDir } from "./helpers.ts";
 
 const scriptWith = (patch: object) => workDir({ ...SCRIPT, ...patch });
+
+// A script whose first scene carries the given "sfx" value.
+const sfxScript = (sfx: unknown) => ({
+  ...SCRIPT,
+  scenes: [{ ...SCRIPT.scenes[0], sfx }, SCRIPT.scenes[1]],
+});
 
 describe("loadScript", () => {
   it("fills in the defaults", () => {
@@ -20,13 +28,30 @@ describe("loadScript", () => {
       ttsModel: "gemini-3.8-flash-tts",
       bgmModel: "lyria-3.5",
       bgmVolume: 0.15,
+      sfxVolume: 0.5,
       lead: 0.25,
       tail: 0.35,
       endHold: 3,
     });
     expect(s.scenes).toEqual([
-      { id: "intro", name: "Intro", narration: "はじめに" },
-      { id: "flow", narration: "流れ" },
+      { id: "intro", name: "Intro", narration: "はじめに", sfx: [] },
+      { id: "flow", narration: "流れ", sfx: [] },
+    ]);
+  });
+
+  it("reads each scene's sound effects, filling in the length and the script-wide volume", () => {
+    const s = loadScript(
+      workDir({
+        ...sfxScript([
+          { at: 1.2, prompt: "soft UI pop", duration: 0.8 },
+          { at: 3, prompt: "quick airy whoosh", volume: 0.4 },
+        ]),
+        sfxVolume: 0.3,
+      })
+    );
+    expect(s.scenes[0]?.sfx).toEqual([
+      { at: 1.2, prompt: "soft UI pop", duration: 0.8, volume: 0.3 },
+      { at: 3, prompt: "quick airy whoosh", duration: 1.5, volume: 0.4 },
     ]);
   });
 
@@ -70,6 +95,29 @@ describe("loadScript", () => {
     ["speed out of range", { ...SCRIPT, speed: 3 }, /"speed" must be a number between 0.5 and 2/],
     ["volume not a number", { ...SCRIPT, bgmVolume: "loud" }, /"bgmVolume" must be a number/],
     ["model with a path", { ...SCRIPT, bgmModel: "../x" }, /"bgmModel" must match/],
+    ["sfxVolume out of range", { ...SCRIPT, sfxVolume: 2 }, /"sfxVolume" must be a number/],
+    ["sfx not an array", sfxScript("pop"), /scenes\[0\]\.sfx must be an array/],
+    ["sfx not an object", sfxScript(["pop"]), /scenes\[0\]\.sfx\[0\] must be an object/],
+    [
+      "sfx without a prompt",
+      sfxScript([{ at: 1, prompt: " " }]),
+      /scenes\[0\]\.sfx\[0\]\.prompt is required/,
+    ],
+    [
+      "sfx at a negative time",
+      sfxScript([{ at: -1, prompt: "pop" }]),
+      /scenes\[0\]\.sfx\[0\]\.at must be a number between 0 and 600/,
+    ],
+    [
+      "sfx too long",
+      sfxScript([{ at: 0, prompt: "pop", duration: 11 }]),
+      /scenes\[0\]\.sfx\[0\]\.duration must be a number between 0.5 and 10/,
+    ],
+    [
+      "sfx volume as text",
+      sfxScript([{ at: 0, prompt: "pop", volume: "1;x" }]),
+      /scenes\[0\]\.sfx\[0\]\.volume must be a number between 0 and 1/,
+    ],
   ])("rejects a script with %s", (_name, script, message) => {
     const dir = tempDir();
     writeFileSync(join(dir, "script.json"), JSON.stringify(script));
@@ -171,5 +219,42 @@ describe("placeOnFilm", () => {
     expect(() =>
       placeOnFilm(timing, { parts: [{ key: "intro", a0: 0, dur: 4 }] }, { lead: 0 }, vi.fn())
     ).toThrow("these script.json scenes are not in the film: flow (scene ids must match)");
+  });
+});
+
+describe("placeSfx", () => {
+  const pop = { at: 1, prompt: "pop", duration: 0.5, volume: 0.5 };
+  const parts = [
+    { key: "intro", a0: 0, dur: 4 },
+    { key: "flow", a0: 4.5, dur: 6 },
+  ];
+  const script = (intro: Sfx[], flow: Sfx[]) => ({
+    scenes: [
+      { id: "intro", narration: "a", sfx: intro },
+      { id: "flow", narration: "b", sfx: flow },
+    ],
+  });
+
+  it("times each effect from where its scene starts in the film, in film order", () => {
+    const placed = placeSfx(
+      script([{ ...pop, at: 2 }], [pop, { ...pop, prompt: "whoosh", at: 0 }]),
+      parts,
+      vi.fn()
+    );
+    expect(placed.map((p) => [p.prompt, p.start])).toEqual([
+      ["pop", 2],
+      ["whoosh", 4.5],
+      ["pop", 5.5],
+    ]);
+  });
+
+  it("warns about an effect that starts after its scene ends", () => {
+    const warn = vi.fn();
+    placeSfx(script([{ ...pop, at: 4 }], []), parts, warn);
+    expect(warn).toHaveBeenCalledWith('sound effect "pop" at 4s is past the end of "intro" (4s)');
+  });
+
+  it("skips scenes that the film does not have", () => {
+    expect(placeSfx(script([], [pop]), [parts[0]!], vi.fn())).toEqual([]);
   });
 });
