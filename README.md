@@ -2,7 +2,7 @@
 
 English | [日本語](README.ja.md)
 
-An Agent Skill that turns a theme into an **animated explainer video with narration and background music, rendered to MP4**.
+An Agent Skill that turns a theme into an **animated explainer video with narration, background music and sound effects, rendered to MP4**.
 
 ```
 /motion-render:motion-render Make a video that explains how GitHub Actions authenticates to Google Cloud with Workload Identity Federation

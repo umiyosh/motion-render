@@ -2,7 +2,7 @@
 
 [English](README.md) | 日本語
 
-テーマを伝えるだけで、それを説明する**アニメーション動画を作り、ナレーションと BGM を付けて MP4 にする** Agent Skill です。
+テーマを伝えるだけで、それを説明する**アニメーション動画を作り、ナレーション・BGM・効果音を付けて MP4 にする** Agent Skill です。
 
 ```
 /motion-render:motion-render Workload Identity Federation による GitHub Actions から Google Cloud への認証の仕組みを説明する動画つくって
