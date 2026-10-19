@@ -198,6 +198,9 @@ describe("mix", () => {
     expect(graph).toContain("[1:a]atempo=1.2,adelay=4750:all=1[n1]");
     expect(graph).toContain("[2:a]atrim=0:10,");
     expect(graph).toContain("volume=0.2,afade=t=in:d=0.8,afade=t=out:st=7:d=3[bgm]");
+    expect(graph.split(";").at(-1)).toBe(
+      "[nar][bgm]amix=inputs=2:normalize=0,alimiter=limit=0.95[out]"
+    );
     expect(args.slice(-9)).toEqual([
       "-map",
       "[out]",
@@ -209,6 +212,37 @@ describe("mix", () => {
       "192k",
       out,
     ]);
+  });
+
+  it("cuts, levels and fades each sound effect, delays it to its time and mixes it with the rest", async () => {
+    const dir = workDir(SCRIPT);
+    writeFileSync(join(dir, "audio", "bgm.json"), JSON.stringify({ file: "bgm.mp3" }));
+    await mix(
+      dir,
+      loadScript(dir),
+      {
+        scenes: [{ id: "intro", start: 0 }],
+        total: 6,
+        sfx: [
+          { file: "/w/pop.mp3", start: 1.25, duration: 0.6, gain: 2.5 },
+          { file: "/w/whoosh.mp3", start: 3, duration: 1.5, gain: 0.123456 },
+        ],
+      },
+      join(dir, "m.m4a")
+    );
+
+    const { args } = ffmpeg.calls[0]!;
+    expect(args.join(" ")).toContain("-i /w/pop.mp3 -i /w/whoosh.mp3 -filter_complex");
+    const graph = args[args.indexOf("-filter_complex") + 1]!.split(";");
+    expect(graph).toContain(
+      "[2:a]atrim=0:0.6,asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,volume=2.5000,afade=t=in:d=0.01,afade=t=out:st=0.4:d=0.2,adelay=1250:all=1[s0]"
+    );
+    expect(graph).toContain(
+      "[3:a]atrim=0:1.5,asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,volume=0.1235,afade=t=in:d=0.01,afade=t=out:st=1.25:d=0.25,adelay=3000:all=1[s1]"
+    );
+    expect(graph.at(-1)).toBe(
+      "[nar][bgm][s0][s1]amix=inputs=4:normalize=0,alimiter=limit=0.95[out]"
+    );
   });
 
   it("reports an ffmpeg failure", async () => {

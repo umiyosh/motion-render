@@ -4,10 +4,19 @@ import { join } from "node:path";
 import { wavSeconds } from "./audio.ts";
 import { isRecord, readJson, type Json } from "./json.ts";
 
+// A sound effect, `at` seconds after its scene starts.
+export interface Sfx {
+  at: number;
+  prompt: string;
+  duration: number;
+  volume: number;
+}
+
 interface Scene {
   id: string;
   name?: string;
   narration: string;
+  sfx: Sfx[];
 }
 
 export interface Script {
@@ -18,6 +27,7 @@ export interface Script {
   ttsModel: string;
   bgmModel: string;
   bgmVolume: number;
+  sfxVolume: number;
   lead: number;
   tail: number;
   endHold: number;
@@ -42,11 +52,13 @@ const DEFAULTS = {
   ttsModel: "gemini-3.8-flash-tts",
   bgmModel: "lyria-3.5",
   bgmVolume: 0.15,
+  sfxVolume: 1, // 1 = leveled 4 dB under the narration (sfx.ts)
   lead: 0.25, // silence before each scene's narration
   tail: 0.35, // silence after it
   endHold: 3, // the last scene holds this long after its narration
 };
 
+const SFX_DURATION = 1.5; // asked for when a sound effect gives no length, so none runs long
 const ID = /^[a-z][a-z0-9-]{0,31}$/;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
@@ -54,7 +66,25 @@ function fail(msg: string): never {
   throw new Error(`script.json: ${msg}`);
 }
 
-function parseScenes(value: unknown): Scene[] {
+function parseSfx(value: unknown, path: string, volume: number): Sfx[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) fail(`${path} must be an array`);
+  return value.map((fx: unknown, i) => {
+    const at = `${path}[${i}]`;
+    if (!isRecord(fx)) fail(`${at} must be an object`);
+    const { prompt } = fx;
+    if (typeof prompt !== "string" || !prompt.trim()) fail(`${at}.prompt is required`);
+    const s = { duration: SFX_DURATION, volume, ...fx };
+    return {
+      at: num(s, "at", 0, 600, at),
+      prompt,
+      duration: num(s, "duration", 0.5, 10, at),
+      volume: num(s, "volume", 0, 1, at),
+    };
+  });
+}
+
+function parseScenes(value: unknown, sfxVolume: number): Scene[] {
   if (!Array.isArray(value) || !value.length) fail('"scenes" must be a non-empty array');
   const seen = new Set<string>();
   return value.map((sc: unknown, i) => {
@@ -65,15 +95,16 @@ function parseScenes(value: unknown): Scene[] {
     seen.add(id);
     if (typeof narration !== "string" || !narration.trim())
       fail(`scenes[${i}].narration is required (every scene is narrated)`);
-    return typeof name === "string" ? { id, name, narration } : { id, narration };
+    const sfx = parseSfx(sc.sfx, `scenes[${i}].sfx`, sfxVolume);
+    return typeof name === "string" ? { id, name, narration, sfx } : { id, narration, sfx };
   });
 }
 
 // These values are written into ffmpeg filter graphs and API URLs: accept plain numbers and names only.
-function num(s: Json, key: string, min: number, max: number): number {
+function num(s: Json, key: string, min: number, max: number, path?: string): number {
   const v = s[key];
   if (typeof v !== "number" || !Number.isFinite(v) || v < min || v > max)
-    fail(`"${key}" must be a number between ${min} and ${max}`);
+    fail(`${path ? `${path}.${key}` : `"${key}"`} must be a number between ${min} and ${max}`);
   return v;
 }
 
@@ -93,12 +124,14 @@ export function loadScript(work: string): Script {
   const { bgm } = s;
   if (typeof bgm !== "string" || !bgm.trim())
     fail('"bgm" (a prompt describing the music) is required');
-  const scenes = parseScenes(s.scenes);
+  const sfxVolume = num(s, "sfxVolume", 0, 1);
+  const scenes = parseScenes(s.scenes, sfxVolume);
   return {
     bgm,
     scenes,
     speed: num(s, "speed", 0.5, 2),
     bgmVolume: num(s, "bgmVolume", 0, 1),
+    sfxVolume,
     lead: num(s, "lead", 0, 5),
     tail: num(s, "tail", 0, 5),
     endHold: num(s, "endHold", 0, 30),
@@ -183,4 +216,29 @@ export function placeOnFilm(
     }
     return [{ ...s, start: p.a0 }];
   });
+}
+
+// A sound effect placed on the film's timeline.
+export interface SfxCue extends Sfx {
+  start: number;
+}
+
+// Each effect goes `at` seconds after where its scene actually starts in the film, so it stays on its
+// animation even when the narration moves the scenes. An effect that starts after its scene ends is reported.
+export function placeSfx(
+  script: Pick<Script, "scenes">,
+  parts: FilmScene[],
+  warn: (msg: string) => void
+): SfxCue[] {
+  const byKey = new Map(parts.map((p) => [p.key, p]));
+  const cues = script.scenes.flatMap((sc) => {
+    const p = byKey.get(sc.id);
+    if (!p) return [];
+    return sc.sfx.map((fx) => {
+      if (fx.at >= p.dur)
+        warn(`sound effect "${fx.prompt}" at ${fx.at}s is past the end of "${sc.id}" (${p.dur}s)`);
+      return { ...fx, start: Math.round((p.a0 + fx.at) * 1000) / 1000 };
+    });
+  });
+  return cues.sort((a, b) => a.start - b.start);
 }
