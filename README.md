@@ -19,6 +19,8 @@ An introduction video made by motion-render itself (57 seconds, with sound).
 
 https://github.com/user-attachments/assets/b62fe703-223d-478e-9e9b-3239a48ba1ea
 
+More videos, including one with sound effects, are in [Examples](https://github.com/umiyosh/motion-render/wiki/Examples) on the wiki.
+
 ![How motion-render works](docs/how-it-works.en.svg)
 
 - Look, length, voice and the mood of the music are chosen from the theme (anything you specify wins)

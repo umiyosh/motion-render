@@ -19,6 +19,8 @@ motion-render 自身が作った紹介動画です（59 秒、音声あり）。
 
 https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
+効果音付きの動画など、ほかの作例は Wiki の[作例](https://github.com/umiyosh/motion-render/wiki/%E4%BD%9C%E4%BE%8B)にあります。
+
 ![motion-render の仕組み](docs/how-it-works.svg)
 
 - 見た目・長さ・声・BGM の雰囲気はテーマから自動で決まります（指定すればそれに従います）
