@@ -1,7 +1,7 @@
 {
   "name": "motion-render",
   "version": "0.5.0",
-  "description": "Make an animated explainer video from a theme with Claude Motion, add narration (Gemini TTS), BGM (Lyria) and sound effects (ElevenLabs), and render it to MP4.",
+  "description": "Make an animated explainer video from a theme with Claude Motion (or as an HTML page when Motion is not available), add narration (Gemini TTS), BGM (Lyria) and sound effects (ElevenLabs), and render it to MP4.",
   "repository": "github:umiyosh/motion-render",
   "type": "module",
   "bin": {
@@ -9,13 +9,17 @@
   },
   "files": [
     "SKILL.md",
-    "scripts/"
+    "scripts/",
+    "kit/",
+    "references/"
   ],
   "engines": {
     "node": ">=22.18"
   },
   "dependencies": {
+    "@fontsource/noto-sans-jp": "5.2.8",
     "ffmpeg-static": "5.2.0",
+    "gsap": "3.13.0",
     "playwright-core": "1.56.1"
   }
 }

@@ -1,12 +1,13 @@
 ---
 name: motion-render
-description: テーマを渡されたら、それを説明するアニメーション動画を Claude Motion で作り、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）、アニメーションに合わせた効果音（ElevenLabs）を付けて MP4 にする。「〇〇を説明する動画を作って」「〇〇の紹介動画」「/motion-render 〇〇」、既存の Motion の動画を MP4 にしたいときに使う。
+description: テーマを渡されたら、それを説明するアニメーション動画を Claude Motion（使えなければ HTML）で作り、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）、アニメーションに合わせた効果音（ElevenLabs）を付けて MP4 にする。「〇〇を説明する動画を作って」「〇〇の紹介動画」「/motion-render 〇〇」、既存の Motion の動画を MP4 にしたいときに使う。
 argument-hint: "<動画のテーマ。長さ・出力先などの指定があれば一緒に>"
 ---
 
 # Motion Render
 
 `/motion-render <テーマ>` の一言で、テーマを説明するアニメーション動画を作り、ナレーションと BGM を付けて MP4 にする。
+映像は Claude Motion で作る。Motion が使えないアカウントでは、映像を 1 枚の HTML として書く（以下「html の映像」）。
 
 **ナレーションと BGM は必ず付ける。** 音のない動画は作らない。既存の Motion の動画を MP4 にするときも、
 場面に合わせてナレーションを書き、BGM を作る。効果音は `ELEVENLABS_API_KEY` があるときだけ付ける（下の「効果音」）。
@@ -59,7 +60,7 @@ Motion の Artifact 型は作成時に Style・Colors・Length を質問する�
   script.json   # 原稿（Claude が書く）
   timing.json   # 場面の秒数（narrate が書く）
   audio/        # <場面id>.wav、bgm.mp3、mix.m4a、sfx/（効果音と試聴用の preview.m4a）
-  film/         # Motion から取得した映像データ（prepare が展開する）
+  film/         # 映像。Motion から取得したもの（prepare が展開する）か、html の映像（kit が用意し、Claude が index.html を書く）
 ```
 
 `script.json` の形:
@@ -107,9 +108,14 @@ motion-render narrate <work>
 
 `timing.json` に各場面の開始と秒数が出る。Motion の場面の `dur` は、この値をそのまま使う。
 
-### 3. Motion の動画を作る
+### 3. 映像を作る
 
-1. `Artifact` の `quickstart`（`intent: "other"`）か `list`（`scope: "types"`）で Motion 型の `type_url` を見つけ、`title` を付けて作る
+`Artifact` の `quickstart`（`intent: "other"`）か `list`（`scope: "types"`）で Motion 型を探す。
+見つかれば 3A、無ければ（Artifact ツールが無い場合も）3B に進む。どちらを使ったかを報告に書く。
+
+#### 3A. Motion で作る
+
+1. Motion 型の `type_url` に `title` を付けて作る
 2. 返ってきた Motion 型の指示に従って場面を作る。ただし:
    - 質問はしない（上の「決め方」）
    - `scenes.json` の場面の `id`・`dur` は `timing.json` と同じにする
@@ -119,13 +125,25 @@ motion-render narrate <work>
 4. 効果音を付けるときは、場面ごとに「何秒目に何が出るか」を決めた値で `script.json` の `sfx` を書き、
    `motion-render sfx <work>` で作る（下の「効果音」）
 
-### 4. 映像データを取得して確認する
+#### 3B. html の映像を作る
+
+1. `motion-render kit <work>` で `<work>/film/` にプレーヤー・フォント・GSAP・場面の秒数を置く
+2. [references/html-film.md](references/html-film.md) を読み、その決まりに従って `<work>/film/index.html` を書く。
+   場面は `<section class="scene" id="<場面id>">`、動きは `film.build` の中で `film.at(場面id, 秒)` に置く
+3. 並行して BGM を作ってよい: `motion-render bgm <work>`
+4. 効果音を付けるときは、`script.json` の `sfx` の `at` に、その動きに渡した `film.at` の秒を書き、
+   `motion-render sfx <work>` で作る。タイトルの場面に `🎧:11.ai` を小さく入れる
+
+### 4. 映像を確認する
+
+html の映像（3B）は手順 4 の 1〜3 を飛ばし、先に `motion-render check <work>/film` を `layout: ok` になるまで直す
+（出力の読み方は references/html-film.md の「確認」）。そのあと 4・5 で静止画を見る。
 
 1. `Artifact` の `read` で `paths: ["index.html", "artifact-type/app.js", "artifact-type/app.css"]`、`out_dir: <work>/film`
 2. `ArtifactData` の `list`（`collection: "modules"`）と `get`（`film`/`script`）を `out_dir: <work>/store` で保存
 3. `motion-render prepare <work>/store <work>/film`
 4. `motion-render stills <work>/film <work>/stills <各場面の中ほどの秒をカンマ区切り>` で全場面を見る。
-   見出しの不自然な改行、はみ出し、重なりがあれば Motion 側を直し、手順 4 をやり直す
+   見出しの不自然な改行、はみ出し、重なりがあれば Motion 側（html の映像なら index.html）を直し、手順 4 をやり直す
 5. 効果音があれば、各効果音の秒（場面の開始 + `at`）の静止画も書き出し、鳴らす対象がその時点で画面に出ているかを見る。
    ずれていれば `at` を直して `motion-render sfx` をやり直す（作り直されるのは変えたものだけ）
 
@@ -136,12 +154,13 @@ motion-render build <work> [<出力.mp4>]
 ```
 
 ナレーションを各場面の頭に置き、BGM を一定の音量で重ね、効果音をそれぞれの秒に置いて MP4 にする。
-ナレーションか BGM、または `script.json` にある効果音が無いと止まる。
+ナレーションか BGM、または `script.json` にある効果音が無いと止まる。html の映像は、`check` と同じ問題が
+残っていても止まる。
 
 ### 6. 確認して報告する
 
 - `ffprobe` で、長さと映像・音声の両トラックがあることを見る
-- 報告: 出力のパス、長さ、場面の流れ、BGM の雰囲気、Motion の URL。耳で聞いていないことは聞いていないと書く
+- 報告: 出力のパス、長さ、場面の流れ、BGM の雰囲気、Motion の URL（html の映像なら `<work>/film/index.html` のパス）。耳で聞いていないことは聞いていないと書く
 - 効果音を付けたときは、試聴用の `audio/sfx/preview.m4a` のパスと、その中の順番（`motion-render sfx` の出力）も報告し、
   合わない音があれば教えてほしいと頼む。Claude には音の良し悪しが判定できないため、ここは人が聞いて決める
 
@@ -201,5 +220,8 @@ URL を渡された場合も音を付ける。映像データを取得し（手�
 - `scripts/sfx.ts`: ElevenLabs による効果音の生成（`sfx`）、音量の測定とそろえ方、試聴用ファイル
 - `scripts/work.ts`: `script.json` の検証、`timing.json` の計算、ナレーションを動画の場面の開始時刻に置く処理
 - `scripts/render.ts`: プレーヤーを開いてコマを返す。描画中は外部への通信を遮断し、Chromium の sandbox を有効にする
+- `scripts/kit.ts`・`kit/`: html の映像のプレーヤー（`player.js`）と土台の CSS（`base.css`）を、フォントと GSAP と一緒に置く（`kit`）
+- `scripts/layout.ts`・`scripts/snapshot.js`: html の映像の配置の確認（`check`。`stills`・`build` も実行する）
+- `references/html-film.md`: html の映像の書き方と配置の決まり
 - `scripts/json.ts`: ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
 - `scripts/store.ts`: Motion の store（ArtifactData の保存先）を映像データのフォルダに展開する（`prepare`）

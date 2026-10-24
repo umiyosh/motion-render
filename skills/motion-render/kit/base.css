@@ -1,0 +1,59 @@
+/* Base of an html film: a 1920x1080 frame, Japanese typesetting, and fixed layers. */
+:root {
+  --safe-x: 144px; /* 7.5% action-safe at 1920 */
+  --safe-y: 81px;
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html,
+body {
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+}
+body {
+  font-family: "Noto Sans JP", sans-serif;
+  font-feature-settings: "palt";
+  -webkit-font-smoothing: antialiased;
+}
+:lang(ja) {
+  word-break: auto-phrase;
+  line-break: strict;
+}
+#root {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+}
+section.scene {
+  position: absolute;
+  inset: 0;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Stacking by role, lowest first. Give every positioned element one of these instead of a
+   z-index of its own, so what is drawn on top never depends on the order in the HTML. */
+.layer-bg {
+  z-index: 0;
+}
+.layer-card {
+  z-index: 10;
+}
+.layer-line {
+  z-index: 20;
+}
+.layer-chip {
+  z-index: 30;
+}
+.layer-mark {
+  z-index: 40;
+}
+.layer-caption {
+  z-index: 50;
+}
