@@ -8,7 +8,9 @@
     "node": ">=22.18"
   },
   "dependencies": {
+    "@fontsource/noto-sans-jp": "5.2.8",
     "ffmpeg-static": "5.2.0",
+    "gsap": "3.13.0",
     "playwright-core": "1.56.1"
   },
   "scripts": {

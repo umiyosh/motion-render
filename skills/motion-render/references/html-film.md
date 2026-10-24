@@ -1,0 +1,144 @@
+# html の映像の作り方
+
+Claude Motion が使えないときに、映像を 1 枚の HTML として書く。`motion-render kit <work>` が
+`<work>/film/kit/` にプレーヤー・フォント（Noto Sans JP）・GSAP・場面の秒数を置くので、
+Claude は `<work>/film/index.html` だけを書く。描画中はネットワークが遮断されるので、CDN や Google Fonts は使えない。
+
+## ページの骨組み
+
+```html
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="kit/fonts.css" />
+    <link rel="stylesheet" href="kit/base.css" />
+    <script src="kit/gsap.min.js"></script>
+    <script src="kit/timing.js"></script>
+    <script src="kit/player.js"></script>
+    <style>
+      :root {
+        --ground: #0b1622;
+        --panel: #12233a;
+        --line: #2a4466;
+        --ink: #e9f0f7;
+        --muted: #8aa0b8;
+        --accent: #3ed6c4;
+        --danger: #ff6b6b;
+      }
+      body {
+        background: var(--ground);
+        color: var(--ink);
+      }
+      /* …場面ごとのスタイル… */
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- 場面をまたいで残るもの（図の全体） -->
+      <div id="stage">…</div>
+      <!-- 場面ごとのもの。id は timing.json の場面 id と同じにする -->
+      <section class="scene" id="title">…</section>
+      <section class="scene" id="problem">…</section>
+    </div>
+    <script>
+      film.build(function (tl) {
+        var IN = "expo.out",
+          MOVE = "power2.inOut",
+          OUT = "power3.in";
+        tl.fromTo("#t-title", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, ease: IN }, film.at("title", 0.2));
+        tl.to("#token", { ...film.spot("#token", "#sts"), duration: 0.8, ease: MOVE }, film.at("sts", 0.6));
+      });
+    </script>
+  </body>
+</html>
+```
+
+プレーヤーが用意するもの:
+
+| 名前                            | 意味                                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| `film.build(fn)`                | フォントの読み込みが終わってから `fn(tl)` を呼ぶ。アニメーションは全部この中に書く |
+| `film.at(id, 秒)`               | 場面 `id` の頭から何秒目か（動画の先頭からの秒に直す）                             |
+| `film.end(id, 秒)`              | 場面 `id` の終わりの何秒前か                                                       |
+| `film.spot(要素, 相手, dx, dy)` | `要素` の中心を `相手` の中心へ（`dx`・`dy` だけずらして）動かす GSAP の `x`・`y`  |
+| `section.scene`                 | その場面の間だけ見える。`#stage` のように section の外に置いたものはずっと見える   |
+
+## 配置の決まり
+
+`motion-render check` はこれを破った所を見つけて止める。最初から守って書く。
+
+1. **関係のあるものは、親子にしてレイアウトで並べる。** カードの中身（見出し、説明、チェック項目、
+   中に入るチップ）はカードの子要素にし、`display: flex` / `grid` と `gap` で並べる。
+   画面全体の座標（`position: absolute; left: …px`）で 1 つずつ置くのは、図の大きな部品（カード、
+   字幕、流れ図）だけにする
+2. **印は、判定する相手の中に置く。** ✕・✓・バッジ・番号は、それが付く要素の子にする
+   （`<div class="chip">OIDC トークン<span class="mark">✕</span></div>`）。2 つの要素の間の
+   空いた所に浮かせない。拒否を見せるときは、チップを相手にぶつけて跳ね返し、チップに ✕ を出し、
+   相手の枠を一瞬赤くする
+3. **重なり順は役割で決める。** 位置を持つ要素には `kit/base.css` の層のクラスを 1 つ付ける。
+   HTML に書いた順番に頼らない
+
+   | クラス          | 使うもの                       |
+   | --------------- | ------------------------------ |
+   | `layer-bg`      | 背景、グラデーション           |
+   | `layer-card`    | カード、パネル、枠             |
+   | `layer-line`    | 矢印、つなぐ線、グラフの補助線 |
+   | `layer-chip`    | 動くチップ、トークン           |
+   | `layer-mark`    | ✕・✓・強調の輪                 |
+   | `layer-caption` | 字幕                           |
+
+4. **チップの行き先は `film.spot` で決める。** 止まる位置は、カードの中に収まるか、どのカードとも
+   重ならない所にする。カードの枠線をまたいで止めない
+5. **箱は親の中に収める。** 親より大きくなりそうな中身は、文字を短くするか親を広げる。
+   はみ出しを `overflow: hidden` で隠さない
+6. **前の場面の残りを片付ける。** 次の場面で使わない部品は、場面の頭で消すか薄くし、新しい部品と
+   同じ場所に重ならないようにする
+
+意図した重なり（グラフの基準線が棒を横切る、軸のラベルが目盛りの外に出る、わざと斜めに押す判子）は、
+その要素に `data-layout-ok` を付けると `check` が数えない。間違いを黙らせるためには使わない。
+
+## 確認
+
+```bash
+motion-render check <work>/film
+```
+
+0.2 秒ごとに全体を調べ、止まっている部品について次を出す。動いている途中の重なりは数えない。
+
+| 出力                        | 意味と直し方                                                        |
+| --------------------------- | ------------------------------------------------------------------- |
+| `A and B partly overlap`    | 2 つが中途半端に重なっている。片方をもう片方の中に入れるか、離す    |
+| `A sticks out of B`         | 子の A が親の B からはみ出している。中身を減らすか B を広げる       |
+| `A is cut off by the frame` | 画面の端で切れている。安全域（左右 144px、上下 81px）の中へ入れる   |
+| `A is hidden under B`       | A の大部分が B の下に隠れている。層のクラスを見直すか、位置をずらす |
+
+`layout: ok` になるまで直してから `stills` で見る。`build` は問題が残っていると止まる。
+
+## 動き
+
+- 役割で緩急を決める: 出るとき `expo.out`（0.4〜0.7 秒）、移動 `power2.inOut`（0.6〜0.9 秒）、
+  消えるとき `power3.in`（0.2〜0.3 秒）。並んだものは 0.05〜0.1 秒ずらして出す
+- 1 場面 1 つの出来事。図が動き終わってから字幕を出す。字幕は場面の終わりの 0.25 秒前に消す
+- 場面の最後の動きのあと、1.5 秒以上止めて読ませる
+- 秒数は `film.at` / `film.end` だけで書く。ナレーションを作り直しても `build` が秒数を読み直す
+
+## 文字
+
+- `<html lang="ja">` と `kit/base.css` で、見出しは文節の切れ目で改行される。長いカタカナ語
+  （セキュリティトークンサービス）は途中で割れるので、短い言葉か英語の表記にする
+- 本文 28px 以上、字幕 52〜60px、見出し 40px 以上。数字には `class="num"`（等幅の数字）
+- 色は `:root` の変数で決め、意味で使い分ける（正常・強調・危険）
+
+## 決まった絵になるように
+
+- 動きはすべて `film.build` の中の GSAP のタイムラインで書く。CSS の `animation`・`transition`、
+  `Date`・`Math.random`・`setTimeout`・`requestAnimationFrame` は使わない
+- 数え上げは `onUpdate` で文字を書き換える（プレーヤーがコマごとに呼ぶ）
+- 画像を使うときは `<work>/film/` の中に置き、相対パスで読む
+
+## 効果音
+
+`script.json` の `sfx` の `at` には、その音を鳴らす動きに渡した `film.at(場面, 秒)` の秒をそのまま書く。
+例えば `tl.fromTo("#key", …, film.at("problem", 1.6))` に合わせる音は、場面 `problem` の `"at": 1.6`。
+効果音を付けた動画は、タイトルの場面に `🎧:11.ai` を小さく入れる。

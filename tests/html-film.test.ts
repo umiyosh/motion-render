@@ -1,0 +1,130 @@
+// html films in headless Chromium: the kit, scene times, frames, and the layout check.
+import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { openFilm } from "../skills/motion-render/scripts/render.ts";
+import { checkLayout, formatIssue } from "../skills/motion-render/scripts/layout.ts";
+import { writeKit } from "../skills/motion-render/scripts/kit.ts";
+import { tempDir } from "./helpers.ts";
+
+const CLI = join(import.meta.dirname, "..", "skills", "motion-render", "scripts", "cli.ts");
+
+const TIMING = {
+  total: 2,
+  scenes: [
+    { id: "intro", name: "Intro", start: 0, dur: 1, speech: 0.8 },
+    { id: "deny", name: "Deny", start: 1, dur: 1, speech: 0.8 },
+  ],
+};
+
+// The scene of the WIF film that had the mistake: a token turned away at a condition box. With
+// `wrong`, the ✕ is placed on its own and half of it ends up under the box.
+function page(wrong: boolean): string {
+  const mark = wrong
+    ? `<div id="deny" style="position:absolute; left:868px; top:300px; font-size:64px">✕</div>
+       <div class="chip">OIDC トークン</div>`
+    : `<div class="chip">OIDC トークン<span class="mark">✕</span></div>`;
+  return `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
+<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
+<style>
+  body { background: #0b1622; color: #e9f0f7; }
+  #cond { position:absolute; left:900px; top:290px; padding:16px; background:#0f1d31; border:3px solid #3ed6c4; font-size:30px; }
+  .chip { position:absolute; left:400px; top:300px; padding:8px 20px; border:3px solid #ff6b6b; border-radius:30px; font-size:32px; }
+  .mark { margin-left:16px; color:#ff6b6b; }
+  #dock { position:absolute; left:1200px; top:600px; width:400px; height:160px; border:3px solid #2a4466; }
+</style></head>
+<body><div id="root">
+  <section class="scene" id="intro"><h1 id="title" style="font-size:80px">条件</h1></section>
+  <section class="scene" id="deny">
+    <div id="cond" class="layer-card">assertion.repository == 'org/app'</div>
+    <div id="dock" class="layer-card"></div>
+    ${mark}
+  </section>
+</div>
+<script>
+  film.build(function (tl) {
+    tl.fromTo("#title", { opacity: 0 }, { opacity: 1, duration: 0.3 }, film.at("intro", 0.1));
+    tl.to(".chip", { ...film.spot(".chip", "#dock"), duration: 0.3 }, film.at("deny", 0.1));
+  });
+</script>
+</body></html>`;
+}
+
+function htmlFilm(wrong: boolean): string {
+  const work = tempDir("mr-html-");
+  writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+  const film = writeKit(work);
+  writeFileSync(join(film, "index.html"), page(wrong));
+  return film;
+}
+
+describe("html film", () => {
+  it("takes scene times from timing.json and draws the same frame twice", async () => {
+    const film = await openFilm(htmlFilm(false));
+    try {
+      expect(film.meta).toEqual({
+        duration: 2,
+        parts: [
+          { key: "intro", a0: 0, dur: 1 },
+          { key: "deny", a0: 1, dur: 1 },
+        ],
+      });
+      const a = await film.frame(0.5);
+      const b = await film.frame(1.5);
+      expect(b.equals(a)).toBe(false);
+      expect((await film.frame(0.5)).equals(a)).toBe(true);
+      // film.spot sent the chip to the center of #dock.
+      const boxes = (await film.inspect?.(1.9)) ?? [];
+      const center = (l: string) => {
+        const b = boxes.find((x) => x.label.startsWith(l));
+        return b && [Math.round(b.x + b.w / 2), Math.round(b.y + b.h / 2)];
+      };
+      expect(center("div.chip")).toEqual(center("#dock"));
+      expect(await film.warnings()).toEqual([]);
+    } finally {
+      await film.close();
+    }
+  });
+
+  it("finds the ✕ half under the condition box, and passes once the ✕ sits in its chip", async () => {
+    const wrong = await openFilm(htmlFilm(true));
+    try {
+      expect((await checkLayout(wrong))?.map(formatIssue)).toEqual([
+        `1.2-1.8s: #cond "assertion.repository == " and #deny "✕" partly overlap`,
+      ]);
+    } finally {
+      await wrong.close();
+    }
+    const right = await openFilm(htmlFilm(false));
+    try {
+      expect(await checkLayout(right)).toEqual([]);
+    } finally {
+      await right.close();
+    }
+  });
+
+  it("fails to load with a pointer to the kit when the font is missing", async () => {
+    const dir = htmlFilm(false);
+    rmSync(join(dir, "kit", "fonts"), { recursive: true });
+    await expect(openFilm(dir)).rejects.toThrow(/Noto Sans JP.*motion-render kit/);
+  });
+
+  it("is set up by the kit command and checked by the check command", () => {
+    const work = tempDir("mr-html-");
+    writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+    const run = (...args: string[]) =>
+      execFileSync(process.execPath, [CLI, ...args], { encoding: "utf8", stdio: "pipe" });
+    expect(run("kit", work)).toContain("kit: ");
+    expect(JSON.parse(readFileSync(join(work, "film", "film.json"), "utf8"))).toEqual({
+      kind: "html",
+    });
+    expect(existsSync(join(work, "film", "kit", "gsap.min.js"))).toBe(true);
+    writeFileSync(join(work, "film", "index.html"), page(true));
+    expect(() => run("check", join(work, "film"))).toThrow(/#cond .* and #deny "✕" partly overlap/);
+    writeFileSync(join(work, "film", "index.html"), page(false));
+    expect(run("check", join(work, "film"))).toContain("layout ok");
+  });
+});

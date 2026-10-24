@@ -1,15 +1,17 @@
-// Motion のプレーヤーを headless Chromium で開き、任意の時刻のコマを PNG で返す。
+// 映像（Motion のプレーヤー、または html の映像）を headless Chromium で開き、任意の時刻のコマを PNG で返す。
 // ブラウザは playwright-core の版に対応する Chromium を使い、無ければ初回に自動で取得する。
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve, extname, dirname } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { chromium, type Browser, type LaunchOptions } from "playwright-core";
-import { errorMessage, field, isRecord } from "./json.ts";
+import { chromium, type Browser, type LaunchOptions, type Page } from "playwright-core";
+import { errorMessage, field, isRecord, readJson } from "./json.ts";
+import { parseBoxes, type LayoutBox } from "./layout.ts";
 
 const require = createRequire(import.meta.url);
 const PLAYWRIGHT_CLI = join(dirname(require.resolve("playwright-core")), "cli.js");
+const SNAPSHOT = fileURLToPath(new URL("snapshot.js", import.meta.url));
 
 const KIND: Partial<Record<string, string>> = {
   ".css": "css",
@@ -77,6 +79,8 @@ interface FilmMeta {
 export interface Film {
   meta: FilmMeta;
   frame(t: number): Promise<Buffer>;
+  // html films only: what paints on screen at t, for the layout check.
+  inspect?(t: number): Promise<LayoutBox[]>;
   warnings(): Promise<string[]>;
   close(): Promise<void>;
 }
@@ -89,11 +93,28 @@ declare global {
       frame(t: number, opts: { scale: number }): unknown;
       consoleLog(): unknown;
     };
+    // An html film's hook: the page lays itself out at time t and the runner screenshots it.
+    __film: {
+      load(): unknown;
+      seek(t: number): unknown;
+      // Optional: false while the page is still settling. Polled from Node, since a film page may
+      // control its own timers.
+      ready?(): unknown;
+    };
+    // Added by snapshot.js for the layout check.
+    __layoutSnapshot(): unknown;
   }
 }
 
+// A film dir is a Motion film unless its film.json says {"kind": "html"}.
+export function isHtmlFilm(dir: string): boolean {
+  const f = join(dir, "film.json");
+  return existsSync(f) && field(readJson(f), "kind") === "html";
+}
+
 export function checkFilmDir(dir: string): void {
-  const missing = REQUIRED.filter((f) => !existsSync(join(dir, f)));
+  const need = isHtmlFilm(dir) ? ["index.html"] : REQUIRED;
+  const missing = need.filter((f) => !existsSync(join(dir, f)));
   if (missing.length)
     throw new Error(
       `${dir} is not a film dir (missing: ${missing.join(", ")}). Run "motion-render prepare" first.`
@@ -164,50 +185,103 @@ async function launch(): Promise<Browser> {
   }
 }
 
+// Opens the film page with the network cut off: only files under the film dir and data:/blob: load.
+async function openPage(browser: Browser): Promise<Page> {
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  await page.context().addInitScript(() => {
+    for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection"])
+      Reflect.deleteProperty(globalThis, k);
+  });
+  let here: string | null = null;
+  await page.context().route("**/*", (r) => {
+    const u = r.request().url();
+    if (!here && r.request().isNavigationRequest()) here = u.slice(0, u.lastIndexOf("/") + 1);
+    return (here && u.startsWith(here)) || /^(data|blob):/.test(u) ? r.continue() : r.abort();
+  });
+  return page;
+}
+
+async function motionFilm(page: Page, dir: string): Promise<Omit<Film, "close">> {
+  await page.goto(pathToFileURL(resolve(dir, "index.html")).href + "#tools");
+  await page.waitForFunction(() => typeof window.__animation === "object");
+  const res = await page.evaluate((f) => window.__animation.load(f), readFilm(dir));
+  const error = field(res, "error");
+  if (error) {
+    const msg = field(error, "message");
+    throw new Error(
+      "film failed to load: " + (typeof msg === "string" && msg ? msg : String(error))
+    );
+  }
+  return {
+    meta: parseMeta(field(res, "meta")),
+    async frame(t) {
+      const url = await page.evaluate((tt) => window.__animation.frame(tt, { scale: 1 }), t);
+      if (typeof url !== "string" || !url.includes(","))
+        throw new Error(`the film player returned no frame at ${t}s`);
+      return Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
+    },
+    async warnings() {
+      const log = await page.evaluate(() => window.__animation.consoleLog());
+      if (!Array.isArray(log)) return [];
+      return log
+        .filter((l: unknown) => isRecord(l) && l.level !== "log")
+        .map((l: unknown) => `${String(field(l, "level"))}: ${String(field(l, "text"))}`);
+    },
+  };
+}
+
+async function waitReady(page: Page): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (!(await page.evaluate(() => !window.__film.ready || window.__film.ready() !== false))) {
+    if (Date.now() > deadline) throw new Error("the film page did not become ready in 30s");
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+async function htmlFilm(page: Page, dir: string): Promise<Omit<Film, "close">> {
+  const log: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "warning" || m.type() === "error") log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on("pageerror", (e) => log.push(`error: ${e.message}`));
+  await page.goto(pathToFileURL(resolve(dir, "index.html")).href);
+  await page.waitForFunction(() => typeof window.__film === "object");
+  let meta: unknown;
+  try {
+    await waitReady(page);
+    meta = await page.evaluate(() => window.__film.load());
+  } catch (e) {
+    throw new Error("film failed to load: " + errorMessage(e));
+  }
+  let injected = false;
+  const seek = async (t: number) => {
+    await page.evaluate((tt) => window.__film.seek(tt), t);
+    await waitReady(page);
+  };
+  return {
+    meta: parseMeta(meta),
+    async frame(t) {
+      await seek(t);
+      return page.screenshot({ type: "png" });
+    },
+    async inspect(t) {
+      await seek(t);
+      if (!injected) await page.addScriptTag({ path: SNAPSHOT });
+      injected = true;
+      return parseBoxes(await page.evaluate(() => window.__layoutSnapshot()));
+    },
+    warnings: () => Promise.resolve(log),
+  };
+}
+
 // Opens the film and returns its meta and a way to grab frames as PNG.
 export async function openFilm(dir: string): Promise<Film> {
   checkFilmDir(dir);
   const browser = await launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-    await page.context().addInitScript(() => {
-      for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection"])
-        Reflect.deleteProperty(globalThis, k);
-    });
-    let here: string | null = null;
-    await page.context().route("**/*", (r) => {
-      const u = r.request().url();
-      if (!here && r.request().isNavigationRequest()) here = u.slice(0, u.lastIndexOf("/") + 1);
-      return (here && u.startsWith(here)) || /^(data|blob):/.test(u) ? r.continue() : r.abort();
-    });
-    await page.goto(pathToFileURL(resolve(dir, "index.html")).href + "#tools");
-    await page.waitForFunction(() => typeof window.__animation === "object");
-    const res = await page.evaluate((f) => window.__animation.load(f), readFilm(dir));
-    const error = field(res, "error");
-    if (error) {
-      const msg = field(error, "message");
-      throw new Error(
-        "film failed to load: " + (typeof msg === "string" && msg ? msg : String(error))
-      );
-    }
-    const meta = parseMeta(field(res, "meta"));
-    return {
-      meta,
-      async frame(t) {
-        const url = await page.evaluate((tt) => window.__animation.frame(tt, { scale: 1 }), t);
-        if (typeof url !== "string" || !url.includes(","))
-          throw new Error(`the film player returned no frame at ${t}s`);
-        return Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
-      },
-      async warnings() {
-        const log = await page.evaluate(() => window.__animation.consoleLog());
-        if (!Array.isArray(log)) return [];
-        return log
-          .filter((l: unknown) => isRecord(l) && l.level !== "log")
-          .map((l: unknown) => `${String(field(l, "level"))}: ${String(field(l, "text"))}`);
-      },
-      close: () => browser.close(),
-    };
+    const page = await openPage(browser);
+    const film = await (isHtmlFilm(dir) ? htmlFilm : motionFilm)(page, dir);
+    return { ...film, close: () => browser.close() };
   } catch (e) {
     await browser.close();
     throw e;
