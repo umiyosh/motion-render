@@ -1,6 +1,7 @@
 // Layout check of an html film: samples the page through the film and reports what a viewer would
 // see as a mistake: two things partly on top of each other, something sticking out of the box it
-// sits in or out of the frame, and something hidden under another thing.
+// sits in or out of the frame, something hidden under another thing, and text too small or too
+// faint to read.
 // Only what stays still is reported, so a chip passing over a card on its way is not a mistake.
 import type { Film } from "./render.ts";
 import { isRecord } from "./json.ts";
@@ -17,6 +18,12 @@ export interface LayoutBox {
   anc: number[]; // keys of the painted boxes it sits inside in the DOM, nearest first
   ok: boolean; // data-layout-ok on it or an ancestor: the overlap is intended
   under: number | null; // key of a solid box drawn over most of it, if any
+  text: BoxText | null; // its own text, if it has any
+}
+
+interface BoxText {
+  px: number; // font size as drawn, after transforms
+  contrast: number | null; // WCAG ratio over its background; null when faded or not measurable
 }
 
 export interface LayoutSample {
@@ -25,7 +32,7 @@ export interface LayoutSample {
 }
 
 export interface LayoutIssue {
-  kind: "overlap" | "outside" | "frame" | "hidden";
+  kind: "overlap" | "outside" | "frame" | "hidden" | "small" | "faint";
   from: number;
   to: number;
   message: string;
@@ -35,6 +42,11 @@ const SLACK = 2; // px of overlap that reads as touching, not overlapping
 // px a box may shift between samples and still count as still. A slow push-in or a breathing card
 // moves 1-2 px per sample and is still to the eye; a chip on its way moves tens of px.
 const MOVED = 3;
+
+// Text on a 1080p frame. Below MIN_PX it is hard to read on a phone. Contrast follows WCAG: 4.5:1
+// for body text, 3:1 for large text (headings and big numbers, LARGE_PX and up).
+const MIN_PX = 24;
+const LARGE_PX = 40;
 
 type Rect = Pick<LayoutBox, "x" | "y" | "w" | "h">;
 
@@ -65,6 +77,26 @@ interface Finding {
   message: string;
 }
 
+function textFindings(b: LayoutBox): Finding[] {
+  const out: Finding[] = [];
+  if (!b.text) return out;
+  const { px, contrast } = b.text;
+  if (px < MIN_PX)
+    out.push({
+      id: `small:${b.key}`,
+      kind: "small",
+      message: `${b.label} is ${px}px, smaller than ${MIN_PX}px`,
+    });
+  const need = px >= LARGE_PX ? 3 : 4.5;
+  if (contrast !== null && contrast < need)
+    out.push({
+      id: `faint:${b.key}`,
+      kind: "faint",
+      message: `${b.label} has contrast ${contrast.toFixed(1)}:1, needs ${need}:1`,
+    });
+  return out;
+}
+
 // What is wrong with one still box on its own: cut by the frame, out of its box, or hidden.
 function boxFindings(b: LayoutBox, byKey: Map<number, LayoutBox>, quiet: Set<number>): Finding[] {
   const out: Finding[] = [];
@@ -74,6 +106,7 @@ function boxFindings(b: LayoutBox, byKey: Map<number, LayoutBox>, quiet: Set<num
       kind: "frame",
       message: `${b.label} is cut off by the frame`,
     });
+  out.push(...textFindings(b));
   if (b.ok) return out;
   const parent = byKey.get(b.anc[0] ?? -1);
   if (parent && !contains(parent, b))
@@ -159,9 +192,17 @@ export function formatIssue(i: LayoutIssue): string {
 
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
+function parseText(v: unknown): BoxText | null | undefined {
+  if (v === null) return null;
+  if (isRecord(v) && num(v.px) && (v.contrast === null || num(v.contrast)))
+    return { px: v.px, contrast: v.contrast };
+  return undefined;
+}
+
 function parseBox(v: unknown): LayoutBox {
   if (isRecord(v)) {
     const { key, label, x, y, w, h, cut, anc, ok, under } = v;
+    const text = parseText(v.text);
     if (
       num(key) &&
       typeof label === "string" &&
@@ -173,9 +214,10 @@ function parseBox(v: unknown): LayoutBox {
       typeof ok === "boolean" &&
       Array.isArray(anc) &&
       anc.every(num) &&
-      (under === null || num(under))
+      (under === null || num(under)) &&
+      text !== undefined
     )
-      return { key, label, x, y, w, h, cut, anc, ok, under };
+      return { key, label, x, y, w, h, cut, anc, ok, under, text };
   }
   throw new Error("the layout snapshot of the film page is malformed");
 }
@@ -186,9 +228,10 @@ export function parseBoxes(raw: unknown): LayoutBox[] {
   return raw.map(parseBox);
 }
 
-// Samples the whole film every `step` seconds. Motion films draw inside their own player and
-// cannot be inspected, so they get null.
-export async function checkLayout(film: Film, step = 0.2): Promise<LayoutIssue[] | null> {
+// Samples the whole film every `step` seconds. A finding needs two samples in a row, so at 0.1 s a
+// pose held for 0.2 s is reported. Motion films draw inside their own player and cannot be
+// inspected, so they get null.
+export async function checkLayout(film: Film, step = 0.1): Promise<LayoutIssue[] | null> {
   if (!film.inspect) return null;
   const samples: LayoutSample[] = [];
   for (let i = 0; i * step < film.meta.duration; i++) {

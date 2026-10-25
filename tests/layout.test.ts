@@ -22,6 +22,7 @@ const box = (
   anc: [],
   ok: false,
   under: null,
+  text: null,
   ...more,
 });
 
@@ -85,6 +86,19 @@ describe("findLayoutIssues", () => {
     expect(findLayoutIssues(held(boxes))).toEqual([]);
   });
 
+  it("reports text that is too small or too faint, with the bar for large text lower", () => {
+    const boxes = [
+      box(1, [0, 0, 100, 30], { text: { px: 20, contrast: 7 } }),
+      box(2, [0, 100, 100, 30], { text: { px: 30, contrast: 3.7 } }),
+      box(3, [0, 200, 300, 60], { text: { px: 48, contrast: 3.7 } }), // large: 3:1 is enough
+      box(4, [0, 300, 100, 30], { text: { px: 30, contrast: null } }), // faded: not measured
+    ];
+    expect(findLayoutIssues(held(boxes)).map((i) => i.message)).toEqual([
+      "#b1 is 20px, smaller than 24px",
+      "#b2 has contrast 3.7:1, needs 4.5:1",
+    ]);
+  });
+
   it("skips boxes marked data-layout-ok", () => {
     const boxes = [box(1, [0, 0, 100, 50]), box(2, [80, 10, 100, 50], { ok: true })];
     expect(findLayoutIssues(held(boxes))).toEqual([]);
@@ -98,5 +112,9 @@ describe("parseBoxes", () => {
     expect(() => parseBoxes({})).toThrow("malformed");
     expect(() => parseBoxes([{ ...b, x: "0" }])).toThrow("malformed");
     expect(() => parseBoxes([{ ...b, anc: ["1"] }])).toThrow("malformed");
+    const t = { ...b, text: { px: 30, contrast: null } };
+    expect(parseBoxes([t])).toEqual([t]);
+    expect(() => parseBoxes([{ ...b, text: { px: "30", contrast: 4 } }])).toThrow("malformed");
+    expect(() => parseBoxes([{ ...b, text: undefined }])).toThrow("malformed");
   });
 });

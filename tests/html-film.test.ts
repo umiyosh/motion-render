@@ -66,6 +66,35 @@ function page(wrong: boolean, lively = false): string {
 </body></html>`;
 }
 
+// Small and faint text in the intro; in the deny scene a chip rests on a card's text for 0.3 s.
+const TEXT_PAGE = `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
+<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
+<style>
+  body { background: #0b1622; color: #e9f0f7; }
+  #card { position:absolute; left:400px; top:300px; width:600px; height:200px; border:3px solid #2a4466; }
+  #words { position:absolute; left:40px; top:80px; font-size:30px; }
+  .chip { position:absolute; left:1300px; top:700px; padding:20px 60px; background:#3a1a22; font-size:32px; }
+</style></head>
+<body><div id="root">
+  <section class="scene" id="intro">
+    <p id="tiny" style="font-size:18px">出典</p>
+    <p id="faint" style="color:#34465a; font-size:30px">薄い文字</p>
+  </section>
+  <section class="scene" id="deny">
+    <div id="card"><span id="words">条件の文字</span></div>
+    <div class="chip">チップ</div>
+  </section>
+</div>
+<script>
+  film.build(function (tl) {
+    tl.to(".chip", { ...film.spot(".chip", "#words"), duration: 0.1 }, film.at("deny", 0));
+    tl.to(".chip", { x: 0, y: 0, duration: 0.1 }, film.at("deny", 0.4));
+  });
+</script>
+</body></html>`;
+
 function htmlFilm(wrong: boolean, lively = false): string {
   const work = tempDir("mr-html-");
   writeFileSync(join(work, "timing.json"), JSON.stringify(lively ? LONG : TIMING));
@@ -106,7 +135,7 @@ describe("html film", () => {
     const wrong = await openFilm(htmlFilm(true));
     try {
       expect((await checkLayout(wrong))?.map(formatIssue)).toEqual([
-        `1.2-1.8s: #cond "assertion.repository == " and #deny "✕" partly overlap`,
+        `1.1-1.9s: #cond "assertion.repository == " and #deny "✕" partly overlap`,
       ]);
     } finally {
       await wrong.close();
@@ -142,6 +171,26 @@ describe("html film", () => {
       expect((await box(2.5, "#cond"))?.w ?? 0).toBeGreaterThan(w1 + 2);
       const issues = (await checkLayout(film))?.map(formatIssue) ?? [];
       expect(issues.some((i) => /#cond .* and #deny "✕" partly overlap/.test(i))).toBe(true);
+    } finally {
+      await film.close();
+    }
+  });
+
+  it("reports small and faint text, and a chip resting on text for only 0.3 s", async () => {
+    const work = tempDir("mr-html-");
+    writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+    const dir = writeKit(work);
+    writeFileSync(join(dir, "index.html"), TEXT_PAGE);
+    const film = await openFilm(dir);
+    try {
+      const issues = ((await checkLayout(film)) ?? []).map(formatIssue);
+      expect(issues).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/#tiny "出典" is 18px, smaller than 24px/),
+          expect.stringMatching(/#faint "薄い文字" has contrast 1\.\d:1, needs 4\.5:1/),
+          expect.stringMatching(/^1\.2-1\.4s: #words "条件の文字" is hidden under div\.chip/),
+        ])
+      );
     } finally {
       await film.close();
     }
