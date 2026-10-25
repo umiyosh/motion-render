@@ -25,8 +25,9 @@ const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
                                           Expand a Motion film's store (ArtifactData out_dir) into a film dir.
   motion-render kit <work>                Set up <work>/film for an html film: player, fonts, GSAP and
                                           the scene times from timing.json (write film/index.html after).
-  motion-render check <filmDir>           Check an html film's layout every 0.2s: overlaps, things
-                                          sticking out of their box or the frame, things hidden under others.
+  motion-render check <filmDir>           Check an html film's layout every 0.1s: overlaps, things
+                                          sticking out of their box or the frame, things hidden under others,
+                                          and text too small or too faint to read.
   motion-render stills <filmDir> <outDir> <t1,t2,...>
                                           Write PNG stills at the given seconds (and run check).
   motion-render build <work> [out.mp4]    Mix narration + BGM + sound effects and render <work>/film to MP4.

@@ -1,6 +1,6 @@
 // html films in headless Chromium: the kit, scene times, frames, and the layout check.
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { openFilm } from "../skills/motion-render/scripts/render.ts";
@@ -202,7 +202,7 @@ describe("html film", () => {
     await expect(openFilm(dir)).rejects.toThrow(/Noto Sans JP.*motion-render kit/);
   });
 
-  it("is set up by the kit command and checked by the check command", () => {
+  it("is set up by the kit command, checked by the check command, and drawn by the stills command", () => {
     const work = tempDir("mr-html-");
     writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
     const run = (...args: string[]) =>
@@ -216,5 +216,9 @@ describe("html film", () => {
     expect(() => run("check", join(work, "film"))).toThrow(/#cond .* and #deny "✕" partly overlap/);
     writeFileSync(join(work, "film", "index.html"), page(false));
     expect(run("check", join(work, "film"))).toContain("layout ok");
+    expect(run("stills", join(work, "film"), join(work, "stills"), "0.5,1.5")).toContain(
+      "done: 2 stills"
+    );
+    expect(readdirSync(join(work, "stills")).sort()).toEqual(["t_0.50.png", "t_1.50.png"]);
   });
 });
