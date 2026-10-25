@@ -280,6 +280,9 @@ export function sfxChain(input: number, t: SfxTrack, label: string): string {
 // and the sound effects at their times.
 const LOOP_FROM = 30; // s into the BGM where a return lands, past its intro
 const LOOP_FADE = 3; // s of crossfade at each return
+// s at the end of the BGM left out when it loops: its closing bars fade out, and crossfading a fade
+// into the next pass leaves the music thin for a few seconds. The film fades out on its own.
+const LOOP_TAIL = 6;
 
 export interface BgmLoop {
   inputs: string[]; // ffmpeg input arguments for the BGM, in order from input number `first`
@@ -289,9 +292,9 @@ export interface BgmLoop {
 
 // A BGM shorter than the film carries on as the same piece: after its first pass it goes back to a
 // point past its intro (never to its start, which sounds like a new piece beginning) and crossfades
-// there, as many times as the film needs. Each return reads the file again as its own input, seeked
-// past the intro: splitting one input with asplit stops the music at the first crossfade with the
-// bundled ffmpeg 6.0.
+// there, as many times as the film needs. Every pass stops before the closing bars. Each return reads
+// the file again as its own input, seeked past the intro: splitting one input with asplit stops the
+// music at the first crossfade with the bundled ffmpeg 6.0.
 export function bgmLoop(
   file: string,
   first: number,
@@ -300,15 +303,16 @@ export function bgmLoop(
   out: string
 ): BgmLoop {
   if (len >= total) return { inputs: ["-i", file], chains: [], label: `${first}:a` };
-  if (len < 4 * LOOP_FADE)
+  if (len < 4 * LOOP_FADE + LOOP_TAIL)
     return { inputs: ["-stream_loop", "-1", "-i", file], chains: [], label: `${first}:a` };
+  const body = round(len - LOOP_TAIL);
   const from = round(Math.min(LOOP_FROM, len / 4));
-  const returns = Math.ceil((total - len) / (len - from - LOOP_FADE));
-  const inputs = ["-i", file];
+  const returns = Math.ceil((total - body) / (body - from - LOOP_FADE));
+  const inputs = ["-t", String(body), "-i", file];
   const chains: string[] = [];
   let last = `${first}:a`;
   for (let i = 1; i <= returns; i++) {
-    inputs.push("-ss", String(from), "-i", file);
+    inputs.push("-ss", String(from), "-t", String(round(body - from)), "-i", file);
     const next = i === returns ? out : `${out}${i}`;
     chains.push(`[${last}][${first + i}:a]acrossfade=d=${LOOP_FADE}:c1=tri:c2=tri[${next}]`);
     last = next;
