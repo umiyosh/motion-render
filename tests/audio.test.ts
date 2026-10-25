@@ -293,31 +293,39 @@ describe("mix", () => {
 });
 
 describe("bgmLoop", () => {
-  it("leaves a BGM that is long enough as it is", () => {
-    expect(bgmLoop(2, 60, 10, "x")).toEqual({ chains: [], label: "2:a", restart: false });
+  it("reads a BGM that is long enough once, as it is", () => {
+    expect(bgmLoop("/w/b.mp3", 2, 60, 10, "x")).toEqual({
+      inputs: ["-i", "/w/b.mp3"],
+      chains: [],
+      label: "2:a",
+    });
   });
 
   it("goes back past the intro of a short BGM and crossfades, as often as the film needs", () => {
-    // 178 s of music for a 194 s film: one return to 30 s.
-    expect(bgmLoop(3, 178, 194, "x")).toEqual({
-      chains: [
-        "[3:a]asplit=2[xp0][xp1]",
-        "[xp1]atrim=start=30,asetpts=PTS-STARTPTS[xp1t]",
-        "[xp0][xp1t]acrossfade=d=3:c1=tri:c2=tri[x]",
-      ],
+    // 178 s of music for a 194 s film: one return to 30 s, read as a second input.
+    expect(bgmLoop("/w/b.mp3", 3, 178, 194, "x")).toEqual({
+      inputs: ["-i", "/w/b.mp3", "-ss", "30", "-i", "/w/b.mp3"],
+      chains: ["[3:a][4:a]acrossfade=d=3:c1=tri:c2=tri[x]"],
       label: "x",
-      restart: false,
     });
     // 40 s of music for 150 s: returns land at 10 s (a quarter in), each adding 27 s.
-    const long = bgmLoop(0, 40, 150, "x");
-    expect(long.chains[0]).toBe("[0:a]asplit=6[xp0][xp1][xp2][xp3][xp4][xp5]");
-    expect(long.chains).toContain("[xx3][xp5t]acrossfade=d=3:c1=tri:c2=tri[x]");
-    expect(long.chains).toContain("[xp2]atrim=start=10,asetpts=PTS-STARTPTS[xp2t]");
-    expect(40 + 5 * (40 - 10 - 3)).toBeGreaterThanOrEqual(150);
+    const long = bgmLoop("/w/b.mp3", 0, 40, 150, "x");
+    expect(long.inputs.filter((a) => a === "-i")).toHaveLength(6);
+    expect(long.chains).toEqual([
+      "[0:a][1:a]acrossfade=d=3:c1=tri:c2=tri[x1]",
+      "[x1][2:a]acrossfade=d=3:c1=tri:c2=tri[x2]",
+      "[x2][3:a]acrossfade=d=3:c1=tri:c2=tri[x3]",
+      "[x3][4:a]acrossfade=d=3:c1=tri:c2=tri[x4]",
+      "[x4][5:a]acrossfade=d=3:c1=tri:c2=tri[x]",
+    ]);
   });
 
   it("loops a BGM too short to crossfade from its start", () => {
-    expect(bgmLoop(1, 10, 60, "x")).toEqual({ chains: [], label: "1:a", restart: true });
+    expect(bgmLoop("/w/b.mp3", 1, 10, 60, "x")).toEqual({
+      inputs: ["-stream_loop", "-1", "-i", "/w/b.mp3"],
+      chains: [],
+      label: "1:a",
+    });
   });
 });
 

@@ -281,31 +281,39 @@ export function sfxChain(input: number, t: SfxTrack, label: string): string {
 const LOOP_FROM = 30; // s into the BGM where a return lands, past its intro
 const LOOP_FADE = 3; // s of crossfade at each return
 
-interface BgmLoop {
+export interface BgmLoop {
+  inputs: string[]; // ffmpeg input arguments for the BGM, in order from input number `first`
   chains: string[]; // filters that make the long-enough BGM
   label: string; // the stream to take the BGM from
-  restart: boolean; // too short to crossfade: loop the input from its start instead
 }
 
 // A BGM shorter than the film carries on as the same piece: after its first pass it goes back to a
 // point past its intro (never to its start, which sounds like a new piece beginning) and crossfades
-// there, as many times as the film needs.
-export function bgmLoop(input: number, len: number, total: number, out: string): BgmLoop {
-  const plain = { chains: [], label: `${input}:a`, restart: false };
-  if (len >= total) return plain;
-  if (len < 4 * LOOP_FADE) return { ...plain, restart: true };
-  const from = Math.min(LOOP_FROM, len / 4);
+// there, as many times as the film needs. Each return reads the file again as its own input, seeked
+// past the intro: splitting one input with asplit stops the music at the first crossfade with the
+// bundled ffmpeg 6.0.
+export function bgmLoop(
+  file: string,
+  first: number,
+  len: number,
+  total: number,
+  out: string
+): BgmLoop {
+  if (len >= total) return { inputs: ["-i", file], chains: [], label: `${first}:a` };
+  if (len < 4 * LOOP_FADE)
+    return { inputs: ["-stream_loop", "-1", "-i", file], chains: [], label: `${first}:a` };
+  const from = round(Math.min(LOOP_FROM, len / 4));
   const returns = Math.ceil((total - len) / (len - from - LOOP_FADE));
-  const parts = Array.from({ length: returns + 1 }, (_, i) => `${out}p${i}`);
-  const chains = [`[${input}:a]asplit=${parts.length}${parts.map((p) => `[${p}]`).join("")}`];
-  let last = parts[0]!;
-  parts.slice(1).forEach((p, i) => {
-    const next = i === returns - 1 ? out : `${out}x${i}`;
-    chains.push(`[${p}]atrim=start=${round(from)},asetpts=PTS-STARTPTS[${p}t]`);
-    chains.push(`[${last}][${p}t]acrossfade=d=${LOOP_FADE}:c1=tri:c2=tri[${next}]`);
+  const inputs = ["-i", file];
+  const chains: string[] = [];
+  let last = `${first}:a`;
+  for (let i = 1; i <= returns; i++) {
+    inputs.push("-ss", String(from), "-i", file);
+    const next = i === returns ? out : `${out}${i}`;
+    chains.push(`[${last}][${first + i}:a]acrossfade=d=${LOOP_FADE}:c1=tri:c2=tri[${next}]`);
     last = next;
-  });
-  return { chains, label: out, restart: false };
+  }
+  return { inputs, chains, label: out };
 }
 
 export async function mix(
@@ -326,12 +334,13 @@ export async function mix(
   const b = timing.scenes.length,
     total = timing.total,
     bgmIn = bgmFile(work);
-  const loop = bgmLoop(b, await mediaSeconds(bgmIn), total, "bgmx");
-  inputs.push(...(loop.restart ? ["-stream_loop", "-1"] : []), "-i", bgmIn);
+  const loop = bgmLoop(bgmIn, b, await mediaSeconds(bgmIn), total, "bgmx");
+  inputs.push(...loop.inputs);
+  const fxFirst = b + loop.inputs.filter((a) => a === "-i").length;
   const sfx = timing.sfx ?? [];
   const fx = sfx.map((t, i) => {
     inputs.push("-i", t.file);
-    return { chain: sfxChain(b + 1 + i, t, `s${i}`), label: `[s${i}]` };
+    return { chain: sfxChain(fxFirst + i, t, `s${i}`), label: `[s${i}]` };
   });
   const graph = [
     ...chains,
