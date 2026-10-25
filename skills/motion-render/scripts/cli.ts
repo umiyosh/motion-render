@@ -41,7 +41,8 @@ env:
   ELEVENLABS_API_KEY     required by sfx
   MOTION_RENDER_OUT_DIR  default output directory for build
   CHROMIUM_PATH          use this Chrome/Chromium instead of the bundled one
-  FFMPEG_PATH            use this ffmpeg instead of the bundled one`;
+  FFMPEG_PATH            use this ffmpeg instead of the bundled one
+  MOTION_RENDER_PAGES    browsers that draw frames at once (default: half the cores, at most 8)`;
 
 function die(msg: string, code = 1): never {
   console.error(`motion-render: ${msg}`);

@@ -150,13 +150,14 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | `motion-render build <work> [out.mp4]`           | Mixes narration, BGM and sound effects and renders the MP4. Stops if any is missing, or if an HTML film fails the layout check                                       |
 | `motion-render --version`                        | Prints the version                                                                                                                                                   |
 
-| Environment variable    | Effect                                                     |
-| ----------------------- | ---------------------------------------------------------- |
-| `GEMINI_API_KEY`        | Required for narration and BGM                             |
-| `ELEVENLABS_API_KEY`    | Required for sound effects (none are added without it)     |
-| `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path  |
-| `CHROMIUM_PATH`         | Use your own Chrome or Chromium instead of the bundled one |
-| `FFMPEG_PATH`           | Use your own ffmpeg instead of the bundled one             |
+| Environment variable    | Effect                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`        | Required for narration and BGM                                                                          |
+| `ELEVENLABS_API_KEY`    | Required for sound effects (none are added without it)                                                  |
+| `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path                                               |
+| `CHROMIUM_PATH`         | Use your own Chrome or Chromium instead of the bundled one                                              |
+| `FFMPEG_PATH`           | Use your own ffmpeg instead of the bundled one                                                          |
+| `MOTION_RENDER_PAGES`   | Browsers that draw frames at once (default: half the cores, at most 8). Lower it if the machine is busy |
 
 ## Troubleshooting
 
