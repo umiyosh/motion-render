@@ -29,6 +29,14 @@
     return { x: x, y: y, w: e.offsetWidth, h: e.offsetHeight };
   }
 
+  // Latin words and numbers stay whole so they do not break apart; everything else goes one
+  // character at a time. Spaces become no-break spaces so an inline-block keeps their width.
+  function glyphs(text) {
+    return (text.match(/[A-Za-z0-9.,'’%+\-]+|\s+|[\s\S]/gu) || []).map(function (s) {
+      return /^\s+$/.test(s) ? "\u00a0" : s;
+    });
+  }
+
   window.film = {
     scenes: scenes,
     total: T.total,
@@ -94,6 +102,41 @@
           ease: "sine.inOut",
           repeat: n - 1,
           yoyo: true,
+        },
+        at
+      );
+    },
+    // Raises the text of `what` one character at a time from below a mask line, starting `at`.
+    // The text is split into spans the first time, so call it on an element that holds only text.
+    // o: { dur = 0.5, stagger = 0.04 }.
+    typeIn: function (tl, what, at, o) {
+      o = o || {};
+      var e = el(what);
+      if (!e.querySelector(".type-mask")) {
+        if (e.children.length)
+          throw new Error("typeIn needs an element that holds only text: " + what);
+        var mask = document.createElement("span");
+        mask.className = "type-mask";
+        glyphs(e.textContent.trim()).forEach(function (g) {
+          var c = document.createElement("span");
+          c.className = "type-char";
+          c.textContent = g;
+          mask.appendChild(c);
+        });
+        e.textContent = "";
+        e.appendChild(mask);
+      }
+      // Hidden until its turn, so a character waiting below the mask line is not laid out as a
+      // box sticking out of the line.
+      return tl.fromTo(
+        e.querySelectorAll(".type-char"),
+        { yPercent: 110, autoAlpha: 0 },
+        {
+          yPercent: 0,
+          autoAlpha: 1,
+          duration: o.dur || 0.5,
+          ease: "expo.out",
+          stagger: o.stagger === undefined ? 0.04 : o.stagger,
         },
         at
       );

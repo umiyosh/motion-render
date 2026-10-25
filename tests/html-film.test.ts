@@ -264,3 +264,52 @@ describe("several pages", () => {
     }
   });
 });
+
+// A title that rises one character at a time with film.typeIn.
+const TYPE_PAGE = `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
+<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
+<style>
+  body { background: #0b1622; color: #e9f0f7; }
+  #t { position:absolute; left:400px; top:300px; font-size:96px; font-weight:700; white-space:nowrap; }
+</style></head>
+<body><div id="root">
+  <section class="scene" id="intro"><h1 id="t">ループ engineering</h1></section>
+  <section class="scene" id="deny"></section>
+</div>
+<script>
+  film.build(function (tl) {
+    film.typeIn(tl, "#t", film.at("intro", 0.2));
+  });
+</script>
+</body></html>`;
+
+describe("film.typeIn", () => {
+  it("raises a title one character at a time, keeping Latin words whole, with no layout issues", async () => {
+    const work = tempDir("mr-html-");
+    writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+    const dir = writeKit(work);
+    writeFileSync(join(dir, "index.html"), TYPE_PAGE);
+    const film = await openFilm(dir);
+    try {
+      const chars = async (t: number) =>
+        ((await film.inspect?.(t)) ?? []).filter((b) => b.label.startsWith("span.type-char"));
+      expect(await chars(0.1)).toEqual([]);
+      const done = await chars(0.95);
+      expect(done.map((b) => b.label.match(/"(.*)"/)?.[1])).toEqual([
+        "ル",
+        "ー",
+        "プ",
+        "engineering",
+      ]);
+      // Settled on one baseline, left to right.
+      expect(new Set(done.map((b) => Math.round(b.y))).size).toBe(1);
+      expect(done.map((b) => b.x)).toEqual([...done.map((b) => b.x)].sort((a, b) => a - b));
+      expect(await checkLayout(film)).toEqual([]);
+      expect(await film.warnings()).toEqual([]);
+    } finally {
+      await film.close();
+    }
+  });
+});

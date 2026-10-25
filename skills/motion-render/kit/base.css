@@ -36,6 +36,16 @@ section.scene {
 .num {
   font-variant-numeric: tabular-nums;
 }
+/* film.typeIn: characters rise from below the line, clipped by it. */
+.type-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding-bottom: 0.08em;
+}
+.type-char {
+  display: inline-block;
+}
 
 /* Stacking by role, lowest first. Give every positioned element one of these instead of a
    z-index of its own, so what is drawn on top never depends on the order in the HTML. */
