@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { checkFilmDir, openFilm } from "../skills/motion-render/scripts/render.ts";
+import { capturePages, checkFilmDir, openFilm } from "../skills/motion-render/scripts/render.ts";
 import { prepare } from "../skills/motion-render/scripts/store.ts";
 import { tempDir } from "./helpers.ts";
 
@@ -81,5 +81,33 @@ describe("motion-render command", () => {
     expect(() => execFileSync(process.execPath, [CLI, "nope"], { stdio: "pipe" })).toThrow(
       /unknown command or wrong arguments/
     );
+  });
+});
+
+describe("capturePages", () => {
+  const saved = process.env.MOTION_RENDER_PAGES;
+  const withEnv = (v: string | undefined, fn: () => void) => {
+    if (v === undefined) delete process.env.MOTION_RENDER_PAGES;
+    else process.env.MOTION_RENDER_PAGES = v;
+    try {
+      fn();
+    } finally {
+      if (saved === undefined) delete process.env.MOTION_RENDER_PAGES;
+      else process.env.MOTION_RENDER_PAGES = saved;
+    }
+  };
+
+  it("uses MOTION_RENDER_PAGES, or 1 to 8 pages from the cores", () => {
+    withEnv("3", () => expect(capturePages()).toBe(3));
+    withEnv(undefined, () => {
+      const n = capturePages();
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(8);
+    });
+  });
+
+  it("rejects a value that is not a whole number of 1 or more", () => {
+    for (const v of ["0", "-1", "1.5", "two"])
+      withEnv(v, () => expect(() => capturePages()).toThrow(/MOTION_RENDER_PAGES must be/));
   });
 });

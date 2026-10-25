@@ -4,22 +4,30 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SCRIPT, tempDir, wav, workDir } from "./helpers.ts";
 
-// ffmpeg is never run in unit tests: spawn records its arguments and exits with `exitCode`.
-const ffmpeg = vi.hoisted(() => ({ calls: [] as { cmd: string; args: string[] }[], exitCode: 0 }));
+// ffmpeg is never run in unit tests: spawn records its arguments and exits with `exitCode`, or with
+// `hang` never exits until it is killed.
+const ffmpeg = vi.hoisted(() => ({
+  calls: [] as { cmd: string; args: string[] }[],
+  exitCode: 0,
+  hang: false,
+  killed: [] as string[],
+}));
 vi.mock("node:child_process", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:child_process")>();
   return {
     ...real,
     spawn: (cmd: string, args: string[]) => {
       ffmpeg.calls.push({ cmd, args });
-      const child = new EventEmitter();
-      setImmediate(() => child.emit("close", ffmpeg.exitCode));
+      const child = Object.assign(new EventEmitter(), {
+        kill: (signal: string) => ffmpeg.killed.push(signal),
+      });
+      if (!ffmpeg.hang) setImmediate(() => child.emit("close", ffmpeg.exitCode));
       return child;
     },
   };
 });
 
-const { bgm, bgmFile, encodeArgs, findFfmpeg, mix, narrate, wavSeconds } =
+const { bgm, bgmFile, encodeArgs, findFfmpeg, mix, narrate, runFfmpeg, wavSeconds } =
   await import("../skills/motion-render/scripts/audio.ts");
 const { loadScript } = await import("../skills/motion-render/scripts/work.ts");
 
@@ -46,6 +54,8 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   ffmpeg.calls = [];
   ffmpeg.exitCode = 0;
+  ffmpeg.hang = false;
+  ffmpeg.killed = [];
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -258,6 +268,16 @@ describe("mix", () => {
       )
     ).rejects.toThrow("ffmpeg exited with code 1");
     expect(existsSync(join(dir, "m.m4a"))).toBe(false);
+  });
+});
+
+describe("runFfmpeg", () => {
+  it("kills an ffmpeg that does not finish in time and names what it was writing", async () => {
+    ffmpeg.hang = true;
+    await expect(runFfmpeg(["-i", "in.wav", "/w/mix.m4a"], 50)).rejects.toThrow(
+      "ffmpeg writing mix.m4a did not finish in 0.05s"
+    );
+    expect(ffmpeg.killed).toEqual(["SIGKILL"]);
   });
 });
 

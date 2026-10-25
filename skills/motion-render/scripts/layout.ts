@@ -5,6 +5,7 @@
 // Only what stays still is reported, so a chip passing over a card on its way is not a mistake.
 import type { Film } from "./render.ts";
 import { isRecord } from "./json.ts";
+import { inOrder } from "./inorder.ts";
 
 // A thing that paints on screen at one moment (snapshot.js). Coordinates are CSS px in the frame.
 export interface LayoutBox {
@@ -228,15 +229,18 @@ export function parseBoxes(raw: unknown): LayoutBox[] {
   return raw.map(parseBox);
 }
 
-// Samples the whole film every `step` seconds. A finding needs two samples in a row, so at 0.1 s a
-// pose held for 0.2 s is reported. Motion films draw inside their own player and cannot be
-// inspected, so they get null.
+// Samples the whole film every `step` seconds, on all of the film's pages at once, and judges the
+// samples in film order. A finding needs two samples in a row, so at 0.1 s a pose held for 0.2 s is
+// reported. Motion films draw inside their own player and cannot be inspected, so they get null.
 export async function checkLayout(film: Film, step = 0.1): Promise<LayoutIssue[] | null> {
-  if (!film.inspect) return null;
-  const samples: LayoutSample[] = [];
-  for (let i = 0; i * step < film.meta.duration; i++) {
+  const inspect = film.inspect;
+  if (!inspect) return null;
+  const count = Math.ceil(film.meta.duration / step - 1e-9);
+  const sample = (i: number): Promise<LayoutSample> => {
     const t = Math.round(i * step * 1000) / 1000;
-    samples.push({ t, boxes: await film.inspect(t) });
-  }
+    return inspect(t).then((boxes) => ({ t, boxes }));
+  };
+  const samples: LayoutSample[] = [];
+  for await (const s of inOrder(count, film.pages, sample)) samples.push(s);
   return findLayoutIssues(samples);
 }

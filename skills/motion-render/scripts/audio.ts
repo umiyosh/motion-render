@@ -1,14 +1,18 @@
 // ナレーション（Gemini TTS）と BGM（Lyria）を作り、ffmpeg で 1 本の音声に合成する。
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { basename, join, dirname } from "node:path";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { errorMessage, field, readJson } from "./json.ts";
+import { limit } from "./limit.ts";
 import type { Script } from "./work.ts";
 
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
 export const TIMEOUT_MS = 90_000; // a TTS request once hung for 15 minutes without this
 const RETRIES = 3;
+// An audio job (mixing a few minutes of sound, measuring a level) takes ffmpeg seconds. One still
+// running after this is stuck, not slow.
+export const FFMPEG_MS = 300_000;
 
 interface Audio {
   mimeType: string;
@@ -60,40 +64,46 @@ export function findFfmpeg(): string {
   throw new Error("ffmpeg not found: install ffmpeg or set FFMPEG_PATH");
 }
 
-export function runFfmpeg(args: string[]): Promise<void> {
+// Resolves with ffmpeg's exit code once it has exited.
+export function exited(ff: ChildProcess): Promise<number | null> {
   return new Promise((ok, fail) => {
-    const ff = spawn(findFfmpeg(), ["-y", "-loglevel", "error", ...args], {
-      stdio: ["ignore", "inherit", "inherit"],
-    });
     ff.on("error", fail);
-    ff.on("close", (code) =>
-      code === 0 ? ok() : fail(new Error(`ffmpeg exited with code ${code}`))
-    );
+    ff.on("close", ok);
   });
 }
 
-// Average and peak level of an audio file in dBFS (ffmpeg's volumedetect). Silence reads as -91 dB or lower.
-export function volumeStats(file: string): Promise<{ mean: number; max: number }> {
-  return new Promise((ok, fail) => {
-    const args = ["-hide_banner", "-nostats", "-i", file, "-af", "volumedetect", "-f", "null", "-"];
-    const ff = spawn(findFfmpeg(), args, { stdio: ["ignore", "ignore", "pipe"] });
-    let log = "";
-    ff.stderr?.on("data", (d: Buffer) => (log += d.toString()));
-    ff.on("error", fail);
-    ff.on("close", (code) => {
-      const level = (name: string): number => {
-        const v = new RegExp(`${name}: (-?[\\d.]+|-inf) dB`).exec(log)?.[1];
-        return v === "-inf" ? -120 : Number(v ?? NaN);
-      };
-      const mean = level("mean_volume"),
-        max = level("max_volume");
-      if (code !== 0 || !Number.isFinite(mean) || !Number.isFinite(max))
-        return fail(
-          new Error(`could not measure the level of ${file} (ffmpeg exited with ${code})`)
-        );
-      ok({ mean, max });
-    });
+// Waits for ffmpeg to exit, killing it if it runs past ms.
+function finish(ff: ChildProcess, what: string, ms: number): Promise<number | null> {
+  return limit(exited(ff), ms, what, () => ff.kill("SIGKILL"));
+}
+
+export async function runFfmpeg(args: string[], ms = FFMPEG_MS): Promise<void> {
+  const ff = spawn(findFfmpeg(), ["-y", "-loglevel", "error", ...args], {
+    stdio: ["ignore", "inherit", "inherit"],
   });
+  const code = await finish(ff, `ffmpeg writing ${basename(args.at(-1) ?? "")}`, ms);
+  if (code !== 0) throw new Error(`ffmpeg exited with code ${code}`);
+}
+
+// Average and peak level of an audio file in dBFS (ffmpeg's volumedetect). Silence reads as -91 dB or lower.
+export async function volumeStats(
+  file: string,
+  ms = FFMPEG_MS
+): Promise<{ mean: number; max: number }> {
+  const args = ["-hide_banner", "-nostats", "-i", file, "-af", "volumedetect", "-f", "null", "-"];
+  const ff = spawn(findFfmpeg(), args, { stdio: ["ignore", "ignore", "pipe"] });
+  let log = "";
+  ff.stderr?.on("data", (d: Buffer) => (log += d.toString()));
+  const code = await finish(ff, `ffmpeg measuring ${basename(file)}`, ms);
+  const level = (name: string): number => {
+    const v = new RegExp(`${name}: (-?[\\d.]+|-inf) dB`).exec(log)?.[1];
+    return v === "-inf" ? -120 : Number(v ?? NaN);
+  };
+  const mean = level("mean_volume"),
+    max = level("max_volume");
+  if (code !== 0 || !Number.isFinite(mean) || !Number.isFinite(max))
+    throw new Error(`could not measure the level of ${file} (ffmpeg exited with ${code})`);
+  return { mean, max };
 }
 
 // Runs `attempt` up to RETRIES times, logging each failure under `label`, and rethrows the last error.

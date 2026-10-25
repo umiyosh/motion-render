@@ -150,13 +150,14 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | `motion-render build <work> [out.mp4]`           | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする。どれかが足りないとき、HTML の映像が配置のチェックに通らないときは止まる |
 | `motion-render --version`                        | 版を表示する                                                                                                                          |
 
-| 環境変数                | 効果                                                         |
-| ----------------------- | ------------------------------------------------------------ |
-| `GEMINI_API_KEY`        | ナレーションと BGM の生成に必要                              |
-| `ELEVENLABS_API_KEY`    | 効果音の生成に必要（無ければ効果音を付けない）               |
-| `MOTION_RENDER_OUT_DIR` | `build` の出力先を省略したときの保存先                       |
-| `CHROMIUM_PATH`         | 同梱の Chromium の代わりに、手元の Chrome や Chromium を使う |
-| `FFMPEG_PATH`           | 同梱の ffmpeg の代わりに、手元の ffmpeg を使う               |
+| 環境変数                | 効果                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `GEMINI_API_KEY`        | ナレーションと BGM の生成に必要                                                            |
+| `ELEVENLABS_API_KEY`    | 効果音の生成に必要（無ければ効果音を付けない）                                             |
+| `MOTION_RENDER_OUT_DIR` | `build` の出力先を省略したときの保存先                                                     |
+| `CHROMIUM_PATH`         | 同梱の Chromium の代わりに、手元の Chrome や Chromium を使う                               |
+| `FFMPEG_PATH`           | 同梱の ffmpeg の代わりに、手元の ffmpeg を使う                                             |
+| `MOTION_RENDER_PAGES`   | 同時にコマを描くブラウザの数（既定: コア数の半分、最大 8）。マシンが混んでいるときは減らす |
 
 ## 困ったとき
 
