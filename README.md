@@ -130,6 +130,7 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 ## Usage
 
 - Add length, output location or mood in the same request (e.g. "30 seconds", "save it to `~/Movies`", "news-style BGM")
+- There is no upper limit on length. Without one, it follows the theme: about a minute for one mechanism, a few minutes for a theme with several steps. Rendering takes about 1-2 minutes per minute of video, depending on the number of cores (`MOTION_RENDER_PAGES`)
 - Without an output location, the video goes to `$MOTION_RENDER_OUT_DIR`, or the current directory
 - After it is done, ask "change the BGM" or "shorten this part" and only that part is redone
 - For an existing Motion film, pass its URL and ask for an MP4. Narration and BGM are added too
