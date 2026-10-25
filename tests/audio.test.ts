@@ -11,6 +11,8 @@ const ffmpeg = vi.hoisted(() => ({
   exitCode: 0,
   hang: false,
   killed: [] as string[],
+  // What ffmpeg prints on stderr: the input's length, as it does for `-i <file>`.
+  log: "  Duration: 00:01:00.00, start: 0.000000, bitrate: 128 kb/s\n",
 }));
 vi.mock("node:child_process", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:child_process")>();
@@ -20,15 +22,30 @@ vi.mock("node:child_process", async (importOriginal) => {
       ffmpeg.calls.push({ cmd, args });
       const child = Object.assign(new EventEmitter(), {
         kill: (signal: string) => ffmpeg.killed.push(signal),
+        stderr: new EventEmitter(),
       });
-      if (!ffmpeg.hang) setImmediate(() => child.emit("close", ffmpeg.exitCode));
+      if (!ffmpeg.hang)
+        setImmediate(() => {
+          child.stderr.emit("data", Buffer.from(ffmpeg.log));
+          child.emit("close", ffmpeg.exitCode);
+        });
       return child;
     },
   };
 });
 
-const { bgm, bgmFile, encodeArgs, findFfmpeg, mix, narrate, runFfmpeg, wavSeconds } =
-  await import("../skills/motion-render/scripts/audio.ts");
+const {
+  bgm,
+  bgmFile,
+  bgmLoop,
+  encodeArgs,
+  findFfmpeg,
+  mediaSeconds,
+  mix,
+  narrate,
+  runFfmpeg,
+  wavSeconds,
+} = await import("../skills/motion-render/scripts/audio.ts");
 const { loadScript } = await import("../skills/motion-render/scripts/work.ts");
 
 const audioResponse = (mimeType: string, data: Buffer) =>
@@ -56,6 +73,7 @@ beforeEach(() => {
   ffmpeg.exitCode = 0;
   ffmpeg.hang = false;
   ffmpeg.killed = [];
+  ffmpeg.log = "  Duration: 00:01:00.00, start: 0.000000, bitrate: 128 kb/s\n";
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -173,7 +191,7 @@ describe("findFfmpeg", () => {
 });
 
 describe("mix", () => {
-  it("places each narration at its scene start plus lead and loops the BGM at a fixed level under it", async () => {
+  it("places each narration at its scene start plus lead and puts the BGM at a fixed level under it", async () => {
     const dir = workDir({ ...SCRIPT, speed: 1.2, bgmVolume: 0.2, lead: 0.5 });
     writeFileSync(join(dir, "audio", "bgm.json"), JSON.stringify({ file: "bgm.mp3" }));
     const out = join(dir, "audio", "mix.m4a");
@@ -190,8 +208,10 @@ describe("mix", () => {
       out
     );
 
-    expect(ffmpeg.calls).toHaveLength(1);
-    const { cmd, args } = ffmpeg.calls[0]!;
+    // The first call reads the BGM's length (60 s, longer than the film); the second mixes.
+    expect(ffmpeg.calls).toHaveLength(2);
+    expect(ffmpeg.calls[0]!.args).toEqual(["-hide_banner", "-i", join(dir, "audio", "bgm.mp3")]);
+    const { cmd, args } = ffmpeg.calls[1]!;
     expect(cmd).toBe("/usr/bin/ffmpeg-test");
     expect(args.slice(0, 3)).toEqual(["-y", "-loglevel", "error"]);
     expect(args).toEqual(
@@ -202,7 +222,8 @@ describe("mix", () => {
         join(dir, "audio", "flow.wav"),
       ])
     );
-    expect(args.join(" ")).toContain(`-stream_loop -1 -i ${join(dir, "audio", "bgm.mp3")}`);
+    expect(args.join(" ")).not.toContain("-stream_loop");
+    expect(args.join(" ")).toContain(`-i ${join(dir, "audio", "bgm.mp3")}`);
     const graph = args[args.indexOf("-filter_complex") + 1]!;
     expect(graph).toContain("[0:a]atempo=1.2,adelay=500:all=1[n0]");
     expect(graph).toContain("[1:a]atempo=1.2,adelay=4750:all=1[n1]");
@@ -241,7 +262,7 @@ describe("mix", () => {
       join(dir, "m.m4a")
     );
 
-    const { args } = ffmpeg.calls[0]!;
+    const { args } = ffmpeg.calls.at(-1)!;
     expect(args.join(" ")).toContain("-i /w/pop.mp3 -i /w/whoosh.mp3 -filter_complex");
     const graph = args[args.indexOf("-filter_complex") + 1]!.split(";");
     expect(graph).toContain(
@@ -268,6 +289,51 @@ describe("mix", () => {
       )
     ).rejects.toThrow("ffmpeg exited with code 1");
     expect(existsSync(join(dir, "m.m4a"))).toBe(false);
+  });
+});
+
+describe("bgmLoop", () => {
+  it("reads a BGM that is long enough once, as it is", () => {
+    expect(bgmLoop("/w/b.mp3", 2, 60, 10, "x")).toEqual({
+      inputs: ["-i", "/w/b.mp3"],
+      chains: [],
+      label: "2:a",
+    });
+  });
+
+  it("goes back past the intro of a short BGM and crossfades, as often as the film needs", () => {
+    // 178 s of music for a 194 s film: the first pass stops before the last 6 s, then one return
+    // to 30 s, read as a second input that also stops there.
+    expect(bgmLoop("/w/b.mp3", 3, 178, 194, "x")).toEqual({
+      inputs: ["-t", "172", "-i", "/w/b.mp3", "-ss", "30", "-t", "142", "-i", "/w/b.mp3"],
+      chains: ["[3:a][4:a]acrossfade=d=3:c1=tri:c2=tri[x]"],
+      label: "x",
+    });
+    // 40 s of music for 150 s: passes of 34 s, returns land at 10 s (a quarter in), each adding 21 s.
+    const long = bgmLoop("/w/b.mp3", 0, 40, 150, "x");
+    expect(long.inputs.filter((a) => a === "-i")).toHaveLength(7);
+    expect(long.chains.at(-1)).toBe("[x5][6:a]acrossfade=d=3:c1=tri:c2=tri[x]");
+    expect(34 + 6 * (34 - 10 - 3)).toBeGreaterThanOrEqual(150);
+  });
+
+  it("loops a BGM too short to crossfade from its start", () => {
+    expect(bgmLoop("/w/b.mp3", 1, 10, 60, "x")).toEqual({
+      inputs: ["-stream_loop", "-1", "-i", "/w/b.mp3"],
+      chains: [],
+      label: "1:a",
+    });
+  });
+});
+
+describe("mediaSeconds", () => {
+  it("reads the length ffmpeg prints, and fails when there is none", async () => {
+    ffmpeg.log = "  Duration: 00:02:58.44, start: 0.025057, bitrate: 128 kb/s\n";
+    ffmpeg.exitCode = 1; // ffmpeg -i without an output always exits with an error
+    expect(await mediaSeconds("/w/bgm.mp3")).toBeCloseTo(178.44);
+    ffmpeg.log = "/w/bgm.mp3: Invalid data found when processing input\n";
+    await expect(mediaSeconds("/w/bgm.mp3")).rejects.toThrow(
+      "could not read the length of /w/bgm.mp3"
+    );
   });
 });
 
