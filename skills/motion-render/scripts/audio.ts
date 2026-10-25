@@ -85,6 +85,20 @@ export async function runFfmpeg(args: string[], ms = FFMPEG_MS): Promise<void> {
   if (code !== 0) throw new Error(`ffmpeg exited with code ${code}`);
 }
 
+// Length of an audio file in seconds, from the Duration line ffmpeg prints for its input (no decoding).
+export async function mediaSeconds(file: string, ms = FFMPEG_MS): Promise<number> {
+  const ff = spawn(findFfmpeg(), ["-hide_banner", "-i", file], {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let log = "";
+  ff.stderr?.on("data", (d: Buffer) => (log += d.toString()));
+  // ffmpeg exits with an error here because no output is given; only the Duration line matters.
+  await finish(ff, `ffmpeg reading the length of ${basename(file)}`, ms);
+  const m = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(log);
+  if (!m) throw new Error(`could not read the length of ${file}`);
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
 // Average and peak level of an audio file in dBFS (ffmpeg's volumedetect). Silence reads as -91 dB or lower.
 export async function volumeStats(
   file: string,
@@ -264,6 +278,36 @@ export function sfxChain(input: number, t: SfxTrack, label: string): string {
 
 // Narration at each scene's start + lead, BGM at a constant level underneath (ducking made it pump),
 // and the sound effects at their times.
+const LOOP_FROM = 30; // s into the BGM where a return lands, past its intro
+const LOOP_FADE = 3; // s of crossfade at each return
+
+interface BgmLoop {
+  chains: string[]; // filters that make the long-enough BGM
+  label: string; // the stream to take the BGM from
+  restart: boolean; // too short to crossfade: loop the input from its start instead
+}
+
+// A BGM shorter than the film carries on as the same piece: after its first pass it goes back to a
+// point past its intro (never to its start, which sounds like a new piece beginning) and crossfades
+// there, as many times as the film needs.
+export function bgmLoop(input: number, len: number, total: number, out: string): BgmLoop {
+  const plain = { chains: [], label: `${input}:a`, restart: false };
+  if (len >= total) return plain;
+  if (len < 4 * LOOP_FADE) return { ...plain, restart: true };
+  const from = Math.min(LOOP_FROM, len / 4);
+  const returns = Math.ceil((total - len) / (len - from - LOOP_FADE));
+  const parts = Array.from({ length: returns + 1 }, (_, i) => `${out}p${i}`);
+  const chains = [`[${input}:a]asplit=${parts.length}${parts.map((p) => `[${p}]`).join("")}`];
+  let last = parts[0]!;
+  parts.slice(1).forEach((p, i) => {
+    const next = i === returns - 1 ? out : `${out}x${i}`;
+    chains.push(`[${p}]atrim=start=${round(from)},asetpts=PTS-STARTPTS[${p}t]`);
+    chains.push(`[${last}][${p}t]acrossfade=d=${LOOP_FADE}:c1=tri:c2=tri[${next}]`);
+    last = next;
+  });
+  return { chains, label: out, restart: false };
+}
+
 export async function mix(
   work: string,
   script: Script,
@@ -280,8 +324,10 @@ export async function mix(
     labels.push(`[n${i}]`);
   });
   const b = timing.scenes.length,
-    total = timing.total;
-  inputs.push("-stream_loop", "-1", "-i", bgmFile(work));
+    total = timing.total,
+    bgmIn = bgmFile(work);
+  const loop = bgmLoop(b, await mediaSeconds(bgmIn), total, "bgmx");
+  inputs.push(...(loop.restart ? ["-stream_loop", "-1"] : []), "-i", bgmIn);
   const sfx = timing.sfx ?? [];
   const fx = sfx.map((t, i) => {
     inputs.push("-i", t.file);
@@ -290,7 +336,8 @@ export async function mix(
   const graph = [
     ...chains,
     `${labels.join("")}amix=inputs=${labels.length}:normalize=0,aresample=44100,pan=stereo|c0=c0|c1=c0,apad=whole_dur=${total}[nar]`, // full level on both sides (an automatic upmix drops mono speech by 3 dB)
-    `[${b}:a]atrim=0:${total},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,volume=${script.bgmVolume},afade=t=in:d=0.8,afade=t=out:st=${Math.max(0, total - 3)}:d=3[bgm]`,
+    ...loop.chains,
+    `[${loop.label}]atrim=0:${total},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,volume=${script.bgmVolume},afade=t=in:d=0.8,afade=t=out:st=${Math.max(0, total - 3)}:d=3[bgm]`,
     ...fx.map((f) => f.chain),
     `[nar][bgm]${fx.map((f) => f.label).join("")}amix=inputs=${2 + fx.length}:normalize=0,alimiter=limit=0.95[out]`,
   ].join(";");
