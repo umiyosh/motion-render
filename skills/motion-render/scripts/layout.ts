@@ -32,7 +32,9 @@ export interface LayoutIssue {
 }
 
 const SLACK = 2; // px of overlap that reads as touching, not overlapping
-const MOVED = 1; // px a box may shift between samples and still count as still
+// px a box may shift between samples and still count as still. A slow push-in or a breathing card
+// moves 1-2 px per sample and is still to the eye; a chip on its way moves tens of px.
+const MOVED = 3;
 
 type Rect = Pick<LayoutBox, "x" | "y" | "w" | "h">;
 

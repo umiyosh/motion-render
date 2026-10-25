@@ -56,6 +56,48 @@
         y: b.y + b.h / 2 - (a.y + a.h / 2) + (dy || 0),
       };
     },
+    // Sends `what` to `target` along an arc that rises `lift` px above the straight line, starting
+    // `at` seconds into the film. o: { dur = 0.9, lift = 120, dx, dy }.
+    arc: function (tl, what, target, at, o) {
+      o = o || {};
+      var dur = o.dur || 0.9,
+        lift = o.lift === undefined ? 120 : o.lift,
+        to = window.film.spot(what, target, o.dx, o.dy);
+      tl.to(what, { x: to.x, duration: dur, ease: "power2.inOut" }, at);
+      // The start y is read when the tween first renders, so earlier moves of `what` count.
+      tl.to(
+        what,
+        {
+          y: function (i, e) {
+            return (Number(gsap.getProperty(e, "y")) + to.y) / 2 - lift;
+          },
+          duration: dur / 2,
+          ease: "sine.out",
+        },
+        at
+      );
+      tl.to(what, { y: to.y, duration: dur / 2, ease: "sine.in" }, at + dur / 2);
+      return tl;
+    },
+    // Keeps `what` gently scaling by `amount` (0.01 = 1%) from `at` until scene `id` ends, so a held
+    // frame is never fully still. Do not tween the element's scale in the same span.
+    breathe: function (tl, what, id, at, amount) {
+      // An even number of halves, so the element is back at its own size when the scene ends.
+      var half = 1.5,
+        n = Math.floor((window.film.end(id) - at) / half / 2) * 2;
+      if (n < 2) return tl;
+      return tl.to(
+        what,
+        {
+          scale: 1 + (amount || 0.01),
+          duration: half,
+          ease: "sine.inOut",
+          repeat: n - 1,
+          yoyo: true,
+        },
+        at
+      );
+    },
   };
 
   function sections() {

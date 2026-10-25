@@ -18,9 +18,17 @@ const TIMING = {
   ],
 };
 
+// The same with a deny scene long enough to breathe in.
+const LONG = {
+  total: 5,
+  scenes: [TIMING.scenes[0]!, { ...TIMING.scenes[1]!, dur: 4 }],
+};
+
 // The scene of the WIF film that had the mistake: a token turned away at a condition box. With
 // `wrong`, the ✕ is placed on its own and half of it ends up under the box.
-function page(wrong: boolean): string {
+// With `lively`, the chip flies to the dock on an arc and the condition box breathes, as
+// references/html-film.md asks for.
+function page(wrong: boolean, lively = false): string {
   const mark = wrong
     ? `<div id="deny" style="position:absolute; left:868px; top:300px; font-size:64px">✕</div>
        <div class="chip">OIDC トークン</div>`
@@ -47,17 +55,22 @@ function page(wrong: boolean): string {
 <script>
   film.build(function (tl) {
     tl.fromTo("#title", { opacity: 0 }, { opacity: 1, duration: 0.3 }, film.at("intro", 0.1));
-    tl.to(".chip", { ...film.spot(".chip", "#dock"), duration: 0.3 }, film.at("deny", 0.1));
+    ${
+      lively
+        ? `film.arc(tl, ".chip", "#dock", film.at("deny", 0.1), { dur: 0.6, lift: 150 });
+    film.breathe(tl, "#cond", "deny", film.at("deny", 0), 0.01);`
+        : `tl.to(".chip", { ...film.spot(".chip", "#dock"), duration: 0.3 }, film.at("deny", 0.1));`
+    }
   });
 </script>
 </body></html>`;
 }
 
-function htmlFilm(wrong: boolean): string {
+function htmlFilm(wrong: boolean, lively = false): string {
   const work = tempDir("mr-html-");
-  writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+  writeFileSync(join(work, "timing.json"), JSON.stringify(lively ? LONG : TIMING));
   const film = writeKit(work);
-  writeFileSync(join(film, "index.html"), page(wrong));
+  writeFileSync(join(film, "index.html"), page(wrong, lively));
   return film;
 }
 
@@ -103,6 +116,34 @@ describe("html film", () => {
       expect(await checkLayout(right)).toEqual([]);
     } finally {
       await right.close();
+    }
+  });
+
+  it("moves a chip on an arc, and still checks a box that breathes", async () => {
+    const film = await openFilm(htmlFilm(true, true));
+    try {
+      // inspect seeks the page, so call it one time at a time.
+      const box = async (t: number, l: string) =>
+        ((await film.inspect?.(t)) ?? []).find((x) => x.label.startsWith(l));
+      const center = async (t: number, l: string) => {
+        const b = await box(t, l);
+        return b ? [b.x + b.w / 2, b.y + b.h / 2] : [0, 0];
+      };
+      const [x0 = 0, y0 = 0] = await center(1, "div.chip");
+      const [xm = 0, ym = 0] = await center(1.4, "div.chip");
+      const [x1 = 0, y1 = 0] = await center(1.7, "div.chip");
+      // Halfway along x, the chip is well above the straight line from start to dock.
+      expect(xm).toBeGreaterThan(x0);
+      expect(xm).toBeLessThan(x1);
+      expect((y0 + y1) / 2 - ym).toBeGreaterThan(100);
+      expect([x1, y1].map(Math.round)).toEqual((await center(1.7, "#dock")).map(Math.round));
+      // #cond keeps breathing, yet the ✕ half under it is still reported.
+      const w1 = (await box(1, "#cond"))?.w ?? 0;
+      expect((await box(2.5, "#cond"))?.w ?? 0).toBeGreaterThan(w1 + 2);
+      const issues = (await checkLayout(film))?.map(formatIssue) ?? [];
+      expect(issues.some((i) => /#cond .* and #deny "✕" partly overlap/.test(i))).toBe(true);
+    } finally {
+      await film.close();
     }
   });
 
