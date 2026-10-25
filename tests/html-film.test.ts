@@ -222,3 +222,25 @@ describe("html film", () => {
     expect(readdirSync(join(work, "stills")).sort()).toEqual(["t_0.50.png", "t_1.50.png"]);
   });
 });
+
+describe("a stuck film page", () => {
+  it("fails a frame whose seek never returns, naming the call and its time", async () => {
+    const dir = htmlFilm(false);
+    // From 1 s on, the page's seek spins forever, as a film with a bug in its own code could.
+    const stuck = `<script>
+      var seek = window.__film.seek;
+      window.__film.seek = function (t) { if (t > 1) for (;;) {} return seek(t); };
+    </script></body>`;
+    const html = readFileSync(join(dir, "index.html"), "utf8").replace("</body>", stuck);
+    writeFileSync(join(dir, "index.html"), html);
+    const film = await openFilm(dir, 1000);
+    try {
+      expect((await film.frame(0.5)).subarray(1, 4).toString()).toBe("PNG");
+      await expect(film.frame(1.5)).rejects.toThrow(
+        "the film page's __film.seek(1.5) did not finish in 1s"
+      );
+    } finally {
+      await film.close();
+    }
+  });
+});

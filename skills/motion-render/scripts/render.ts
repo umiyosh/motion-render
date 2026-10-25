@@ -8,10 +8,20 @@ import { spawnSync } from "node:child_process";
 import { chromium, type Browser, type LaunchOptions, type Page } from "playwright-core";
 import { errorMessage, field, isRecord, readJson } from "./json.ts";
 import { parseBoxes, type LayoutBox } from "./layout.ts";
+import { limit } from "./limit.ts";
 
 const require = createRequire(import.meta.url);
 const PLAYWRIGHT_CLI = join(dirname(require.resolve("playwright-core")), "cli.js");
 const SNAPSHOT = fileURLToPath(new URL("snapshot.js", import.meta.url));
+// A call into the film page takes well under a second. The page's code is not ours and can loop
+// forever, and Playwright's evaluate never gives up on its own, so each call gets this limit.
+const PAGE_MS = 60_000;
+
+// Runs one call into the film page under the time limit, named for the error.
+type Call = <T>(p: Promise<T>, what: string) => Promise<T>;
+
+// Seconds as the error shows them: 0.3, not 0.30000000000000004.
+const sec = (t: number) => String(+t.toFixed(3));
 
 const KIND: Partial<Record<string, string>> = {
   ".css": "css",
@@ -201,10 +211,13 @@ async function openPage(browser: Browser): Promise<Page> {
   return page;
 }
 
-async function motionFilm(page: Page, dir: string): Promise<Omit<Film, "close">> {
+async function motionFilm(page: Page, dir: string, call: Call): Promise<Omit<Film, "close">> {
   await page.goto(pathToFileURL(resolve(dir, "index.html")).href + "#tools");
   await page.waitForFunction(() => typeof window.__animation === "object");
-  const res = await page.evaluate((f) => window.__animation.load(f), readFilm(dir));
+  const res = await call(
+    page.evaluate((f) => window.__animation.load(f), readFilm(dir)),
+    "__animation.load()"
+  );
   const error = field(res, "error");
   if (error) {
     const msg = field(error, "message");
@@ -215,13 +228,19 @@ async function motionFilm(page: Page, dir: string): Promise<Omit<Film, "close">>
   return {
     meta: parseMeta(field(res, "meta")),
     async frame(t) {
-      const url = await page.evaluate((tt) => window.__animation.frame(tt, { scale: 1 }), t);
+      const url = await call(
+        page.evaluate((tt) => window.__animation.frame(tt, { scale: 1 }), t),
+        `__animation.frame(${sec(t)})`
+      );
       if (typeof url !== "string" || !url.includes(","))
         throw new Error(`the film player returned no frame at ${t}s`);
       return Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
     },
     async warnings() {
-      const log = await page.evaluate(() => window.__animation.consoleLog());
+      const log = await call(
+        page.evaluate(() => window.__animation.consoleLog()),
+        "__animation.consoleLog()"
+      );
       if (!Array.isArray(log)) return [];
       return log
         .filter((l: unknown) => isRecord(l) && l.level !== "log")
@@ -230,15 +249,20 @@ async function motionFilm(page: Page, dir: string): Promise<Omit<Film, "close">>
   };
 }
 
-async function waitReady(page: Page): Promise<void> {
+async function waitReady(page: Page, call: Call): Promise<void> {
   const deadline = Date.now() + 30_000;
-  while (!(await page.evaluate(() => !window.__film.ready || window.__film.ready() !== false))) {
+  const ready = () =>
+    call(
+      page.evaluate(() => !window.__film.ready || window.__film.ready() !== false),
+      "__film.ready()"
+    );
+  while (!(await ready())) {
     if (Date.now() > deadline) throw new Error("the film page did not become ready in 30s");
     await new Promise((r) => setTimeout(r, 20));
   }
 }
 
-async function htmlFilm(page: Page, dir: string): Promise<Omit<Film, "close">> {
+async function htmlFilm(page: Page, dir: string, call: Call): Promise<Omit<Film, "close">> {
   const log: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "warning" || m.type() === "error") log.push(`${m.type()}: ${m.text()}`);
@@ -248,39 +272,52 @@ async function htmlFilm(page: Page, dir: string): Promise<Omit<Film, "close">> {
   await page.waitForFunction(() => typeof window.__film === "object");
   let meta: unknown;
   try {
-    await waitReady(page);
-    meta = await page.evaluate(() => window.__film.load());
+    await waitReady(page, call);
+    meta = await call(
+      page.evaluate(() => window.__film.load()),
+      "__film.load()"
+    );
   } catch (e) {
     throw new Error("film failed to load: " + errorMessage(e));
   }
   let injected = false;
   const seek = async (t: number) => {
-    await page.evaluate((tt) => window.__film.seek(tt), t);
-    await waitReady(page);
+    await call(
+      page.evaluate((tt) => window.__film.seek(tt), t),
+      `__film.seek(${sec(t)})`
+    );
+    await waitReady(page, call);
   };
   return {
     meta: parseMeta(meta),
     async frame(t) {
       await seek(t);
-      return page.screenshot({ type: "png" });
+      return call(page.screenshot({ type: "png" }), `screenshot at ${sec(t)}s`);
     },
     async inspect(t) {
       await seek(t);
-      if (!injected) await page.addScriptTag({ path: SNAPSHOT });
+      if (!injected) await call(page.addScriptTag({ path: SNAPSHOT }), "snapshot.js");
       injected = true;
-      return parseBoxes(await page.evaluate(() => window.__layoutSnapshot()));
+      return parseBoxes(
+        await call(
+          page.evaluate(() => window.__layoutSnapshot()),
+          `layout snapshot at ${sec(t)}s`
+        )
+      );
     },
     warnings: () => Promise.resolve(log),
   };
 }
 
-// Opens the film and returns its meta and a way to grab frames as PNG.
-export async function openFilm(dir: string): Promise<Film> {
+// Opens the film and returns its meta and a way to grab frames as PNG. Each call into the page
+// fails after pageMs.
+export async function openFilm(dir: string, pageMs = PAGE_MS): Promise<Film> {
   checkFilmDir(dir);
   const browser = await launch();
+  const call: Call = (p, what) => limit(p, pageMs, `the film page's ${what}`);
   try {
     const page = await openPage(browser);
-    const film = await (isHtmlFilm(dir) ? htmlFilm : motionFilm)(page, dir);
+    const film = await (isHtmlFilm(dir) ? htmlFilm : motionFilm)(page, dir, call);
     return { ...film, close: () => browser.close() };
   } catch (e) {
     await browser.close();

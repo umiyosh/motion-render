@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 import { openFilm, checkFilmDir, isHtmlFilm, type Film } from "./render.ts";
 import { checkLayout, formatIssue } from "./layout.ts";
 import { writeKit, writeKitTiming } from "./kit.ts";
-import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs } from "./audio.ts";
+import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs, exited, FFMPEG_MS } from "./audio.ts";
+import { limit } from "./limit.ts";
 import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx } from "./work.ts";
 import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.ts";
 import { prepare } from "./store.ts";
@@ -124,27 +125,29 @@ async function runSfx(work: string): Promise<void> {
   console.log(`made ${made} new, listen to all of them: ${preview.file}`);
 }
 
-// Pipes rendered frames straight into ffmpeg (no temp files) and muxes the mixed audio.
+// ffmpeg takes a frame in milliseconds. One that has not taken it after this is stuck.
+const FRAME_MS = 60_000;
+
+// Pipes rendered frames straight into ffmpeg (no temp files) and muxes the mixed audio. The whole
+// encode runs as long as capture does, so the limits are per frame and for the final mux.
 async function encode(film: Film, fps: number, audio: string, out: string): Promise<number> {
   const count = Math.round(film.meta.duration * fps);
   const args = encodeArgs(fps, audio, out);
   const ff = spawn(findFfmpeg(), args, { stdio: ["pipe", "inherit", "inherit"] });
-  const finished = new Promise<void>((ok, fail) => {
-    ff.on("error", fail);
-    ff.on("close", (code) =>
-      code === 0 ? ok() : fail(new Error(`ffmpeg exited with code ${code}`))
-    );
-  });
+  const kill = () => ff.kill("SIGKILL");
+  const exit = exited(ff);
   ff.stdin.on("error", () => {}); // EPIPE when ffmpeg dies early; its exit code reports the cause.
   try {
     for (let i = 0; i < count; i++) {
-      if (!ff.stdin.write(await film.frame(i / fps))) await once(ff.stdin, "drain");
+      if (!ff.stdin.write(await film.frame(i / fps)))
+        await limit(once(ff.stdin, "drain"), FRAME_MS, `ffmpeg taking frame ${i}`, kill);
       if (i % Math.max(1, Math.round(count / 10)) === 0) console.error(`frames: ${i}/${count}`);
     }
   } finally {
     ff.stdin.end();
   }
-  await finished;
+  const code = await limit(exit, FFMPEG_MS, "ffmpeg finishing the MP4", kill);
+  if (code !== 0) throw new Error(`ffmpeg exited with code ${code}`);
   return count;
 }
 
