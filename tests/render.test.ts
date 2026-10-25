@@ -97,12 +97,12 @@ describe("capturePages", () => {
     }
   };
 
-  it("uses MOTION_RENDER_PAGES, or 1 to 4 pages from the cores", () => {
+  it("uses MOTION_RENDER_PAGES, or 1 to 8 pages from the cores", () => {
     withEnv("3", () => expect(capturePages()).toBe(3));
     withEnv(undefined, () => {
       const n = capturePages();
       expect(n).toBeGreaterThanOrEqual(1);
-      expect(n).toBeLessThanOrEqual(4);
+      expect(n).toBeLessThanOrEqual(8);
     });
   });
 

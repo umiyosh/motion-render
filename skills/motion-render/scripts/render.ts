@@ -106,12 +106,13 @@ export interface FilmOptions {
   pages?: number; // pages that draw at the same time
 }
 
-// Pages that draw a film at the same time. Each page draws in its own renderer process, so one
-// per two cores, at most 4, unless MOTION_RENDER_PAGES says otherwise.
+// Pages that draw a film at the same time. Each page has its own browser and keeps about one core
+// busy (capture speed grew in step with the pages up to 8), so one per two cores, at most 8, which
+// leaves the rest to ffmpeg and whatever else runs. MOTION_RENDER_PAGES overrides it.
 export function capturePages(): number {
   const env = process.env.MOTION_RENDER_PAGES;
   if (env === undefined || env === "")
-    return Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
+    return Math.max(1, Math.min(8, Math.floor(availableParallelism() / 2)));
   const n = Number(env);
   if (!Number.isInteger(n) || n < 1)
     throw new Error(`MOTION_RENDER_PAGES must be a whole number of 1 or more, got "${env}"`);
@@ -350,20 +351,26 @@ function onFreePage(films: PageFilm[]) {
   };
 }
 
-// Opens the film on `pages` pages of one browser and returns its meta and a way to grab frames as
-// PNG. Each call into a page fails after pageMs.
+// Opens the film on `pages` pages and returns its meta and a way to grab frames as PNG. Each page
+// gets its own browser: the pages of one browser draw one at a time (2 or 4 pages in one browser
+// captured no faster than 1), while separate browsers draw side by side. Each call into a page
+// fails after pageMs.
 export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Film> {
   const { pageMs = PAGE_MS, pages = 1 } = opts;
   if (!Number.isInteger(pages) || pages < 1)
     throw new Error(`pages must be 1 or more, got ${pages}`);
   checkFilmDir(dir);
-  const browser = await launch();
+  // The first launch may download Chromium, so the others wait for it.
+  const browsers = [await launch()];
+  const closeAll = () => Promise.all(browsers.map((b) => b.close())).then(() => undefined);
   const call: Call = (p, what) => limit(p, pageMs, `the film page's ${what}`);
   const open = isHtmlFilm(dir) ? htmlFilm : motionFilm;
   try {
-    const films = await Promise.all(
-      Array.from({ length: pages }, async () => open(await openPage(browser), dir, call))
-    );
+    const more = await Promise.allSettled(Array.from({ length: pages - 1 }, () => launch()));
+    for (const r of more) if (r.status === "fulfilled") browsers.push(r.value);
+    const failed = more.find((r) => r.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+    const films = await Promise.all(browsers.map(async (b) => open(await openPage(b), dir, call)));
     const [first] = films;
     if (!first) throw new Error("no film page opened");
     const run = onFreePage(films);
@@ -377,10 +384,10 @@ export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Fil
       warnings: async () => [
         ...new Set((await Promise.all(films.map((f) => f.warnings()))).flat()),
       ],
-      close: () => browser.close(),
+      close: closeAll,
     };
   } catch (e) {
-    await browser.close();
+    await closeAll();
     throw e;
   }
 }
