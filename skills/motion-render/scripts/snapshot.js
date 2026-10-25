@@ -19,6 +19,85 @@
     return p.length > 3 ? parseFloat(p[3]) : 1;
   }
 
+  // [r, g, b, a] with r, g, b in 0-255, from rgb()/rgba() or color(srgb ...) (what color-mix()
+  // computes to). null for any other color space.
+  function rgba(color) {
+    var m = /^rgba?\(([^)]*)\)/.exec(color);
+    var p, k;
+    if (m) {
+      p = m[1]
+        .split(/[\s,/]+/)
+        .filter(Boolean)
+        .map(parseFloat);
+      k = 1;
+    } else {
+      m = /^color\(srgb ([^)]*)\)/.exec(color);
+      if (!m) return null;
+      p = m[1]
+        .split(/[\s/]+/)
+        .filter(Boolean)
+        .map(parseFloat);
+      k = 255;
+    }
+    return [p[0] * k, p[1] * k, p[2] * k, p.length > 3 ? p[3] : 1];
+  }
+
+  function over(top, under) {
+    var a = top[3];
+    return [0, 1, 2].map(function (i) {
+      return top[i] * a + under[i] * (1 - a);
+    });
+  }
+
+  // What the element's own background looks like: its background and its ancestors' composited
+  // from the page down. null when one of them is an image or gradient, or in an unknown space.
+  function backdrop(el) {
+    var layers = [];
+    for (var e = el; e; e = e.parentElement) {
+      var cs = getComputedStyle(e);
+      if (cs.backgroundImage !== "none") return null;
+      var c = rgba(cs.backgroundColor);
+      if (!c) return null;
+      if (c[3] > 0) layers.push(c);
+    }
+    return layers.reduceRight(
+      function (under, c) {
+        return over(c, under);
+      },
+      [255, 255, 255]
+    );
+  }
+
+  function luminance(c) {
+    var v = c.map(function (x) {
+      var s = x / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  }
+
+  // WCAG contrast ratio of the text color over its backdrop, or null when it cannot be told.
+  function contrast(el, cs) {
+    var fg = rgba(cs.color),
+      bg = backdrop(el);
+    if (!fg || !bg) return null;
+    var a = luminance(over(fg, bg)),
+      b = luminance(bg);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  }
+
+  // The size its own text is drawn at, after transforms, and its contrast. Contrast is left out
+  // for text drawn faded (opacity under 0.9): dimmed on purpose, or fading in or out.
+  function textOf(el, cs, shown) {
+    if (!ownText(el) || el instanceof SVGElement) return null;
+    var h = el.offsetHeight,
+      scale = h > 0 ? el.getBoundingClientRect().height / h : 1;
+    return {
+      px: Math.round(parseFloat(cs.fontSize) * scale * 10) / 10,
+      contrast: shown < 0.9 ? null : contrast(el, cs),
+    };
+  }
+
   function ownText(el) {
     return Array.prototype.some.call(el.childNodes, function (n) {
       return n.nodeType === 3 && n.textContent.trim() !== "";
@@ -101,8 +180,9 @@
       if (el instanceof SVGElement && !(el instanceof SVGSVGElement)) return;
       var cs = getComputedStyle(el);
       if (cs.visibility !== "visible" || cs.display === "none") return;
-      var kind = paint(el, cs);
-      if (!kind || opacity(el) < 0.05) return;
+      var kind = paint(el, cs),
+        shown = opacity(el);
+      if (!kind || shown < 0.05) return;
       var r = rectOf(el, kind, cs);
       var v = cross(r, clipOf(el.parentElement));
       if (v.right - v.left < 1 || v.bottom - v.top < 1) return;
@@ -119,6 +199,7 @@
         ok: !!el.closest("[data-layout-ok]"),
         solid: kind === "solid",
         under: null,
+        text: textOf(el, cs, shown),
       });
     });
     return { boxes: boxes, keyOf: keyOf };
