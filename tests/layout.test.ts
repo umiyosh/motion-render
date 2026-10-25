@@ -58,6 +58,13 @@ describe("findLayoutIssues", () => {
     expect(findLayoutIssues(samples)).toHaveLength(1);
   });
 
+  it("counts a box that drifts a couple of px per sample (push-in, breathing) as still", () => {
+    const card = box(1, [0, 0, 100, 50]);
+    const drift = (i: number) => box(2, [80 + 2 * i, 10, 100 + 2 * i, 50]);
+    const samples = [0, 1, 2].map((i) => ({ t: i / 5, boxes: [card, drift(i)] }));
+    expect(findLayoutIssues(samples).map((i) => i.kind)).toEqual(["overlap"]);
+  });
+
   it("reports a box sticking out of its parent, out of the frame, or hidden under another", () => {
     const boxes = [
       box(1, [100, 100, 300, 200]),
