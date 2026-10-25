@@ -5,6 +5,7 @@ import { join, resolve, extname, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
+import { availableParallelism } from "node:os";
 import { chromium, type Browser, type LaunchOptions, type Page } from "playwright-core";
 import { errorMessage, field, isRecord, readJson } from "./json.ts";
 import { parseBoxes, type LayoutBox } from "./layout.ts";
@@ -93,6 +94,28 @@ export interface Film {
   inspect?(t: number): Promise<LayoutBox[]>;
   warnings(): Promise<string[]>;
   close(): Promise<void>;
+  // How many frame or inspect calls run at once: one per page.
+  pages: number;
+}
+
+// The film as one page shows it.
+type PageFilm = Omit<Film, "close" | "pages">;
+
+export interface FilmOptions {
+  pageMs?: number; // time limit of each call into a page
+  pages?: number; // pages that draw at the same time
+}
+
+// Pages that draw a film at the same time. Each page draws in its own renderer process, so one
+// per two cores, at most 4, unless MOTION_RENDER_PAGES says otherwise.
+export function capturePages(): number {
+  const env = process.env.MOTION_RENDER_PAGES;
+  if (env === undefined || env === "")
+    return Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
+  const n = Number(env);
+  if (!Number.isInteger(n) || n < 1)
+    throw new Error(`MOTION_RENDER_PAGES must be a whole number of 1 or more, got "${env}"`);
+  return n;
 }
 
 declare global {
@@ -211,7 +234,7 @@ async function openPage(browser: Browser): Promise<Page> {
   return page;
 }
 
-async function motionFilm(page: Page, dir: string, call: Call): Promise<Omit<Film, "close">> {
+async function motionFilm(page: Page, dir: string, call: Call): Promise<PageFilm> {
   await page.goto(pathToFileURL(resolve(dir, "index.html")).href + "#tools");
   await page.waitForFunction(() => typeof window.__animation === "object");
   const res = await call(
@@ -262,7 +285,7 @@ async function waitReady(page: Page, call: Call): Promise<void> {
   }
 }
 
-async function htmlFilm(page: Page, dir: string, call: Call): Promise<Omit<Film, "close">> {
+async function htmlFilm(page: Page, dir: string, call: Call): Promise<PageFilm> {
   const log: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "warning" || m.type() === "error") log.push(`${m.type()}: ${m.text()}`);
@@ -309,16 +332,53 @@ async function htmlFilm(page: Page, dir: string, call: Call): Promise<Omit<Film,
   };
 }
 
-// Opens the film and returns its meta and a way to grab frames as PNG. Each call into the page
-// fails after pageMs.
-export async function openFilm(dir: string, pageMs = PAGE_MS): Promise<Film> {
+// Runs each call on a free page, waiting for one when all are busy. A page seeks before it draws,
+// so it must not take a second call before the first is done.
+function onFreePage(films: PageFilm[]) {
+  // The pool is this closure's own state; nothing outside sees it change.
+  const free = [...films];
+  const waiting: ((f: PageFilm) => void)[] = [];
+  return async <T>(fn: (f: PageFilm) => Promise<T>): Promise<T> => {
+    const f = free.pop() ?? (await new Promise<PageFilm>((ok) => waiting.push(ok)));
+    try {
+      return await fn(f);
+    } finally {
+      const next = waiting.shift();
+      if (next) next(f);
+      else free.push(f);
+    }
+  };
+}
+
+// Opens the film on `pages` pages of one browser and returns its meta and a way to grab frames as
+// PNG. Each call into a page fails after pageMs.
+export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Film> {
+  const { pageMs = PAGE_MS, pages = 1 } = opts;
+  if (!Number.isInteger(pages) || pages < 1)
+    throw new Error(`pages must be 1 or more, got ${pages}`);
   checkFilmDir(dir);
   const browser = await launch();
   const call: Call = (p, what) => limit(p, pageMs, `the film page's ${what}`);
+  const open = isHtmlFilm(dir) ? htmlFilm : motionFilm;
   try {
-    const page = await openPage(browser);
-    const film = await (isHtmlFilm(dir) ? htmlFilm : motionFilm)(page, dir, call);
-    return { ...film, close: () => browser.close() };
+    const films = await Promise.all(
+      Array.from({ length: pages }, async () => open(await openPage(browser), dir, call))
+    );
+    const [first] = films;
+    if (!first) throw new Error("no film page opened");
+    const run = onFreePage(films);
+    return {
+      meta: first.meta,
+      pages,
+      frame: (t) => run((f) => f.frame(t)),
+      inspect:
+        first.inspect && ((t) => run((f) => (f.inspect ? f.inspect(t) : Promise.resolve([])))),
+      // Every page logs the same film, so the same warning comes once.
+      warnings: async () => [
+        ...new Set((await Promise.all(films.map((f) => f.warnings()))).flat()),
+      ],
+      close: () => browser.close(),
+    };
   } catch (e) {
     await browser.close();
     throw e;

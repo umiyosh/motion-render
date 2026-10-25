@@ -233,7 +233,7 @@ describe("a stuck film page", () => {
     </script></body>`;
     const html = readFileSync(join(dir, "index.html"), "utf8").replace("</body>", stuck);
     writeFileSync(join(dir, "index.html"), html);
-    const film = await openFilm(dir, 1000);
+    const film = await openFilm(dir, { pageMs: 1000 });
     try {
       expect((await film.frame(0.5)).subarray(1, 4).toString()).toBe("PNG");
       await expect(film.frame(1.5)).rejects.toThrow(
@@ -241,6 +241,26 @@ describe("a stuck film page", () => {
       );
     } finally {
       await film.close();
+    }
+  });
+});
+
+describe("several pages", () => {
+  it("draws the same frames and finds the same issues as one page", async () => {
+    const dir = htmlFilm(true, true);
+    const one = await openFilm(dir);
+    const two = await openFilm(dir, { pages: 2 });
+    try {
+      expect(two.pages).toBe(2);
+      const times = [0.5, 1.2, 1.5, 2.5, 3.5];
+      const a = await Promise.all(times.map((t) => two.frame(t)));
+      for (const [i, t] of times.entries()) expect(a[i]!.equals(await one.frame(t))).toBe(true);
+      expect((await checkLayout(two))?.map(formatIssue)).toEqual(
+        (await checkLayout(one))?.map(formatIssue)
+      );
+    } finally {
+      await one.close();
+      await two.close();
     }
   });
 });

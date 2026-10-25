@@ -6,7 +6,8 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { openFilm, checkFilmDir, isHtmlFilm, type Film } from "./render.ts";
+import { openFilm, checkFilmDir, isHtmlFilm, capturePages, type Film } from "./render.ts";
+import { inOrder } from "./inorder.ts";
 import { checkLayout, formatIssue } from "./layout.ts";
 import { writeKit, writeKitTiming } from "./kit.ts";
 import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs, exited, FFMPEG_MS } from "./audio.ts";
@@ -69,7 +70,7 @@ async function stills(filmDir: string, outDir: string, list: string): Promise<vo
   const times = list.split(",").map(Number);
   if (times.some((t) => !Number.isFinite(t))) die(`times must be numbers: ${list}`);
   mkdirSync(outDir, { recursive: true });
-  const film = await openFilm(filmDir);
+  const film = await openFilm(filmDir, { pages: capturePages() });
   try {
     for (const t of times)
       writeFileSync(join(outDir, `t_${t.toFixed(2)}.png`), await film.frame(t));
@@ -84,7 +85,7 @@ async function stills(filmDir: string, outDir: string, list: string): Promise<vo
 async function check(filmDir: string): Promise<void> {
   if (!isHtmlFilm(filmDir))
     die("check works on html films only (Motion films draw in their own player)");
-  const film = await openFilm(filmDir);
+  const film = await openFilm(filmDir, { pages: capturePages() });
   let n: number;
   try {
     n = await reportLayout(film);
@@ -138,10 +139,12 @@ async function encode(film: Film, fps: number, audio: string, out: string): Prom
   const exit = exited(ff);
   ff.stdin.on("error", () => {}); // EPIPE when ffmpeg dies early; its exit code reports the cause.
   try {
-    for (let i = 0; i < count; i++) {
-      if (!ff.stdin.write(await film.frame(i / fps)))
+    let i = 0;
+    for await (const png of inOrder(count, film.pages, (k) => film.frame(k / fps))) {
+      if (!ff.stdin.write(png))
         await limit(once(ff.stdin, "drain"), FRAME_MS, `ffmpeg taking frame ${i}`, kill);
       if (i % Math.max(1, Math.round(count / 10)) === 0) console.error(`frames: ${i}/${count}`);
+      i++;
     }
   } finally {
     ff.stdin.end();
@@ -166,7 +169,8 @@ async function build(work: string, out: string, fps: number): Promise<void> {
   checkFilmDir(filmDir);
   if (isHtmlFilm(filmDir)) writeKitTiming(work);
 
-  const film = await openFilm(filmDir);
+  const film = await openFilm(filmDir, { pages: capturePages() });
+  console.error(`capture: ${film.pages} pages`);
   try {
     if (await reportLayout(film))
       throw new Error(
