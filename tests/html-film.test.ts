@@ -30,7 +30,7 @@ const LONG = {
 // references/html-film.md asks for.
 function page(wrong: boolean, lively = false): string {
   const mark = wrong
-    ? `<div id="deny" style="position:absolute; left:868px; top:300px; font-size:64px">✕</div>
+    ? `<div id="cross" style="position:absolute; left:868px; top:300px; font-size:64px">✕</div>
        <div class="chip">OIDC トークン</div>`
     : `<div class="chip">OIDC トークン<span class="mark">✕</span></div>`;
   return `<!doctype html>
@@ -95,6 +95,58 @@ const TEXT_PAGE = `<!doctype html>
 </script>
 </body></html>`;
 
+// An <svg> icon flies to a card, and inside a diagram drawn at twice its viewBox a dot moves onto a
+// slot. #probe shows where the dot and the slot are on screen once the dot has arrived.
+// `extra` goes into the root after the scenes.
+function svgPage(extra = ""): string {
+  return `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
+<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
+<style>
+  body { background: #0b1622; color: #e9f0f7; }
+  #ico { position:absolute; left:200px; top:200px; }
+  #dock { position:absolute; left:1200px; top:600px; width:400px; height:160px; border:3px solid #2a4466; }
+  #dia { position:absolute; left:300px; top:500px; }
+  #probe { position:absolute; left:100px; top:900px; font-size:30px; }
+</style></head>
+<body><div id="root">
+  <section class="scene" id="intro"><h1 style="font-size:80px">図</h1></section>
+  <section class="scene" id="deny">
+    <svg id="ico" width="60" height="60"><rect width="60" height="60" fill="#3ed6c4" /></svg>
+    <div id="dock"></div>
+    <svg id="dia" width="600" height="300" viewBox="0 0 300 150">
+      <circle id="dot" cx="20" cy="20" r="10" fill="#ff6b6b" />
+      <rect id="slot" x="200" y="100" width="40" height="30" fill="none" stroke="#2a4466" />
+    </svg>
+    <p id="probe"></p>
+  </section>
+  ${extra}
+</div>
+<script>
+  film.build(function (tl) {
+    tl.to("#ico", { ...film.spot("#ico", "#dock"), duration: 0.3 }, film.at("deny", 0.1));
+    film.arc(tl, "#dot", "#slot", film.at("deny", 0.1), { dur: 0.3, lift: 40 });
+    tl.call(function () {
+      var c = function (s) {
+        var r = document.querySelector(s).getBoundingClientRect();
+        return Math.round(r.x + r.width / 2) + "," + Math.round(r.y + r.height / 2);
+      };
+      document.querySelector("#probe").textContent = c("#dot") + " " + c("#slot");
+    }, null, film.at("deny", 0.6));
+  });
+</script>
+</body></html>`;
+}
+
+function filmOf(html: string): string {
+  const work = tempDir("mr-html-");
+  writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+  const film = writeKit(work);
+  writeFileSync(join(film, "index.html"), html);
+  return film;
+}
+
 function htmlFilm(wrong: boolean, lively = false): string {
   const work = tempDir("mr-html-");
   writeFileSync(join(work, "timing.json"), JSON.stringify(lively ? LONG : TIMING));
@@ -135,7 +187,7 @@ describe("html film", () => {
     const wrong = await openFilm(htmlFilm(true));
     try {
       expect((await checkLayout(wrong))?.map(formatIssue)).toEqual([
-        `1.1-1.9s: #cond "assertion.repository == " and #deny "✕" partly overlap`,
+        `1.1-1.9s: #cond "assertion.repository == " and #cross "✕" partly overlap`,
       ]);
     } finally {
       await wrong.close();
@@ -170,7 +222,7 @@ describe("html film", () => {
       const w1 = (await box(1, "#cond"))?.w ?? 0;
       expect((await box(2.5, "#cond"))?.w ?? 0).toBeGreaterThan(w1 + 2);
       const issues = (await checkLayout(film))?.map(formatIssue) ?? [];
-      expect(issues.some((i) => /#cond .* and #deny "✕" partly overlap/.test(i))).toBe(true);
+      expect(issues.some((i) => /#cond .* and #cross "✕" partly overlap/.test(i))).toBe(true);
     } finally {
       await film.close();
     }
@@ -213,13 +265,40 @@ describe("html film", () => {
     });
     expect(existsSync(join(work, "film", "kit", "gsap.min.js"))).toBe(true);
     writeFileSync(join(work, "film", "index.html"), page(true));
-    expect(() => run("check", join(work, "film"))).toThrow(/#cond .* and #deny "✕" partly overlap/);
+    expect(() => run("check", join(work, "film"))).toThrow(
+      /#cond .* and #cross "✕" partly overlap/
+    );
     writeFileSync(join(work, "film", "index.html"), page(false));
     expect(run("check", join(work, "film"))).toContain("layout ok");
     expect(run("stills", join(work, "film"), join(work, "stills"), "0.5,1.5")).toContain(
       "done: 2 stills"
     );
     expect(readdirSync(join(work, "stills")).sort()).toEqual(["t_0.50.png", "t_1.50.png"]);
+  });
+});
+
+describe("film.spot and ids", () => {
+  it("sends an <svg> icon and a shape inside a scaled diagram to their targets", async () => {
+    const film = await openFilm(filmOf(svgPage()));
+    try {
+      const boxes = (await film.inspect?.(1.9)) ?? [];
+      const box = (l: string) => boxes.find((x) => x.label.startsWith(l));
+      const center = (l: string) => {
+        const b = box(l);
+        return b && [Math.round(b.x + b.w / 2), Math.round(b.y + b.h / 2)];
+      };
+      expect(center("#ico")).toEqual(center("#dock"));
+      // The slot's center is at (220, 115) in the viewBox, drawn at twice that from (300, 500).
+      expect(box("#probe")?.label).toBe('#probe "740,730 740,730"');
+    } finally {
+      await film.close();
+    }
+  });
+
+  it("fails to load when an id is used twice, as a chip named like its scene", async () => {
+    await expect(openFilm(filmOf(svgPage('<div id="deny">チップ</div>')))).rejects.toThrow(
+      /ids used more than once: deny\b/
+    );
   });
 });
 

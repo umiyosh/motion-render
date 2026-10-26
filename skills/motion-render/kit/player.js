@@ -28,6 +28,39 @@
     }
     return { x: x, y: y, w: e.offsetWidth, h: e.offsetHeight };
   }
+  function htmlParent(e) {
+    var p = e.parentNode;
+    while (!(p instanceof HTMLElement)) p = p.parentNode;
+    return p;
+  }
+  // How many times the transforms above `h` scale it on screen.
+  function scaleOf(h) {
+    return h.offsetWidth ? h.getBoundingClientRect().width / h.offsetWidth : 1;
+  }
+  // Frame px per unit of GSAP's x/y on `e`. Inside an <svg>, GSAP moves a shape in the svg's own
+  // units, which a viewBox can make larger or smaller than px.
+  function unit(e) {
+    if (!(e instanceof SVGElement) || !e.ownerSVGElement) return 1;
+    return e.parentNode.getScreenCTM().a / scaleOf(htmlParent(e));
+  }
+  // The center of `e` in frame px, leaving out its own GSAP x/y. SVG elements have no layout box,
+  // so they are measured on screen against their nearest HTML parent.
+  function center(e) {
+    if (e instanceof HTMLElement) {
+      var b = layoutBox(e);
+      return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    }
+    var h = htmlParent(e),
+      hb = layoutBox(h),
+      s = scaleOf(h),
+      u = unit(e),
+      r = e.getBoundingClientRect(),
+      hr = h.getBoundingClientRect();
+    return {
+      x: hb.x + (r.x + r.width / 2 - hr.x) / s - Number(gsap.getProperty(e, "x")) * u,
+      y: hb.y + (r.y + r.height / 2 - hr.y) / s - Number(gsap.getProperty(e, "y")) * u,
+    };
+  }
 
   // Latin words and numbers stay whole so they do not break apart; everything else goes one
   // character at a time. Spaces become no-break spaces so an inline-block keeps their width.
@@ -55,13 +88,16 @@
       builders.push(fn);
     },
     // GSAP x/y that put the center of `what` on the center of `target`, moved by (dx, dy).
-    // Use it to send a chip to a card instead of working out pixel offsets by hand.
+    // Use it to send a chip to a card instead of working out pixel offsets by hand. Either may be an
+    // SVG element, such as an <svg> icon or a shape inside a diagram.
     spot: function (what, target, dx, dy) {
-      var a = layoutBox(el(what)),
-        b = layoutBox(el(target));
+      var w = el(what),
+        a = center(w),
+        b = center(el(target)),
+        u = unit(w);
       return {
-        x: b.x + b.w / 2 - (a.x + a.w / 2) + (dx || 0),
-        y: b.y + b.h / 2 - (a.y + a.h / 2) + (dy || 0),
+        x: (b.x - a.x + (dx || 0)) / u,
+        y: (b.y - a.y + (dy || 0)) / u,
       };
     },
     // Sends `what` to `target` along an arc that rises `lift` px above the straight line, starting
@@ -69,7 +105,7 @@
     arc: function (tl, what, target, at, o) {
       o = o || {};
       var dur = o.dur || 0.9,
-        lift = o.lift === undefined ? 120 : o.lift,
+        lift = (o.lift === undefined ? 120 : o.lift) / unit(el(what)),
         to = window.film.spot(what, target, o.dx, o.dy);
       tl.to(what, { x: to.x, duration: dur, ease: "power2.inOut" }, at);
       // The start y is read when the tween first renders, so earlier moves of `what` count.
@@ -146,6 +182,16 @@
   function sections() {
     return Array.prototype.slice.call(document.querySelectorAll("section.scene"));
   }
+  function repeatedIds() {
+    var seen = {},
+      twice = [];
+    document.querySelectorAll("[id]").forEach(function (e) {
+      if (!e.id) return;
+      if (seen[e.id] && twice.indexOf(e.id) < 0) twice.push(e.id);
+      seen[e.id] = true;
+    });
+    return twice;
+  }
   // A scene's section is shown over [start, start + dur); everything outside sections stays.
   function show(t) {
     sections().forEach(function (el) {
@@ -189,6 +235,13 @@
         });
       if (unknown.length)
         throw new Error("section.scene ids not in timing.json: " + unknown.join(", "));
+      var twice = repeatedIds();
+      if (twice.length)
+        throw new Error(
+          "ids used more than once: " +
+            twice.join(", ") +
+            ". A selector #id reaches all of them, so hiding or moving one also hides or moves the others"
+        );
       await loadFonts();
       builders.forEach(function (fn) {
         fn(timeline);

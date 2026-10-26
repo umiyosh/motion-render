@@ -37,7 +37,7 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
     <div id="root">
       <!-- 場面をまたいで残るもの（図の全体） -->
       <div id="stage">…</div>
-      <!-- 場面ごとのもの。id は timing.json の場面 id と同じにする -->
+      <!-- 場面ごとのもの。id は timing.json の場面 id と同じにする。ページの中で同じ id を 2 度使わない -->
       <section class="scene" id="title">…</section>
       <section class="scene" id="problem">…</section>
     </div>
@@ -106,7 +106,8 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
    | `layer-caption` | 字幕                           |
 
 4. **チップの行き先は `film.spot` で決める。** 止まる位置は、カードの中に収まるか、どのカードとも
-   重ならない所にする。カードの枠線をまたいで止めない
+   重ならない所にする。カードの枠線をまたいで止めない。SVG の要素（アイコンの `<svg>`、図の中の図形）も
+   `film.spot`・`film.arc` で動かせる
 5. **箱は親の中に収める。** 親より大きくなりそうな中身は、文字を短くするか親を広げる。
    はみ出しを `overflow: hidden` で隠さない
 6. **前の場面の残りを片付ける。** 次の場面で使わない部品は、場面の頭で消すか薄くし、新しい部品と
