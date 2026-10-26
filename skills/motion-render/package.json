@@ -1,6 +1,6 @@
 {
   "name": "motion-render",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "description": "Make an animated explainer video from a theme with Claude Motion (or as an HTML page when Motion is not available), add narration (Gemini TTS), BGM (Lyria) and sound effects (ElevenLabs), and render it to MP4.",
   "repository": "github:umiyosh/motion-render",
   "type": "module",

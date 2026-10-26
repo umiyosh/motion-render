@@ -11,7 +11,7 @@ An Agent Skill that turns a theme into an **animated explainer video with narrat
 From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and BGM that fits the theme (Lyria), builds the animation, and renders it to an MP4 on your machine. The animation is made with [Claude **Motion**](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) when your account has it, and as an HTML page when it does not.
 
 > [!NOTE]
-> motion-render works on every Claude plan. Claude Motion is in beta and available only on Team and Enterprise plans (as of October 2026); on other plans Claude writes the animation as HTML instead. See [Two ways to make the animation](#two-ways-to-make-the-animation).
+> motion-render works wherever Claude Code runs: the Pro, Max, Team and Enterprise plans, and API keys (Console, Amazon Bedrock, Google Cloud, Microsoft Foundry). The free Claude.ai plan does not include Claude Code. Claude Motion is in beta and available only on Team and Enterprise plans (as of October 2026); elsewhere Claude writes the animation as HTML instead. See [Two ways to make the animation](#two-ways-to-make-the-animation).
 
 ## Demo
 
@@ -35,7 +35,7 @@ Narration, BGM, sound effects and the MP4 are the same either way. Only the anim
 
 |                        | Claude Motion                                                  | HTML                                                                                                                        |
 | ---------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Plans                  | Team and Enterprise (beta)                                     | All plans, including Free, Pro and Max                                                                                      |
+| Plans                  | Team and Enterprise (beta)                                     | Pro, Max, Team, Enterprise and API keys                                                                                     |
 | How it is made         | Claude builds the film in Motion, and motion-render fetches it | Claude writes one HTML page on a kit that comes with motion-render: an animation player (GSAP), styles and Japanese fonts   |
 | Checking before render | Claude looks at still frames                                   | An automatic layout check (overlaps, things sticking out or hidden, text that is too small or too faint), then still frames |
 | What you can look at   | The Motion film on claude.ai, and the MP4                      | Still frames and the MP4 on your machine (there is no link to share before the MP4)                                         |
@@ -43,12 +43,12 @@ Narration, BGM, sound effects and the MP4 are the same either way. Only the anim
 
 ## Requirements
 
-| What                   | Notes                                                                                                                                                                 |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code            | Any plan. On Team and Enterprise, [Claude Motion](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) is used when it is available to you |
-| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                                                                                     |
-| Gemini API key         | Used for narration and BGM. Create one in Google AI Studio ([step by step](docs/api-key.md))                                                                          |
-| ElevenLabs API key     | Optional, for sound effects. Pay-as-you-go works without a subscription ([step by step](docs/elevenlabs-key.md))                                                      |
+| What                   | Notes                                                                                                                                                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code            | Pro, Max, Team or Enterprise plan, or an API key (not the free plan). On Team and Enterprise, [Claude Motion](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) is used when it is available to you |
+| Node.js 22.18 or later | Check with `node -v`. Node runs the command's TypeScript directly                                                                                                                                                                 |
+| Gemini API key         | Used for narration and BGM. Create one in Google AI Studio ([step by step](docs/api-key.md))                                                                                                                                      |
+| ElevenLabs API key     | Optional, for sound effects. Pay-as-you-go works without a subscription ([step by step](docs/elevenlabs-key.md))                                                                                                                  |
 
 Works on macOS, Linux and Windows.
 

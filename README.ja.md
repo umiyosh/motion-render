@@ -11,7 +11,7 @@
 この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、アニメーションを作って手元の MP4 に書き出します。アニメーションは、[Claude **Motion**](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) が使えるアカウントなら Motion で、使えなければ HTML で作ります。
 
 > [!NOTE]
-> motion-render はどのプランでも使えます。Claude Motion はベータ版で、Team プランと Enterprise プランでのみ使えます（2026 年 10 月時点）。ほかのプランでは、Claude がアニメーションを HTML で書きます。詳しくは「[アニメーションの 2 つの作り方](#アニメーションの-2-つの作り方)」を見てください。
+> motion-render は Claude Code が動くところならどこでも使えます: Pro・Max・Team・Enterprise の各プランと、API キー（Console、Amazon Bedrock、Google Cloud、Microsoft Foundry）。無料プランには Claude Code が含まれないため使えません。Claude Motion はベータ版で、Team プランと Enterprise プランでのみ使えます（2026 年 10 月時点）。それ以外では、Claude がアニメーションを HTML で書きます。詳しくは「[アニメーションの 2 つの作り方](#アニメーションの-2-つの作り方)」を見てください。
 
 ## デモ動画
 
@@ -35,7 +35,7 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 |                  | Claude Motion                                           | HTML                                                                                                                            |
 | ---------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 使えるプラン     | Team・Enterprise（ベータ版）                            | Free・Pro・Max を含むすべてのプラン                                                                                             |
+| 使えるプラン     | Team・Enterprise（ベータ版）                            | Pro・Max・Team・Enterprise と API キー                                                                                          |
 | 作り方           | Claude が Motion で作り、motion-render がそれを取得する | Claude が 1 枚の HTML を書く。土台（アニメーションのプレーヤー（GSAP）・スタイル・日本語フォント）は motion-render に入っている |
 | 書き出す前の確認 | Claude が静止画を見る                                   | 配置の自動チェック（重なり、はみ出し、隠れ、小さすぎる文字や薄すぎる文字）のあと、静止画を見る                                  |
 | 見られるもの     | claude.ai 上の Motion の動画と MP4                      | 手元の静止画と MP4（MP4 ができる前に共有できるリンクはない）                                                                    |
@@ -43,12 +43,12 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ## 必要なもの
 
-| もの                | 備考                                                                                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code         | プランは問いません。Team・Enterprise で [Claude Motion](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) が使えるときは Motion で作ります |
-| Node.js 22.18 以上  | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                                                                                                        |
-| Gemini API キー     | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）                                                                                            |
-| ElevenLabs API キー | 任意。効果音に使います。月額プランなしの従量課金で作れます（[作成の手順](docs/elevenlabs-key.ja.md)）                                                                                       |
+| もの                | 備考                                                                                                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code         | Pro・Max・Team・Enterprise のプランか API キー（無料プランは不可）。Team・Enterprise で [Claude Motion](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) が使えるときは Motion で作ります |
+| Node.js 22.18 以上  | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                                                                                                                                                        |
+| Gemini API キー     | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）                                                                                                                                            |
+| ElevenLabs API キー | 任意。効果音に使います。月額プランなしの従量課金で作れます（[作成の手順](docs/elevenlabs-key.ja.md)）                                                                                                                                       |
 
 macOS・Linux・Windows で動きます。
 
