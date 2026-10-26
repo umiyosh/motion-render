@@ -24,6 +24,7 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 ![motion-render の仕組み](docs/how-it-works.svg)
 
 - 見た目・長さ・声・BGM の雰囲気はテーマから自動で決まります（指定すればそれに従います）
+- HTML の映像は、テーマに合う作風で描かれます: 暗い平面、紙と鉛筆、色鉛筆、設計図、紙コラージュ、ホワイトボード
 - ElevenLabs の API キーがあれば、カードが現れる・流れ図が光るといった動きに合わせて効果音も付きます
 - 既存の Motion の動画の URL を渡して、ナレーションと BGM 付きの MP4 にすることもできます
 - 描画用のブラウザ（Chromium）と ffmpeg は自動で用意されるので、環境ごとの差が出ません
@@ -32,13 +33,13 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ナレーション・BGM・効果音・MP4 への書き出しは、どちらでも同じです。違うのはアニメーションの作り方だけで、Claude が自動で選びます。Motion が使えるアカウントなら Motion、使えなければ HTML です。
 
-|                  | Claude Motion                                           | HTML                                                                                                                                  |
-| ---------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 使えるプラン     | Team・Enterprise（ベータ版）                            | Free・Pro・Max を含むすべてのプラン                                                                                                   |
-| 作り方           | Claude が Motion で作り、motion-render がそれを取得する | Claude が 1 枚の HTML を書く。土台（アニメーションのプレーヤー（GSAP）・基本のスタイル・日本語フォント）は motion-render に入っている |
-| 書き出す前の確認 | Claude が静止画を見る                                   | 配置の自動チェック（重なり、はみ出し、隠れ、小さすぎる文字や薄すぎる文字）のあと、静止画を見る                                        |
-| 見られるもの     | claude.ai 上の Motion の動画と MP4                      | 手元の静止画と MP4（MP4 ができる前に共有できるリンクはない）                                                                          |
-| 追加の準備       | なし                                                    | なし（土台は motion-render と一緒に入る）                                                                                             |
+|                  | Claude Motion                                           | HTML                                                                                                                            |
+| ---------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 使えるプラン     | Team・Enterprise（ベータ版）                            | Free・Pro・Max を含むすべてのプラン                                                                                             |
+| 作り方           | Claude が Motion で作り、motion-render がそれを取得する | Claude が 1 枚の HTML を書く。土台（アニメーションのプレーヤー（GSAP）・スタイル・日本語フォント）は motion-render に入っている |
+| 書き出す前の確認 | Claude が静止画を見る                                   | 配置の自動チェック（重なり、はみ出し、隠れ、小さすぎる文字や薄すぎる文字）のあと、静止画を見る                                  |
+| 見られるもの     | claude.ai 上の Motion の動画と MP4                      | 手元の静止画と MP4（MP4 ができる前に共有できるリンクはない）                                                                    |
+| 追加の準備       | なし                                                    | なし（土台は motion-render と一緒に入る）                                                                                       |
 
 ## 必要なもの
 
@@ -145,7 +146,7 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | `motion-render bgm <work>`                       | `script.json` の `bgm` の指示から BGM を作る                                                                                          |
 | `motion-render sfx <work>`                       | `script.json` の `sfx` から効果音を作り、全部を順に聞ける `preview.m4a` を書く                                                        |
 | `motion-render prepare <storeDir> <work>/film`   | Motion: Motion から取得した映像データを、描画できる形に展開する                                                                       |
-| `motion-render kit <work>`                       | HTML: `<work>/film` にプレーヤー・基本のスタイル・GSAP・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く  |
+| `motion-render kit <work>`                       | HTML: `<work>/film` にプレーヤー・スタイル・GSAP・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く        |
 | `motion-render check <work>/film`                | HTML: 0.1 秒ごとに配置を調べ、重なり、箱や画面からのはみ出し、ほかのものの下に隠れたもの、小さすぎる文字や薄すぎる文字を報告する      |
 | `motion-render stills <filmDir> <outDir> 0,5,12` | 確認用の静止画を書き出す（HTML の映像は先に配置を調べる）                                                                             |
 | `motion-render build <work> [out.mp4]`           | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする。どれかが足りないとき、HTML の映像が配置のチェックに通らないときは止まる |
@@ -174,8 +175,8 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | 初回の Chromium のダウンロードが失敗する                                             | `CHROMIUM_PATH` に手元の Chrome か Chromium を指定してください                                                                                                                                                                                                                 |
 | `motion-render` の実行で `Unknown file extension ".ts"` が出る                       | Node が 22.18 より古いです。Node を更新してください                                                                                                                                                                                                                            |
 | `stills` や `build` が `1.1-1.9s: #a and #b partly overlap` のような行を出して止まる | HTML の映像の配置に問題があります。Claude が `film/index.html` を直して調べ直します。自分で直すときは、`motion-render check <work>/film` が `layout ok` を出すまで直してください。各メッセージの意味は [html-film.md](skills/motion-render/references/html-film.md) にあります |
-| `font "Noto Sans JP" … did not load. Run "motion-render kit" again.` が出る          | HTML の映像のフォントのファイルがありません。`motion-render kit <work>` をもう一度実行してください（`index.html` はそのまま残ります）                                                                                                                                          |
-| 日本語の字形や改行位置が Motion のページと少し違う                                   | Motion の映像は OS のフォントで描かれます。HTML の映像は、同梱の Noto Sans JP で描かれます                                                                                                                                                                                     |
+| `font … "Noto Sans JP" did not load. Run "motion-render kit" again.` が出る          | HTML の映像のフォントのファイルがありません。`motion-render kit <work>` をもう一度実行してください（`index.html` はそのまま残ります）                                                                                                                                          |
+| 日本語の字形や改行位置が Motion のページと少し違う                                   | Motion の映像は OS のフォントで描かれます。HTML の映像は、同梱の Noto Sans JP（手描きの作風では Klee One）で描かれます                                                                                                                                                         |
 
 ## 更新
 
@@ -233,9 +234,9 @@ package-lock.json
 tsconfig.json             # TypeScript の設定（型の検査用。実行時は Node が .ts をそのまま動かす）
 skills/motion-render/     # スキル本体（skills CLI とプラグインの両方がここを読む）
   SKILL.md                # Claude が読む手順（準備、絵コンテ・原稿・BGM の決め方を含む）
-  package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp）
+  package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one）
   references/html-film.md # Claude が HTML の映像を書くときの決まり（配置、動き、配置のチェックの読み方）
-  kit/                    # kit が HTML の映像に写すプレーヤーと基本のスタイル
+  kit/                    # kit が HTML の映像に写すプレーヤーと基本のスタイル、作風のスタイル
   scripts/cli.ts          # motion-render コマンド
   scripts/audio.ts        # ナレーションと BGM の生成、音声の合成
   scripts/sfx.ts          # 効果音の生成（ElevenLabs）、音量のそろえ方、試聴用ファイル

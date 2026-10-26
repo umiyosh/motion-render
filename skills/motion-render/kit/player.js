@@ -5,7 +5,40 @@
   var T = window.__timing;
   if (!T || !window.gsap)
     throw new Error("load kit/gsap.min.js and kit/timing.js before kit/player.js");
-  var FAMILY = '"Noto Sans JP"';
+  // Each family with the weights kit/fonts.css has for it. Klee One is the hand-written face of the
+  // paper, crayon and whiteboard styles, so it is loaded only when the page uses it.
+  var FONTS = [
+    { family: '"Noto Sans JP"', weights: ["400", "700"] },
+    { family: '"Klee One"', weights: ["400", "600"], optional: true },
+  ];
+  // The filters kit/styles.css draws with. The noise of the line filters (.mr-boil) is re-seeded
+  // 8 times a second so drawn lines shimmer like hand-drawn animation; the seed comes from the time,
+  // so a frame always looks the same.
+  var FILTERS =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" style="position:absolute">' +
+    '<filter id="mr-pencil" x="-5%" y="-5%" width="110%" height="110%">' +
+    '<feTurbulence class="mr-boil" type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="1" result="n"/>' +
+    '<feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G" result="d"/>' +
+    '<feTurbulence type="fractalNoise" baseFrequency="1.2" numOctaves="1" seed="7" result="g"/>' +
+    '<feColorMatrix in="g" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.5 1.5" result="tooth"/>' +
+    '<feComposite in="d" in2="tooth" operator="in"/></filter>' +
+    '<filter id="mr-crayon" x="-5%" y="-5%" width="110%" height="110%">' +
+    '<feTurbulence class="mr-boil" type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="1" result="n"/>' +
+    '<feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G" result="d"/>' +
+    '<feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="5" result="g"/>' +
+    '<feColorMatrix in="g" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2 1.85" result="tooth"/>' +
+    '<feComposite in="d" in2="tooth" operator="in"/></filter>' +
+    '<filter id="mr-marker" x="-5%" y="-5%" width="110%" height="110%">' +
+    '<feTurbulence class="mr-boil" type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="1" result="n"/>' +
+    '<feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/></filter>' +
+    '<filter id="mr-torn" x="-5%" y="-5%" width="110%" height="110%">' +
+    '<feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="4" seed="4" result="n"/>' +
+    '<feDisplacementMap in="SourceGraphic" in2="n" scale="12" xChannelSelector="R" yChannelSelector="G"/></filter>' +
+    '<filter id="mr-tooth">' +
+    '<feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" seed="2" result="g"/>' +
+    '<feColorMatrix in="g" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -3 2.1" result="tooth"/>' +
+    '<feComposite in="SourceGraphic" in2="tooth" operator="in"/></filter>' +
+    "</svg>";
   var scenes = {};
   T.scenes.forEach(function (s) {
     scenes[s.id] = s;
@@ -201,26 +234,55 @@
   }
   // Fonts load per unicode-range subset on first use, so a scene's first frame could fall back.
   // Load every glyph the film shows before the first frame, and fail if any is missing.
+  function usesFamily(family) {
+    var name = family.replace(/"/g, "");
+    return Array.prototype.some.call(document.querySelectorAll("body, body *"), function (e) {
+      return getComputedStyle(e).fontFamily.indexOf(name) >= 0;
+    });
+  }
   async function loadFonts() {
     var text = document.body.textContent.replace(/\s+/g, "") + "0123456789";
-    var weights = ["400", "700"];
+    var faces = [];
+    FONTS.forEach(function (f) {
+      if (f.optional && !usesFamily(f.family)) return;
+      f.weights.forEach(function (w) {
+        faces.push({ family: f.family, spec: w + " 48px " + f.family });
+      });
+    });
     try {
       await Promise.all(
-        weights.map(function (w) {
-          return document.fonts.load(w + " 48px " + FAMILY, text);
+        faces.map(function (f) {
+          return document.fonts.load(f.spec, text);
         })
       );
     } catch (e) {
       throw new Error(
-        "font " + FAMILY + " failed to load (" + e.message + '). Run "motion-render kit" again.'
+        "font " +
+          faces
+            .map(function (f) {
+              return f.spec;
+            })
+            .join(", ") +
+          " failed to load (" +
+          e.message +
+          '). Run "motion-render kit" again.'
       );
     }
     await document.fonts.ready;
-    weights.forEach(function (w) {
-      if (!document.fonts.check(w + " 48px " + FAMILY, text))
-        throw new Error(
-          "font " + FAMILY + " " + w + ' did not load. Run "motion-render kit" again.'
-        );
+    faces.forEach(function (f) {
+      if (!document.fonts.check(f.spec, text))
+        throw new Error("font " + f.spec + ' did not load. Run "motion-render kit" again.');
+    });
+  }
+  function addFilters() {
+    var holder = document.createElement("div");
+    holder.innerHTML = FILTERS;
+    document.body.appendChild(holder.firstChild);
+  }
+  function boil(t) {
+    var seed = String(1 + (Math.floor(t * 8) % 4));
+    document.querySelectorAll(".mr-boil").forEach(function (n) {
+      n.setAttribute("seed", seed);
     });
   }
 
@@ -242,6 +304,7 @@
             twice.join(", ") +
             ". A selector #id reaches all of them, so hiding or moving one also hides or moves the others"
         );
+      addFilters();
       await loadFonts();
       builders.forEach(function (fn) {
         fn(timeline);
@@ -256,6 +319,7 @@
     },
     seek: function (t) {
       show(t);
+      boil(t);
       // suppressEvents=false so onUpdate callbacks (count-ups) run on every seek.
       timeline.seek(t, false);
     },

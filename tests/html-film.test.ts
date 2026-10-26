@@ -392,3 +392,53 @@ describe("film.typeIn", () => {
     }
   });
 });
+
+// A paper-style scene: a hand-drawn card placed with position: absolute, holding a title, a line of
+// text faded into the paper and a pencil line that does not move.
+const STYLE_PAGE = `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
+<link rel="stylesheet" href="kit/styles.css">
+<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
+<style>
+  #card { position:absolute; left:300px; top:200px; width:600px; height:300px; padding:30px; background:var(--panel); }
+  #t { font-size:48px; }
+  #faint { font-size:30px; color:#d6cfbf; }
+  #line { position:absolute; left:300px; top:700px; }
+</style></head>
+<body data-style="paper"><div id="root">
+  <section class="scene" id="intro"><h1 style="font-size:80px">紙</h1></section>
+  <section class="scene" id="deny">
+    <div id="card" class="drawn layer-card"><p id="t">鉛筆で描く</p><p id="faint">薄い字</p></div>
+    <svg id="line" class="sketch layer-line" width="800" height="60"><path d="M10 30 H790" stroke="currentColor" stroke-width="5" /></svg>
+  </section>
+</div>
+<script>film.build(function (tl) {});</script>
+</body></html>`;
+
+describe("drawing styles", () => {
+  it("puts the stylesheet and the hand-written font in the kit", () => {
+    const dir = filmOf(STYLE_PAGE);
+    expect(readFileSync(join(dir, "kit", "styles.css"), "utf8")).toContain('[data-style="paper"]');
+    expect(readFileSync(join(dir, "kit", "fonts.css"), "utf8")).toContain("Klee One");
+  });
+
+  it("keeps a drawn card where the page puts it, measures its text against the card, and shimmers its lines the same way every time", async () => {
+    const film = await openFilm(filmOf(STYLE_PAGE));
+    try {
+      const boxes = (await film.inspect?.(1.5)) ?? [];
+      const card = boxes.find((b) => b.label.startsWith("#card"));
+      expect(card && [card.x, card.y]).toEqual([300, 200]);
+      expect((await checkLayout(film))?.map(formatIssue)).toEqual([
+        expect.stringMatching(/#faint "薄い字" has contrast 1\.\d:1, needs 4\.5:1/),
+      ]);
+      // Nothing moves in the scene; only the lines are re-drawn 8 times a second.
+      const a = await film.frame(1.5);
+      expect((await film.frame(1.5)).equals(a)).toBe(true);
+      expect((await film.frame(1.63)).equals(a)).toBe(false);
+      expect(await film.warnings()).toEqual([]);
+    } finally {
+      await film.close();
+    }
+  });
+});
