@@ -416,6 +416,31 @@ const STYLE_PAGE = `<!doctype html>
 <script>film.build(function (tl) {});</script>
 </body></html>`;
 
+// A heading with a highlighter stroke drawn under it between 0.14s and 0.2s, and a shape filled with
+// the kit's hatching (or with nothing, to compare against).
+function markPage(fill: string): string {
+  return `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
+<link rel="stylesheet" href="kit/styles.css">
+<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
+<style>
+  #h { position:absolute; left:300px; top:200px; font-size:60px; --mark-x:0; }
+  #shape { position:absolute; left:300px; top:500px; }
+</style></head>
+<body data-style="paper"><div id="root">
+  <section class="scene" id="intro">
+    <h1 id="h" class="marker layer-caption">これから</h1>
+    <svg id="shape" class="sketch layer-card" width="200" height="200"><rect x="10" y="10" width="180" height="180" fill="${fill}" stroke="currentColor" /></svg>
+  </section>
+  <section class="scene" id="deny"></section>
+</div>
+<script>film.build(function (tl) {
+  tl.to("#h", { "--mark-x": 1, duration: 0.06, ease: "none" }, film.at("intro", 0.14));
+});</script>
+</body></html>`;
+}
+
 describe("drawing styles", () => {
   it("puts the stylesheet and the hand-written font in the kit", () => {
     const dir = filmOf(STYLE_PAGE);
@@ -439,6 +464,22 @@ describe("drawing styles", () => {
       expect(await film.warnings()).toEqual([]);
     } finally {
       await film.close();
+    }
+  });
+
+  it("draws the highlighter as --mark-x grows and fills SVG shapes with the kit's hatching", async () => {
+    const hatched = await openFilm(filmOf(markPage("url(#mr-hatch)")));
+    const empty = await openFilm(filmOf(markPage("none")));
+    try {
+      // 0.13s and 0.24s fall in the same eighth of a second, so the lines shimmer the same way in both.
+      const before = await hatched.frame(0.13);
+      expect((await hatched.frame(0.24)).equals(before)).toBe(false);
+      expect((await empty.frame(0.13)).equals(before)).toBe(false);
+      expect((await checkLayout(hatched))?.map(formatIssue)).toEqual([]);
+      expect(await hatched.warnings()).toEqual([]);
+    } finally {
+      await hatched.close();
+      await empty.close();
     }
   });
 });

@@ -1,8 +1,9 @@
 /* Drawing styles of an html film. <body data-style="paper"> picks one; without data-style the film
    keeps the flat dark look the page sets itself. Each style sets the colour variables, the ground
    (drawn on #root::before, which the layout check does not see, so text over it is still measured
-   for contrast against --ground) and how .sketch, .drawn, .hatch and .cutout look. The SVG filters
-   these use (#mr-pencil, #mr-crayon, #mr-marker, #mr-torn, #mr-tooth) are added to the page by kit/player.js. */
+   for contrast against --ground) and how .sketch, .drawn, .hatch, .marker and .cutout look. The SVG
+   filters these use (#mr-pencil, #mr-crayon, #mr-marker, #mr-torn, #mr-tooth) and the hatch patterns
+   for SVG shapes (#mr-hatch, #mr-hatch-accent) are added to the page by kit/player.js. */
 
 [data-style] {
   background: var(--ground);
@@ -51,43 +52,58 @@
 [data-style] .hatch {
   filter: var(--fill-filter);
 }
+/* A highlighter stroke behind a word or a heading, drawn from left to right as --mark-x goes from
+   0 to 1 (GSAP tweens it: { "--mark-x": 1 }). Keep the text on it in --ink. */
+:where([data-style] .marker) {
+  position: relative;
+}
+[data-style] .marker {
+  isolation: isolate;
+}
+[data-style] .marker::before {
+  content: "";
+  position: absolute;
+  left: -0.35em;
+  right: -0.35em;
+  top: 0.38em;
+  bottom: 0.02em;
+  z-index: -1;
+  background: var(--mark);
+  border-radius: 0.5em;
+  transform: scaleX(var(--mark-x, 1));
+  transform-origin: left center;
+  filter: var(--line-filter);
+  pointer-events: none;
+}
 
 /* Every style has --tint-1 to --tint-4: light colours to fill a .drawn box or a .cutout with
-   (--fill), light enough that --ink on them stays readable. */
+   (--fill), light enough that --ink on them stays readable; and --mark, the highlighter colour. */
 
-/* 紙と鉛筆: cream paper with grain and a faint blue grid, graphite lines that wobble. */
+/* 紙と鉛筆: off-white paper with a faint grain, graphite lines that wobble, ochre for what matters
+   and a highlighter stroke behind headings. */
 [data-style="paper"] {
-  --ground: #ede6d5;
-  --panel: #f4efe2;
-  --line: #34343a;
-  --ink: #26262b;
-  --muted: #5e5a52;
-  --accent: #2447c4;
-  --danger: #bf3328;
-  --tint-1: #f3d9a9;
-  --tint-2: #cad7f3;
-  --tint-3: #d2e4c3;
-  --tint-4: #f1cdc4;
-  --stroke: 3.5px;
+  --ground: #f5f3ec;
+  --panel: #faf8f3;
+  --line: #3a3d45;
+  --ink: #2f3239;
+  --muted: #5d5f66;
+  --accent: #8a5a0e;
+  --danger: #b23a2c;
+  --mark: #e8c47c;
+  --tint-1: #f0dcae;
+  --tint-2: #d6e0f2;
+  --tint-3: #dbe7cf;
+  --tint-4: #f2d5cb;
+  --stroke: 3px;
   --line-filter: url(#mr-pencil);
   --fill-filter: url(#mr-pencil);
-  --hatch-w: 2px;
-  --hatch-gap: 9px;
+  --hatch-w: 2.4px;
+  --hatch-gap: 7px;
   font-family: "Klee One", "Noto Sans JP", sans-serif;
 }
 [data-style="paper"] #root::before {
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.26 0 0 0 0 0.2 0 0 0 0.16 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>"),
-    linear-gradient(rgba(36, 71, 196, 0.17) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(36, 71, 196, 0.17) 1px, transparent 1px),
-    linear-gradient(rgba(36, 71, 196, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(36, 71, 196, 0.08) 1px, transparent 1px);
-  background-size:
-    480px 480px,
-    300px 300px,
-    300px 300px,
-    60px 60px,
-    60px 60px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.27 0 0 0 0 0.2 0 0 0 0.1 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  background-size: 480px 480px;
 }
 
 /* 色鉛筆: warm paper with more tooth; thick soft lines, and fills of coloured pencil that let the
@@ -100,6 +116,7 @@
   --muted: #675a50;
   --accent: #b9471a;
   --danger: #b0302a;
+  --mark: #f5dc84;
   --tint-1: #f6bf8e;
   --tint-2: #f5dc84;
   --tint-3: #add7a2;
@@ -129,6 +146,7 @@
   --muted: #c3cff5;
   --accent: #ffd84a;
   --danger: #ff9a8f;
+  --mark: rgba(255, 216, 74, 0.38);
   --tint-1: rgba(255, 255, 255, 0.1);
   --tint-2: rgba(255, 216, 74, 0.16);
   --tint-3: rgba(140, 230, 200, 0.14);
@@ -162,6 +180,7 @@
   --muted: #4f443a;
   --accent: #1f4c9e;
   --danger: #a3261b;
+  --mark: #f0c24f;
   --tint-1: #f3ead6;
   --tint-2: #f0c24f;
   --tint-3: #a9cfa4;
@@ -216,6 +235,7 @@
   --muted: #4d545c;
   --accent: #1f5bbf;
   --danger: #cc3326;
+  --mark: #fde58a;
   --tint-1: #fdeeb3;
   --tint-2: #dbe7fb;
   --tint-3: #d3eedc;

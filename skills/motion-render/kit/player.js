@@ -38,6 +38,12 @@
     '<feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" seed="2" result="g"/>' +
     '<feColorMatrix in="g" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -3 2.1" result="tooth"/>' +
     '<feComposite in="SourceGraphic" in2="tooth" operator="in"/></filter>' +
+    // Hatching for SVG shapes (fill="url(#mr-hatch)"): strokes in --line, and crossed strokes in --accent.
+    '<pattern id="mr-hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">' +
+    '<line x1="0" y1="0" x2="0" y2="7" style="stroke:var(--line);stroke-width:var(--hatch-w,2px)"/></pattern>' +
+    '<pattern id="mr-hatch-accent" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(45)">' +
+    '<line x1="0" y1="0" x2="0" y2="9" style="stroke:var(--accent);stroke-width:1.5px;opacity:.75"/>' +
+    '<line x1="0" y1="0" x2="9" y2="0" style="stroke:var(--accent);stroke-width:1.5px;opacity:.5"/></pattern>' +
     "</svg>";
   var scenes = {};
   T.scenes.forEach(function (s) {
