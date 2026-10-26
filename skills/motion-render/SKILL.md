@@ -132,6 +132,7 @@ motion-render narrate <work>
 
 1. `motion-render kit <work>` で `<work>/film/` にプレーヤー・フォント・GSAP・場面の秒数を置く
 2. [references/html-film.md](references/html-film.md) を読み、その決まりに従って `<work>/film/index.html` を書く。
+   先に「作る前に決めること」を依頼文とテーマから決め、ページの先頭に書く。
    場面は `<section class="scene" id="<場面id>">`、動きは `film.build` の中で `film.at(場面id, 秒)` に置く
 3. 並行して BGM を作ってよい: `motion-render bgm <work>`
 4. 効果音を付けるときは、`script.json` の `sfx` の `at` に、その動きに渡した `film.at` の秒を書き、
