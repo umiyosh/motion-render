@@ -1,0 +1,255 @@
+/* Drawing styles of an html film. <body data-style="paper"> picks one; without data-style the film
+   keeps the flat dark look the page sets itself. Each style sets the colour variables, the ground
+   (drawn on #root::before, which the layout check does not see, so text over it is still measured
+   for contrast against --ground) and how .sketch, .drawn, .hatch, .marker and .cutout look. The SVG
+   filters these use (#mr-pencil, #mr-crayon, #mr-marker, #mr-torn, #mr-tooth) and the hatch patterns
+   for SVG shapes (#mr-hatch, #mr-hatch-accent) are added to the page by kit/player.js. */
+
+[data-style] {
+  background: var(--ground);
+  color: var(--ink);
+}
+[data-style] #root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* A box outlined (and, with --fill, coloured in) by hand. Both are on a pseudo-element behind the
+   box's content, so the filter that makes them wobble does not reach the text inside, and the layout
+   check still measures the text against the box's own background. */
+/* :where() keeps these at no specificity, so a page's own position: absolute still wins. */
+:where([data-style] .drawn, [data-style="collage"] .cutout) {
+  position: relative;
+}
+[data-style] .drawn {
+  isolation: isolate;
+}
+[data-style] .drawn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--fill, transparent);
+  border: var(--stroke) solid var(--line);
+  border-radius: inherit;
+  filter: var(--line-filter);
+  pointer-events: none;
+}
+[data-style] .sketch {
+  filter: var(--line-filter);
+}
+/* Shading: diagonal strokes in the current colour. Put text next to it, not on it. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    currentColor 0 var(--hatch-w, 2px),
+    transparent var(--hatch-w, 2px) var(--hatch-gap, 10px)
+  );
+}
+[data-style] .hatch {
+  filter: var(--fill-filter);
+}
+/* A highlighter stroke behind a word or a heading, drawn from left to right as --mark-x goes from
+   0 to 1 (GSAP tweens it: { "--mark-x": 1 }). Keep the text on it in --ink. */
+:where([data-style] .marker) {
+  position: relative;
+}
+[data-style] .marker {
+  isolation: isolate;
+}
+[data-style] .marker::before {
+  content: "";
+  position: absolute;
+  left: -0.35em;
+  right: -0.35em;
+  top: 0.38em;
+  bottom: 0.02em;
+  z-index: -1;
+  background: var(--mark);
+  border-radius: 0.5em;
+  transform: scaleX(var(--mark-x, 1));
+  transform-origin: left center;
+  filter: var(--line-filter);
+  pointer-events: none;
+}
+
+/* Every style has --tint-1 to --tint-4: light colours to fill a .drawn box or a .cutout with
+   (--fill), light enough that --ink on them stays readable; and --mark, the highlighter colour. */
+
+/* 紙と鉛筆: off-white paper with a faint grain, graphite lines that wobble, ochre for what matters
+   and a highlighter stroke behind headings. */
+[data-style="paper"] {
+  --ground: #f5f3ec;
+  --panel: #faf8f3;
+  --line: #3a3d45;
+  --ink: #2f3239;
+  --muted: #5d5f66;
+  --accent: #8a5a0e;
+  --danger: #b23a2c;
+  --mark: #e8c47c;
+  --tint-1: #f0dcae;
+  --tint-2: #d6e0f2;
+  --tint-3: #dbe7cf;
+  --tint-4: #f2d5cb;
+  --stroke: 3px;
+  --line-filter: url(#mr-pencil);
+  --fill-filter: url(#mr-pencil);
+  --hatch-w: 2.4px;
+  --hatch-gap: 7px;
+  font-family: "Klee One", "Noto Sans JP", sans-serif;
+}
+[data-style="paper"] #root::before {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.27 0 0 0 0 0.2 0 0 0 0.1 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  background-size: 480px 480px;
+}
+
+/* 色鉛筆: warm paper with more tooth; thick soft lines, and fills of coloured pencil that let the
+   paper show through (.tooth on a box filled with one of --tint-1 to --tint-4). */
+[data-style="crayon"] {
+  --ground: #f6efe0;
+  --panel: #fbf6ea;
+  --line: #5a4334;
+  --ink: #3a302a;
+  --muted: #675a50;
+  --accent: #b9471a;
+  --danger: #b0302a;
+  --mark: #f5dc84;
+  --tint-1: #f6bf8e;
+  --tint-2: #f5dc84;
+  --tint-3: #add7a2;
+  --tint-4: #a6c8ef;
+  --stroke: 6px;
+  --line-filter: url(#mr-crayon);
+  --fill-filter: url(#mr-crayon);
+  --hatch-w: 5px;
+  --hatch-gap: 9px;
+  font-family: "Klee One", "Noto Sans JP", sans-serif;
+}
+[data-style="crayon"] #root::before {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' seed='5' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.32 0 0 0 0 0.22 0 0 0 0.22 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  background-size: 480px 480px;
+}
+/* A solid fill in coloured pencil. */
+[data-style="crayon"] .tooth {
+  filter: url(#mr-tooth);
+}
+
+/* 設計図: flat blue with a white grid, clean white lines. */
+[data-style="blueprint"] {
+  --ground: #1d3fae;
+  --panel: #2149bd;
+  --line: #f2f5ff;
+  --ink: #f6f8ff;
+  --muted: #c3cff5;
+  --accent: #ffd84a;
+  --danger: #ff9a8f;
+  --mark: rgba(255, 216, 74, 0.38);
+  --tint-1: rgba(255, 255, 255, 0.1);
+  --tint-2: rgba(255, 216, 74, 0.16);
+  --tint-3: rgba(140, 230, 200, 0.14);
+  --tint-4: rgba(255, 154, 143, 0.16);
+  --stroke: 3px;
+  --line-filter: none;
+  --fill-filter: none;
+  --hatch-w: 1.5px;
+  --hatch-gap: 8px;
+  font-family: "Noto Sans JP", sans-serif;
+}
+[data-style="blueprint"] #root::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.26) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.26) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size:
+    300px 300px,
+    300px 300px,
+    60px 60px,
+    60px 60px;
+}
+
+/* 紙コラージュ: kraft paper; pieces of coloured paper with torn edges and a hard shadow. */
+[data-style="collage"] {
+  --ground: #cfb994;
+  --panel: #f3ead6;
+  --line: #2e2722;
+  --ink: #2a231e;
+  --muted: #4f443a;
+  --accent: #1f4c9e;
+  --danger: #a3261b;
+  --mark: #f0c24f;
+  --tint-1: #f3ead6;
+  --tint-2: #f0c24f;
+  --tint-3: #a9cfa4;
+  --tint-4: #9dc0e3;
+  --stroke: 3px;
+  --line-filter: url(#mr-marker);
+  --fill-filter: url(#mr-tooth);
+  --hatch-w: 3px;
+  --hatch-gap: 10px;
+  font-family: "Noto Sans JP", sans-serif;
+}
+[data-style="collage"] #root::before {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.9 0.06' numOctaves='2' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.25 0 0 0 0 0.12 0 0 0 0.28 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  background-size: 480px 480px;
+}
+/* The torn edge and the shadow are on a pseudo-element a little larger than the piece, so the text
+   on the piece is not torn with it and the layout check still sees the piece's own colour. */
+[data-style="collage"] .cutout {
+  isolation: isolate;
+  background-color: var(--fill, var(--tint-1));
+}
+[data-style="collage"] .cutout::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  z-index: -1;
+  background-color: inherit;
+  box-shadow: 5px 7px 0 rgba(40, 28, 16, 0.28);
+  filter: url(#mr-torn);
+  pointer-events: none;
+}
+/* A strip of tape over the top edge of a .cutout. */
+[data-style="collage"] .cutout.taped::after {
+  content: "";
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  width: 120px;
+  height: 36px;
+  margin-left: -60px;
+  background: rgba(250, 244, 222, 0.7);
+  transform: rotate(-3deg);
+  pointer-events: none;
+}
+
+/* ホワイトボード: a white board, marker lines with round ends. */
+[data-style="whiteboard"] {
+  --ground: #f6f7f4;
+  --panel: #ffffff;
+  --line: #22262b;
+  --ink: #1d2126;
+  --muted: #4d545c;
+  --accent: #1f5bbf;
+  --danger: #cc3326;
+  --mark: #fde58a;
+  --tint-1: #fdeeb3;
+  --tint-2: #dbe7fb;
+  --tint-3: #d3eedc;
+  --tint-4: #f9d6d2;
+  --stroke: 4px;
+  --line-filter: url(#mr-marker);
+  --fill-filter: url(#mr-marker);
+  --hatch-w: 3px;
+  --hatch-gap: 12px;
+  font-family: "Klee One", "Noto Sans JP", sans-serif;
+}
+[data-style="whiteboard"] #root::before {
+  background-image:
+    radial-gradient(ellipse 900px 500px at 70% 20%, rgba(255, 255, 255, 0.9), transparent 70%),
+    radial-gradient(ellipse 420px 160px at 22% 78%, rgba(120, 130, 140, 0.06), transparent 70%),
+    radial-gradient(ellipse 300px 120px at 82% 70%, rgba(120, 130, 140, 0.05), transparent 70%);
+}

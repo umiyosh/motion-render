@@ -8,6 +8,7 @@
     "node": ">=22.18"
   },
   "dependencies": {
+    "@fontsource/klee-one": "5.3.1",
     "@fontsource/noto-sans-jp": "5.2.8",
     "ffmpeg-static": "5.2.0",
     "gsap": "3.13.0",

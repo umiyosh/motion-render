@@ -1,4 +1,4 @@
-// Sets up <work>/film for an html film: the player, the base stylesheet, GSAP, the Japanese font
+// Sets up <work>/film for an html film: the player, the stylesheets, GSAP, the Japanese fonts
 // and the scene times. Claude writes <work>/film/index.html against these files.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -8,10 +8,13 @@ import { loadTiming } from "./work.ts";
 
 const require = createRequire(import.meta.url);
 const KIT = fileURLToPath(new URL("../kit/", import.meta.url));
-// The two weights the player loads (kit/player.js).
+// The weights the player loads (kit/player.js): Noto Sans JP for every film, Klee One for the
+// hand-drawn styles of kit/styles.css.
 const FONT_CSS = [
   require.resolve("@fontsource/noto-sans-jp/400.css"),
   require.resolve("@fontsource/noto-sans-jp/700.css"),
+  require.resolve("@fontsource/klee-one/400.css"),
+  require.resolve("@fontsource/klee-one/600.css"),
 ];
 
 // Fontsource's CSS for one weight, cut down to woff2 files under fonts/ and font-display: block,
@@ -42,7 +45,7 @@ export function writeKit(work: string): string {
   const film = join(work, "film");
   const kit = join(film, "kit");
   mkdirSync(join(kit, "fonts"), { recursive: true });
-  for (const f of ["player.js", "base.css"]) copyFileSync(join(KIT, f), join(kit, f));
+  for (const f of ["player.js", "base.css", "styles.css"]) copyFileSync(join(KIT, f), join(kit, f));
   const gsap = require.resolve("gsap/dist/gsap.min.js");
   copyFileSync(gsap, join(kit, basename(gsap)));
   writeFileSync(join(kit, "fonts.css"), FONT_CSS.map((f) => fontCss(f, kit)).join("\n"));

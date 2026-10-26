@@ -24,6 +24,7 @@ More videos, including one with sound effects, are in [Examples](https://github.
 ![How motion-render works](docs/how-it-works.en.svg)
 
 - Look, length, voice and the mood of the music are chosen from the theme (anything you specify wins)
+- An HTML film is drawn in the look that fits the theme: flat and dark, pencil on paper, coloured pencil, blueprint, paper collage or whiteboard
 - With an ElevenLabs API key, sound effects follow the animation too: a card appearing, a step of a flow lighting up
 - You can also pass the URL of an existing Motion film to get an MP4 with narration and BGM
 - The rendering browser (Chromium) and ffmpeg are set up automatically, so results don't depend on what is installed on your machine
@@ -32,13 +33,13 @@ More videos, including one with sound effects, are in [Examples](https://github.
 
 Narration, BGM, sound effects and the MP4 are the same either way. Only the animation is made differently, and Claude picks the way by itself: Motion if your account offers it, HTML otherwise.
 
-|                        | Claude Motion                                                  | HTML                                                                                                                            |
-| ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Plans                  | Team and Enterprise (beta)                                     | All plans, including Free, Pro and Max                                                                                          |
-| How it is made         | Claude builds the film in Motion, and motion-render fetches it | Claude writes one HTML page on a kit that comes with motion-render: an animation player (GSAP), base styles and a Japanese font |
-| Checking before render | Claude looks at still frames                                   | An automatic layout check (overlaps, things sticking out or hidden, text that is too small or too faint), then still frames     |
-| What you can look at   | The Motion film on claude.ai, and the MP4                      | Still frames and the MP4 on your machine (there is no link to share before the MP4)                                             |
-| Extra setup            | None                                                           | None: the kit is installed with motion-render                                                                                   |
+|                        | Claude Motion                                                  | HTML                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Plans                  | Team and Enterprise (beta)                                     | All plans, including Free, Pro and Max                                                                                      |
+| How it is made         | Claude builds the film in Motion, and motion-render fetches it | Claude writes one HTML page on a kit that comes with motion-render: an animation player (GSAP), styles and Japanese fonts   |
+| Checking before render | Claude looks at still frames                                   | An automatic layout check (overlaps, things sticking out or hidden, text that is too small or too faint), then still frames |
+| What you can look at   | The Motion film on claude.ai, and the MP4                      | Still frames and the MP4 on your machine (there is no link to share before the MP4)                                         |
+| Extra setup            | None                                                           | None: the kit is installed with motion-render                                                                               |
 
 ## Requirements
 
@@ -145,7 +146,7 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | `motion-render bgm <work>`                       | Generates the BGM from the `bgm` prompt in `script.json`                                                                                                             |
 | `motion-render sfx <work>`                       | Generates the sound effects in `script.json` and a `preview.m4a` of them in order                                                                                    |
 | `motion-render prepare <storeDir> <work>/film`   | Motion: expands a Motion film's data into a directory it can render                                                                                                  |
-| `motion-render kit <work>`                       | HTML: sets up `<work>/film` with the player, base styles, GSAP, the Japanese font and the scene times. Claude then writes `film/index.html`                          |
+| `motion-render kit <work>`                       | HTML: sets up `<work>/film` with the player, styles, GSAP, the Japanese fonts and the scene times. Claude then writes `film/index.html`                              |
 | `motion-render check <work>/film`                | HTML: checks the layout every 0.1 s for overlaps, things sticking out of their box or the frame, things hidden under others, and text that is too small or too faint |
 | `motion-render stills <filmDir> <outDir> 0,5,12` | Writes still frames for checking (an HTML film is checked first)                                                                                                     |
 | `motion-render build <work> [out.mp4]`           | Mixes narration, BGM and sound effects and renders the MP4. Stops if any is missing, or if an HTML film fails the layout check                                       |
@@ -174,8 +175,8 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | Chromium fails to download on first run                                        | Point `CHROMIUM_PATH` at your own Chrome or Chromium                                                                                                                                                                                                                              |
 | `Unknown file extension ".ts"` when running `motion-render`                    | Node is older than 22.18. Update Node                                                                                                                                                                                                                                             |
 | `stills` or `build` stops with lines like `1.1-1.9s: #a and #b partly overlap` | The layout check found a problem in an HTML film. Claude fixes `film/index.html` and checks again. If you edit it yourself, run `motion-render check <work>/film` until it prints `layout ok`; [html-film.md](skills/motion-render/references/html-film.md) explains each message |
-| `font "Noto Sans JP" … did not load. Run "motion-render kit" again.`           | The font files of an HTML film are missing. Run `motion-render kit <work>` again (it keeps `index.html`)                                                                                                                                                                          |
-| Japanese glyphs or line breaks differ slightly from the Motion page            | A Motion film is drawn with your OS fonts. An HTML film always uses the bundled Noto Sans JP                                                                                                                                                                                      |
+| `font … "Noto Sans JP" did not load. Run "motion-render kit" again.`           | The font files of an HTML film are missing. Run `motion-render kit <work>` again (it keeps `index.html`)                                                                                                                                                                          |
+| Japanese glyphs or line breaks differ slightly from the Motion page            | A Motion film is drawn with your OS fonts. An HTML film uses the bundled Noto Sans JP (and Klee One in the hand-drawn looks)                                                                                                                                                      |
 
 ## Update
 
@@ -233,9 +234,9 @@ package-lock.json
 tsconfig.json             # TypeScript settings (type check only; Node runs the .ts files directly)
 skills/motion-render/     # The skill (read by both the skills CLI and the plugin)
   SKILL.md                # Instructions for Claude (setup, storyboard, script and BGM choices)
-  package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp)
+  package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one)
   references/html-film.md # How Claude writes an HTML film: layout, motion, and reading the layout check
-  kit/                    # The player and base styles that `kit` copies into an HTML film
+  kit/                    # The player, base styles and drawing styles that `kit` copies into an HTML film
   scripts/cli.ts          # The motion-render command
   scripts/audio.ts        # Narration and BGM generation, audio mixing
   scripts/sfx.ts          # Sound effect generation (ElevenLabs), leveling and the listening file

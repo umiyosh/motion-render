@@ -230,7 +230,7 @@ URL を渡された場合も音を付ける。映像データを取得し（手�
 - `scripts/sfx.ts`: ElevenLabs による効果音の生成（`sfx`）、音量の測定とそろえ方、試聴用ファイル
 - `scripts/work.ts`: `script.json` の検証、`timing.json` の計算、ナレーションを動画の場面の開始時刻に置く処理
 - `scripts/render.ts`: プレーヤーを開いてコマを返す。描画中は外部への通信を遮断し、Chromium の sandbox を有効にする
-- `scripts/kit.ts`・`kit/`: html の映像のプレーヤー（`player.js`）と土台の CSS（`base.css`）を、フォントと GSAP と一緒に置く（`kit`）
+- `scripts/kit.ts`・`kit/`: html の映像のプレーヤー（`player.js`）と土台の CSS（`base.css`）、作風の CSS（`styles.css`）を、フォントと GSAP と一緒に置く（`kit`）
 - `scripts/layout.ts`・`scripts/snapshot.js`: html の映像の配置の確認（`check`。`stills`・`build` も実行する）
 - `references/html-film.md`: html の映像の書き方と配置の決まり
 - `scripts/json.ts`: ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
