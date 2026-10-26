@@ -10,9 +10,6 @@
 
 この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、アニメーションを作って手元の MP4 に書き出します。アニメーションは、[Claude **Motion**](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) が使えるアカウントなら Motion で、使えなければ HTML で作ります。
 
-> [!NOTE]
-> motion-render は Claude Code が動くところならどこでも使えます: Pro・Max・Team・Enterprise の各プランと、API キー（Console、Amazon Bedrock、Google Cloud、Microsoft Foundry）。無料プランには Claude Code が含まれないため使えません。Claude Motion はベータ版で、Team プランと Enterprise プランでのみ使えます（2026 年 10 月時点）。それ以外では、Claude がアニメーションを HTML で書きます。詳しくは「[アニメーションの 2 つの作り方](#アニメーションの-2-つの作り方)」を見てください。
-
 ## デモ動画
 
 motion-render 自身が作った紹介動画です（59 秒、音声あり）。
@@ -43,12 +40,12 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ## 必要なもの
 
-| もの                | 備考                                                                                                                                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code         | Pro・Max・Team・Enterprise のプランか API キー（無料プランは不可）。Team・Enterprise で [Claude Motion](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) が使えるときは Motion で作ります |
-| Node.js 22.18 以上  | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                                                                                                                                                        |
-| Gemini API キー     | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）                                                                                                                                            |
-| ElevenLabs API キー | 任意。効果音に使います。月額プランなしの従量課金で作れます（[作成の手順](docs/elevenlabs-key.ja.md)）                                                                                                                                       |
+| もの                | 備考                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------- |
+| Claude Code         | Pro・Max・Team・Enterprise のプランか API キー（無料プランは不可）                                    |
+| Node.js 22.18 以上  | `node -v` で確認。コマンドの TypeScript を Node がそのまま実行します                                  |
+| Gemini API キー     | ナレーションと BGM に使います。Google AI Studio で発行します（[発行の手順](docs/api-key.ja.md)）      |
+| ElevenLabs API キー | 任意。効果音に使います。月額プランなしの従量課金で作れます（[作成の手順](docs/elevenlabs-key.ja.md)） |
 
 macOS・Linux・Windows で動きます。
 
