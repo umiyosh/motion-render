@@ -1,6 +1,6 @@
 {
   "name": "motion-render",
-  "description": "motion-render: explainer videos with narration, BGM and sound effects from a theme, via Claude Motion",
+  "description": "motion-render: explainer videos with narration, BGM and sound effects from a theme, made with Claude Motion or as HTML",
   "owner": {
     "name": "umiyosh"
   },
@@ -8,7 +8,7 @@
     {
       "name": "motion-render",
       "source": "./",
-      "description": "Make an animated explainer video from a theme with Claude Motion, add narration, BGM and sound effects, and render it to MP4."
+      "description": "Make an animated explainer video from a theme with Claude Motion (or as an HTML page when Motion is not available), add narration, BGM and sound effects, and render it to MP4."
     }
   ]
 }
