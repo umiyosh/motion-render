@@ -254,3 +254,7 @@ scripts/quality-gate*.mjs # Compares the current findings with the baseline
 tests/                    # Vitest unit tests and render smoke tests (fixture store, a stub player, HTML films)
 vitest.config.ts          # Test settings and the 80% coverage gate
 ```
+
+## License
+
+[MIT](LICENSE)
