@@ -253,3 +253,7 @@ scripts/quality-gate*.mjs # 今の指摘をベースラインと比べる
 tests/                    # Vitest のユニットテストと描画のスモークテスト（フィクスチャの store、代役のプレーヤー、HTML の映像）
 vitest.config.ts          # テストの設定とカバレッジ 80% の基準
 ```
+
+## ライセンス
+
+[MIT](LICENSE)
