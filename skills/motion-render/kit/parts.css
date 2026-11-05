@@ -50,10 +50,11 @@
   font-size: 34px;
   font-weight: 700;
 }
+/* The body darkens to --ink as the card lights, so it keeps its contrast on the lit fill. */
 .card-body {
   font-size: 28px;
   line-height: 1.5;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--ink) calc(var(--on) * 100%), var(--muted));
 }
 
 /* Lanes on one time axis: names on the left, tracks on the right. --from and --to (seconds or any
@@ -126,11 +127,14 @@
 .tick {
   position: absolute;
   top: 0;
+  /* Centered on its value by a negative margin, not a transform: film.spot measures layout boxes,
+     so a transform would put a chip sent to a tick half a tick off. */
+  width: var(--tick-w, 120px);
+  margin-left: calc(var(--tick-w, 120px) / -2);
   left: calc(
     var(--ruler-pad) + (var(--at) - var(--from)) / (var(--to) - var(--from)) *
       (100% - 2 * var(--ruler-pad))
   );
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;

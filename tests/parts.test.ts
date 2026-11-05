@@ -48,13 +48,16 @@ const PARTS_PAGE = `<!doctype html>
       <div class="track"><i class="pin" id="pin" style="--at: 7"></i></div>
     </div>
     <div id="ruler" class="ruler layer-line"></div>
+    <div id="mark" class="layer-chip" style="position: absolute; left: 300px; top: 820px; font-size: 24px; padding: 4px 10px">印</div>
   </section>
 </div>
 <script>
   film.build(function (tl) {
     film.light(tl, "#s2", film.at("steps", 0.5), { off: film.at("steps", 1.2) });
+    film.light(tl, "#note", film.at("steps", 0.5));
     film.caption(tl, "#cap1", "steps", film.at("steps", 0.3));
     film.ticks("#ruler", { step: 2, label: "{v} 秒" });
+    tl.to("#mark", { ...film.spot("#mark", "#ruler .tick:nth-child(3)", 0, -90), duration: 0.3 }, film.at("lanes", 0.2));
   });
 </script>
 </body></html>`;
@@ -68,7 +71,7 @@ function partsFilm(html = PARTS_PAGE): string {
 }
 
 describe("kit parts", () => {
-  it("lay out without layout issues, and place segments, pins and ticks on their axis", async () => {
+  it("lay out without layout issues, a lit card's body included, and place segments, pins and ticks on their axis", async () => {
     const film = await openFilm(partsFilm());
     try {
       expect((await checkLayout(film))?.map(formatIssue)).toEqual([]);
@@ -86,6 +89,13 @@ describe("kit parts", () => {
       const labels = boxes.filter((b) => b.label.startsWith("i.tick")).map((b) => b.label);
       expect(labels).toHaveLength(6);
       expect(labels[5]).toContain("10 秒");
+      // The 4 s tick sits at 4 tenths of the line, which runs 60px in from each end, and a chip
+      // sent there with film.spot lands right above it.
+      const tick = boxes.find((b) => b.label.startsWith('i.tick "4 秒"'));
+      const mark = box("#mark");
+      if (!tick || !mark) throw new Error("tick or mark not found");
+      expect(tick.x + tick.w / 2).toBeCloseTo(400 + 60 + 0.4 * 880, 0);
+      expect(mark.x + mark.w / 2).toBeCloseTo(tick.x + tick.w / 2, 0);
       expect(await film.warnings()).toEqual([]);
     } finally {
       await film.close();
