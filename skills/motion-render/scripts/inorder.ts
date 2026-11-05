@@ -21,3 +21,26 @@ export async function* inOrder<T>(
     yield await p;
   }
 }
+
+// Runs fn on each item with up to `n` running at once, for API calls whose results are saved one by
+// one. After a failure no new item starts; the ones running finish, and the first error is thrown.
+export async function inParallel<T>(
+  items: readonly T[],
+  n: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  const errors: unknown[] = [];
+  const worker = async (): Promise<void> => {
+    while (!errors.length && next < items.length) {
+      const i = next++;
+      try {
+        await fn(items[i]);
+      } catch (e) {
+        errors.push(e);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, items.length)) }, worker));
+  if (errors.length) throw errors[0];
+}

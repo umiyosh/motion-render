@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { errorMessage, field, readJson } from "./json.ts";
 import {
+  Busy,
+  busyWait,
   runFfmpeg,
   sfxChain,
   TIMEOUT_MS,
@@ -11,6 +13,7 @@ import {
   withRetries,
   type SfxTrack,
 } from "./audio.ts";
+import { inParallel } from "./inorder.ts";
 import type { Script, SfxCue } from "./work.ts";
 
 const API = "https://api.elevenlabs.io/v1/sound-generation?output_format=mp3_44100_128"; // the best format pay-as-you-go allows
@@ -23,6 +26,9 @@ const UNDER_NARRATION_DB = 4;
 const PEAK_DB = -1;
 const NARRATION_DB = -16; // Gemini TTS's usual average level, for when there is no narration yet
 const PREVIEW_GAP = 0.6;
+// Effects made at once. ElevenLabs allows 2 to 10 requests at a time depending on the plan and
+// answers 429 past that, which makes a call wait (Busy).
+const SFX_AT_ONCE = 3;
 
 interface Level {
   mean: number;
@@ -65,7 +71,11 @@ async function soundEffect(key: string, prompt: string, duration: number): Promi
     } catch {
       body = text; // not JSON: the status alone has to do
     }
-    throw new Error(`HTTP ${res.status} ${apiReason(body)}`.trim());
+    const msg = `HTTP ${res.status} ${apiReason(body)}`.trim();
+    // Also sent when more requests run at once than the plan allows.
+    if (res.status === 429)
+      throw new Busy(msg, busyWait(body, res.headers.get("retry-after"), 2_000));
+    throw new Error(msg);
   }
   return Buffer.from(await res.arrayBuffer());
 }
@@ -84,14 +94,15 @@ export async function makeSfx(work: string, script: Script): Promise<number> {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new Error("ELEVENLABS_API_KEY is not set (needed for sound effects)");
   mkdirSync(join(work, "audio", "sfx"), { recursive: true });
-  for (const { prompt, duration } of todo.values()) {
+  await inParallel([...todo.values()], SFX_AT_ONCE, async ({ prompt, duration }) => {
     console.error(`sound effect: ${prompt}`);
     const mp3 = sfxFile(work, prompt, duration, "mp3");
     const level = await withRetries(`sound effect "${prompt}"`, async (): Promise<Level> => {
       try {
         writeFileSync(mp3, await soundEffect(key, prompt, duration));
       } catch (e) {
-        throw new Error(`sound effect "${prompt}": ${errorMessage(e)}`);
+        const msg = `sound effect "${prompt}": ${errorMessage(e)}`;
+        throw e instanceof Busy ? new Busy(msg, e.wait) : new Error(msg);
       }
       const l = await volumeStats(mp3);
       if (l.max < SILENT_DB)
@@ -102,7 +113,7 @@ export async function makeSfx(work: string, script: Script): Promise<number> {
       sfxFile(work, prompt, duration, "json"),
       JSON.stringify({ prompt, duration, ...level }, null, 2)
     );
-  }
+  });
   return todo.size;
 }
 

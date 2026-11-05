@@ -64,6 +64,31 @@ const sfxPath = (dir: string, prompt: string, duration: number, ext: string) =>
   join(dir, "audio", "sfx", `${sfxKey(prompt, duration)}.${ext}`);
 
 describe("makeSfx", () => {
+  it("makes up to three effects at once and waits out a 429 for its Retry-After", async () => {
+    const fx = Array.from({ length: 6 }, (_, i) => ({ at: i, prompt: `sound ${i}`, duration: 1 }));
+    const dir = workDir({ ...SCRIPT, scenes: [{ ...SCRIPT.scenes[0], sfx: fx }] });
+    let running = 0,
+      most = 0,
+      calls = 0;
+    fetchMock.mockImplementation(async () => {
+      if (++calls === 1)
+        return new Response(
+          JSON.stringify({ detail: { message: "too many concurrent requests" } }),
+          {
+            status: 429,
+            headers: { "retry-after": "0.01" },
+          }
+        );
+      most = Math.max(most, ++running);
+      await new Promise((ok) => setTimeout(ok, 10));
+      running--;
+      return new Response(Buffer.from("mp3"), { status: 200 });
+    });
+    expect(await makeSfx(dir, loadScript(dir))).toBe(6);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(most).toBe(3);
+  });
+
   it("asks ElevenLabs once per distinct effect and stores the MP3 with its measured level", async () => {
     const dir = workDir(SFX_SCRIPT);
     expect(await makeSfx(dir, loadScript(dir))).toBe(2);

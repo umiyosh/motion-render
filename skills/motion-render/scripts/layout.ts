@@ -231,16 +231,22 @@ export function parseBoxes(raw: unknown): LayoutBox[] {
 
 // Samples the whole film every `step` seconds, on all of the film's pages at once, and judges the
 // samples in film order. A finding needs two samples in a row, so at 0.1 s a pose held for 0.2 s is
-// reported. Motion films draw inside their own player and cannot be inspected, so they get null.
+// reported. A film opened with only some scene files is sampled over those scenes only. Motion films
+// draw inside their own player and cannot be inspected, so they get null.
 export async function checkLayout(film: Film, step = 0.1): Promise<LayoutIssue[] | null> {
   const inspect = film.inspect;
   if (!inspect) return null;
-  const count = Math.ceil(film.meta.duration / step - 1e-9);
+  const only = film.only;
+  const spans = only ? film.meta.parts.filter((p) => only.includes(p.key)) : null;
+  const times = Array.from(
+    { length: Math.ceil(film.meta.duration / step - 1e-9) },
+    (_, i) => Math.round(i * step * 1000) / 1000
+  ).filter((t) => !spans || spans.some((p) => t >= p.a0 && t < p.a0 + p.dur));
   const sample = (i: number): Promise<LayoutSample> => {
-    const t = Math.round(i * step * 1000) / 1000;
+    const t = times[i] ?? 0;
     return inspect(t).then((boxes) => ({ t, boxes }));
   };
   const samples: LayoutSample[] = [];
-  for await (const s of inOrder(count, film.pages, sample)) samples.push(s);
+  for await (const s of inOrder(times.length, film.pages, sample)) samples.push(s);
   return findLayoutIssues(samples);
 }

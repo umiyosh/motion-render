@@ -181,6 +181,50 @@
         at
       );
     },
+    // Lights a .step or .card of kit/parts.css at `at` (its --on goes to 1), and puts it out again
+    // at o.off when given. o: { dur = 0.35, off }.
+    light: function (tl, what, at, o) {
+      o = o || {};
+      var dur = o.dur || 0.35;
+      tl.to(what, { "--on": 1, duration: dur, ease: "power2.out" }, at);
+      if (o.off !== undefined) tl.to(what, { "--on": 0, duration: dur, ease: "power2.in" }, o.off);
+      return tl;
+    },
+    // Fills a .ruler of kit/parts.css with a tick every o.step from its --from to its --to, each
+    // labeled with o.label ("{v} 秒"; "" for no labels). Call it inside film.build.
+    ticks: function (what, o) {
+      var e = el(what),
+        css = getComputedStyle(e),
+        from = Number(css.getPropertyValue("--from")),
+        to = Number(css.getPropertyValue("--to")),
+        step = o && o.step,
+        label = o && o.label !== undefined ? o.label : "{v}";
+      if (!(step > 0) || !(to > from)) throw new Error("film.ticks needs --from < --to and a step");
+      for (var i = 0; from + i * step <= to + 1e-9; i++) {
+        var v = Math.round((from + i * step) * 1000) / 1000,
+          t = document.createElement("i");
+        t.className = "tick";
+        t.style.setProperty("--at", String(v));
+        if (label) t.textContent = label.replace("{v}", String(v));
+        e.appendChild(t);
+      }
+      return e;
+    },
+    // Shows a caption from `at` and takes it away so it is gone 0.25 s before scene `id` ends, as
+    // references/html-film.md asks.
+    caption: function (tl, what, id, at) {
+      tl.fromTo(
+        what,
+        { autoAlpha: 0, y: 16 },
+        { autoAlpha: 1, y: 0, duration: 0.4, ease: "expo.out" },
+        at
+      );
+      return tl.to(
+        what,
+        { autoAlpha: 0, duration: 0.2, ease: "power3.in" },
+        window.film.end(id, 0.45)
+      );
+    },
     // Raises the text of `what` one character at a time from below a mask line, starting `at`.
     // The text is split into spans the first time, so call it on an element that holds only text.
     // o: { dur = 0.5, stagger = 0.04 }.

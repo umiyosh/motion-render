@@ -1,4 +1,4 @@
-// Sets up <work>/film for an html film: the player, the stylesheets, GSAP, the Japanese fonts
+// Sets up <work>/film for an html film: the player, the stylesheets (and the parts of parts.css), GSAP, the Japanese fonts
 // and the scene times. Claude writes <work>/film/index.html against these files.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -45,7 +45,8 @@ export function writeKit(work: string): string {
   const film = join(work, "film");
   const kit = join(film, "kit");
   mkdirSync(join(kit, "fonts"), { recursive: true });
-  for (const f of ["player.js", "base.css", "styles.css"]) copyFileSync(join(KIT, f), join(kit, f));
+  for (const f of ["player.js", "base.css", "styles.css", "parts.css"])
+    copyFileSync(join(KIT, f), join(kit, f));
   const gsap = require.resolve("gsap/dist/gsap.min.js");
   copyFileSync(gsap, join(kit, basename(gsap)));
   writeFileSync(join(kit, "fonts.css"), FONT_CSS.map((f) => fontCss(f, kit)).join("\n"));

@@ -5,6 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { errorMessage, field, readJson } from "./json.ts";
 import { limit } from "./limit.ts";
+import { inParallel } from "./inorder.ts";
 import type { Script } from "./work.ts";
 
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -120,15 +121,49 @@ export async function volumeStats(
   return { mean, max };
 }
 
+// A provider's "too many requests" (HTTP 429). Calls run several at once, so a rate limit is a normal
+// answer: the call waits `wait` ms and tries again without using up one of its attempts.
+export class Busy extends Error {
+  wait: number;
+  constructor(message: string, wait: number) {
+    super(message);
+    this.wait = wait;
+  }
+}
+// Most a call waits on rate limits, in time and in tries, before a 429 counts as a failed attempt.
+const BUSY_TOTAL_MS = 180_000;
+const BUSY_TRIES = 10;
+
+// The wait an HTTP 429 asks for: Gemini's RetryInfo ("retryDelay": "23s") or a Retry-After header
+// in seconds, else `fallback` ms. Never more than a minute at a time.
+export function busyWait(body: unknown, retryAfter: string | null, fallback: number): number {
+  const details = field(field(body, "error"), "details");
+  const delay = Array.isArray(details)
+    ? details.map((d: unknown) => field(d, "retryDelay")).find((d) => typeof d === "string")
+    : undefined;
+  const s = typeof delay === "string" ? parseFloat(delay) : Number(retryAfter ?? NaN);
+  return Math.min(60_000, Number.isFinite(s) && s >= 0 ? s * 1000 : fallback);
+}
+
 // Runs `attempt` up to RETRIES times, logging each failure under `label`, and rethrows the last error.
 export async function withRetries<T>(label: string, attempt: () => Promise<T>): Promise<T> {
   let last: unknown;
-  for (let i = 1; i <= RETRIES; i++) {
+  let waited = 0,
+    waits = 0;
+  for (let i = 1; i <= RETRIES;) {
     try {
       return await attempt();
     } catch (e) {
       last = e;
+      if (e instanceof Busy && waits < BUSY_TRIES && waited + e.wait <= BUSY_TOTAL_MS) {
+        console.error(`motion-render: ${label} is rate-limited, trying again in ${e.wait / 1000}s`);
+        waited += e.wait;
+        waits++;
+        await new Promise((ok) => setTimeout(ok, e.wait));
+        continue;
+      }
       console.error(`motion-render: ${label} attempt ${i}/${RETRIES} failed: ${errorMessage(e)}`);
+      i++;
     }
   }
   throw last;
@@ -163,9 +198,10 @@ async function generateAudio(model: string, body: object): Promise<Audio> {
     const json: unknown = await res.json();
     if (!res.ok) {
       const detail = field(field(json, "error"), "message");
-      throw new Error(
-        `${model}: HTTP ${res.status} ${typeof detail === "string" ? detail : ""}`.trim()
-      );
+      const msg = `${model}: HTTP ${res.status} ${typeof detail === "string" ? detail : ""}`.trim();
+      if (res.status === 429)
+        throw new Busy(msg, busyWait(json, res.headers.get("retry-after"), 5_000));
+      throw new Error(msg);
     }
     const part = audioPart(json);
     if (!part) throw new Error(`${model}: no audio in the response`);
@@ -214,14 +250,21 @@ export function wavSeconds(file: string): number {
   return size / (rate * align);
 }
 
+// Scenes narrated at once. One by one, 14 scenes took 74 s; a rate limit makes a call wait (Busy).
+const TTS_AT_ONCE = 4;
+
 // Writes audio/<scene id>.wav for each scene. A scene is regenerated only when its narration text changed.
 export async function narrate(work: string, script: Script): Promise<void> {
   const dir = join(work, "audio");
   mkdirSync(dir, { recursive: true });
-  for (const s of script.scenes) {
+  const todo = script.scenes.filter((s) => {
     const wav = join(dir, `${s.id}.wav`),
       txt = join(dir, `${s.id}.txt`);
-    if (existsSync(wav) && existsSync(txt) && readFileSync(txt, "utf8") === s.narration) continue;
+    return !(existsSync(wav) && existsSync(txt) && readFileSync(txt, "utf8") === s.narration);
+  });
+  await inParallel(todo, TTS_AT_ONCE, async (s) => {
+    const wav = join(dir, `${s.id}.wav`),
+      txt = join(dir, `${s.id}.txt`);
     console.error(`narration: ${s.id}`);
     const audio = await generateAudio(script.ttsModel, {
       contents: [{ parts: [{ text: s.narration }] }],
@@ -232,7 +275,7 @@ export async function narrate(work: string, script: Script): Promise<void> {
     });
     writeFileSync(wav, toWav(audio));
     writeFileSync(txt, s.narration);
-  }
+  });
 }
 
 // Writes audio/bgm.<ext> from the script's BGM prompt, asking for a little more than the film's length.

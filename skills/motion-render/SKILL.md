@@ -62,8 +62,11 @@ Motion の Artifact 型は作成時に Style・Colors・Length を質問する�
 <work>/
   script.json   # 原稿（Claude が書く）
   timing.json   # 場面の秒数（narrate が書く）
+  plan.md       # html の映像の絵コンテと秒の計画（Claude が書く。場面を手分けして書くときの共通の指示書）
+  steps.jsonl   # 各コマンドの開始と終了（コマンドが書く。motion-render times で表にする）
   audio/        # <場面id>.wav、bgm.mp3、mix.m4a、sfx/（効果音と試聴用の preview.m4a）
-  film/         # 映像。Motion から取得したもの（prepare が展開する）か、html の映像（kit が用意し、Claude が index.html を書く）
+  film/         # 映像。Motion から取得したもの（prepare が展開する）か、html の映像（kit が用意し、
+                # Claude が index.html と scenes/*.html を書く）
 ```
 
 `script.json` の形:
@@ -130,26 +133,40 @@ motion-render narrate <work>
 
 #### 3B. html の映像を作る
 
-1. `motion-render kit <work>` で `<work>/film/` にプレーヤー・フォント・GSAP・場面の秒数を置く
-2. [references/html-film.md](references/html-film.md) を読み、その決まりに従って `<work>/film/index.html` を書く。
-   先に「作る前に決めること」を依頼文とテーマから決め、ページの先頭に書く。
-   場面は `<section class="scene" id="<場面id>">`、動きは `film.build` の中で `film.at(場面id, 秒)` に置く
-3. 並行して BGM を作ってよい: `motion-render bgm <work>`
-4. 効果音を付けるときは、`script.json` の `sfx` の `at` に、その動きに渡した `film.at` の秒を書き、
-   `motion-render sfx <work>` で作る。タイトルの場面に `🎧:11.ai` を小さく入れる
+待ち時間を作らない順に進める。API を待つ工程（BGM・効果音）は Bash の `run_in_background` で裏に回し、
+その間に Claude は書き続ける。場面は手分けして同時に書く（工程のつながりは [references/pipeline.md](references/pipeline.md)）。
+
+1. `motion-render kit <work>` で `<work>/film/` にプレーヤー・部品・フォント・GSAP・場面の秒数を置き、
+   `motion-render bgm <work>` を裏で始める
+2. [references/html-film.md](references/html-film.md) を読み、`<work>/plan.md`（絵コンテと秒の計画）を書く。
+   場面ごとに、見せるもの、使う部品、動きとその秒（`film.at` に渡す秒）、効果音、場面をまたいで残る物の
+   入るときと出るときの状態を書く（書き方は html-film.md の「絵コンテと秒の計画」）
+3. 効果音を付けるときは、plan.md の効果音を `script.json` の `sfx` に写し、`motion-render sfx <work>` を裏で始める。
+   効果音は `prompt` と `duration` だけで作られるので、あとで `at` を直しても作り直しにはならない
+4. `<work>/film/index.html` に、全場面で共通の部分を書く: 「作る前に決めること」、配色、共通のスタイル、
+   場面をまたいで残る物（`#stage`）とその動き、場面を差し込む `<!-- scenes -->` の行
+5. 場面を書く。場面が 5 つ以上で Agent ツールがあれば、続いた場面を 2 つずつ（最大 7）のまとまりに分け、
+   まとまりごとにサブエージェントを 1 つ、1 つのメッセージでまとめて起動する（頼み方は html-film.md の
+   「場面を分けて書く」）。各サブエージェントは `film/scenes/<番号>-<名前>.html` を書き、
+   `motion-render check <work>/film <そのファイル名>` を `layout ok` まで直して返す。
+   場面が 4 つ以下か Agent ツールが無いときは、Claude が同じ形で場面のファイルを書く
+6. 全員が返ったら `motion-render check <work>/film` で全体を調べ、まとまりの境目の問題を直す。
+   書いた動きの秒が plan.md と違えば、`script.json` の `sfx` の `at` をその秒に直す。
+   効果音を付けるときは、タイトルの場面に `🎧:11.ai` を小さく入れる
 
 ### 4. 映像を確認する
 
-html の映像（3B）は手順 4 の 1〜3 を飛ばし、先に `motion-render check <work>/film` を `layout: ok` になるまで直す
-（出力の読み方は references/html-film.md の「確認」）。そのあと 4・5 で静止画を見る。
+html の映像（3B）は手順 4 の 1〜3 を飛ばし、3B の 6 で `layout: ok` になってから 4・5 で静止画を見る
+（`check` の出力の読み方は references/html-film.md の「確認」）。直すのは、その場面がある `film/scenes/` のファイル。
 
 1. `Artifact` の `read` で `paths: ["index.html", "artifact-type/app.js", "artifact-type/app.css"]`、`out_dir: <work>/film`
 2. `ArtifactData` の `list`（`collection: "modules"`）と `get`（`film`/`script`）を `out_dir: <work>/store` で保存
 3. `motion-render prepare <work>/store <work>/film`
 4. `motion-render stills <work>/film <work>/stills <各場面の中ほどの秒をカンマ区切り>` で全場面を見る。
    見出しの不自然な改行、はみ出し、重なりがあれば Motion 側（html の映像なら index.html）を直し、手順 4 をやり直す
-5. 効果音があれば、各効果音の秒（場面の開始 + `at`）の静止画も書き出し、鳴らす対象がその時点で画面に出ているかを見る。
-   ずれていれば `at` を直して `motion-render sfx` をやり直す（作り直されるのは変えたものだけ）
+5. 効果音があれば、4 の静止画と同じ `stills` の 1 回で、各効果音の秒（場面の開始 + `at`）も書き出し、
+   鳴らす対象がその時点で画面に出ているかを見る。ずれていれば `at` を直す（`at` だけなら作り直しは要らない）。
+   `prompt` か `duration` を変えたときだけ `motion-render sfx` をやり直す（作り直されるのは変えたものだけ）
 
 ### 5. MP4 にする
 
@@ -164,7 +181,8 @@ motion-render build <work> [<出力.mp4>]
 ### 6. 確認して報告する
 
 - `ffprobe` で、長さと映像・音声の両トラックがあることを見る
-- 報告: 出力のパス、長さ、場面の流れ、BGM の雰囲気、Motion の URL（html の映像なら `<work>/film/index.html` のパス）。耳で聞いていないことは聞いていないと書く
+- 報告: 出力のパス、長さ、場面の流れ、BGM の雰囲気、Motion の URL（html の映像なら `<work>/film/index.html` のパス）、
+  かかった時間（`motion-render times <work>` の最後の行）。耳で聞いていないことは聞いていないと書く
 - 効果音を付けたときは、試聴用の `audio/sfx/preview.m4a` のパスと、その中の順番（`motion-render sfx` の出力）も報告し、
   合わない音があれば教えてほしいと頼む。Claude には音の良し悪しが判定できないため、ここは人が聞いて決める
 
@@ -230,8 +248,11 @@ URL を渡された場合も音を付ける。映像データを取得し（手�
 - `scripts/sfx.ts`: ElevenLabs による効果音の生成（`sfx`）、音量の測定とそろえ方、試聴用ファイル
 - `scripts/work.ts`: `script.json` の検証、`timing.json` の計算、ナレーションを動画の場面の開始時刻に置く処理
 - `scripts/render.ts`: プレーヤーを開いてコマを返す。描画中は外部への通信を遮断し、Chromium の sandbox を有効にする
-- `scripts/kit.ts`・`kit/`: html の映像のプレーヤー（`player.js`）と土台の CSS（`base.css`）、作風の CSS（`styles.css`）を、フォントと GSAP と一緒に置く（`kit`）
+- `scripts/kit.ts`・`kit/`: html の映像のプレーヤー（`player.js`）と土台の CSS（`base.css`）、作風の CSS（`styles.css`）、部品の CSS（`parts.css`）を、フォントと GSAP と一緒に置く（`kit`）
+- `scripts/scenes.ts`: `film/scenes/*.html` を index.html の `<!-- scenes -->` に差し込んで、描画するページにする
 - `scripts/layout.ts`・`scripts/snapshot.js`: html の映像の配置の確認（`check`。`stills`・`build` も実行する）
-- `references/html-film.md`: html の映像の書き方と配置の決まり
+- `scripts/steps.ts`: 各コマンドの開始と終了を `<work>/steps.jsonl` に残し、工程ごとの時間の表にする（`times`）
+- `references/html-film.md`: html の映像の書き方と配置の決まり、部品、場面を分けて書くときの決まり
+- `references/pipeline.md`: 工程のつながり（何を待ち、何を裏で動かすか）と、工程を足すときの決まり
 - `scripts/json.ts`: ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
 - `scripts/store.ts`: Motion の store（ArtifactData の保存先）を映像データのフォルダに展開する（`prepare`）
