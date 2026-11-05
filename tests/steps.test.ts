@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   readSteps,
+  span,
   stepRows,
   stepsTable,
   timed,
@@ -99,5 +100,13 @@ describe("the times command", () => {
     expect(table).toMatch(/\| kit \| \d+\.\d s \|/);
     expect(table).toMatch(/^total .*: Claude .*, waiting on commands /m);
     expect(stepsTable(tempDir())).toMatch(/^no steps logged/);
+  });
+});
+
+describe("span", () => {
+  it("rounds to the whole second before splitting into minutes", () => {
+    expect(span(42.25)).toBe("42.3 s");
+    expect(span(179.6)).toBe("3 min 0 s");
+    expect(span(331.4)).toBe("5 min 31 s");
   });
 });

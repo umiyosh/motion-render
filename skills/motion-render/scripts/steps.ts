@@ -109,8 +109,12 @@ export function stepRows(steps: Step[], runStart: number): Row[] {
 
 const clock = (sec: number): string =>
   `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
-const span = (sec: number): string =>
-  sec < 60 ? `${sec.toFixed(1)} s` : `${Math.floor(sec / 60)} min ${Math.round(sec % 60)} s`;
+// Rounded to the whole second first, so 179.6 s reads "3 min 0 s", not "2 min 60 s".
+export function span(sec: number): string {
+  if (sec < 60) return `${sec.toFixed(1)} s`;
+  const s = Math.round(sec);
+  return `${Math.floor(s / 60)} min ${s % 60} s`;
+}
 
 // A Markdown table of the run, with the totals of Claude's time and of the commands it waited for.
 export function stepsTable(work: string): string {

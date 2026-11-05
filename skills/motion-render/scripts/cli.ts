@@ -95,6 +95,9 @@ async function check(filmDir: string, scenes: string[]): Promise<void> {
   let n: number;
   try {
     n = await reportLayout(film);
+    // Errors from the page's own code (a path built from NaN, a failed selector) draw nothing and
+    // break no layout rule, so the layout check alone would pass them.
+    for (const w of await film.warnings()) console.error("runner", w);
   } finally {
     await film.close();
   }

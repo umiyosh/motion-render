@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { openFilm } from "../skills/motion-render/scripts/render.ts";
 import { checkLayout, formatIssue } from "../skills/motion-render/scripts/layout.ts";
 import { filmPage, sceneIds } from "../skills/motion-render/scripts/scenes.ts";
@@ -106,6 +106,17 @@ describe("a film in scene files", () => {
       await intro.close();
     }
     expect(readdirSync(film).filter((n) => n.startsWith(".page-"))).toEqual([]);
+  });
+
+  it("passes on errors from the page's own code with the check command", () => {
+    const broken = `<section class="scene" id="intro"><svg width="100" height="100"><path id="p" /></svg></section>
+<script>film.build(function () { document.querySelector("#p").setAttribute("d", "M0 " + NaN); });</script>`;
+    const film = sceneFilm({ "01-intro.html": broken });
+    const r = spawnSync(process.execPath, [CLI, "check", film, "01-intro.html"], {
+      encoding: "utf8",
+    });
+    expect(r.stdout).toContain("layout ok");
+    expect(r.stderr).toMatch(/runner error: .*attribute d/);
   });
 
   it("is checked by scene file with the check command", () => {
