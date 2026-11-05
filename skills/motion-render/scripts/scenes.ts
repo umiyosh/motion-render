@@ -4,11 +4,11 @@
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const MARKER = "<!-- scenes -->";
+const MARKER = "<!-- scenes -->";
 const DIR = "scenes";
 
 // The scene files of a film dir, in name order (01-title.html, 02-flow.html, ...).
-export function sceneFiles(dir: string): string[] {
+function sceneFiles(dir: string): string[] {
   const d = join(dir, DIR);
   return existsSync(d)
     ? readdirSync(d)

@@ -1,8 +1,8 @@
 # html の映像の作り方
 
 Claude Motion が使えないときに、映像を 1 枚の HTML として書く。`motion-render kit <work>` が
-`<work>/film/kit/` にプレーヤー・スタイル・フォント（Noto Sans JP と、手描きの作風用の Klee One）・GSAP・場面の秒数を置くので、
-Claude は `<work>/film/index.html` だけを書く。描画中はネットワークが遮断されるので、CDN や Google Fonts は使えない。
+`<work>/film/kit/` にプレーヤー・スタイル・部品・フォント（Noto Sans JP と、手描きの作風用の Klee One）・GSAP・場面の秒数を置くので、
+Claude は `<work>/film/index.html` と、場面を書いた `<work>/film/scenes/*.html` だけを書く。描画中はネットワークが遮断されるので、CDN や Google Fonts は使えない。
 
 ## ページの骨組み
 
@@ -14,6 +14,7 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
     <link rel="stylesheet" href="kit/fonts.css" />
     <link rel="stylesheet" href="kit/base.css" />
     <link rel="stylesheet" href="kit/styles.css" />
+    <link rel="stylesheet" href="kit/parts.css" />
     <script src="kit/gsap.min.js"></script>
     <script src="kit/timing.js"></script>
     <script src="kit/player.js"></script>
@@ -39,17 +40,13 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
     <div id="root">
       <!-- 場面をまたいで残るもの（図の全体） -->
       <div id="stage">…</div>
-      <!-- 場面ごとのもの。id は timing.json の場面 id と同じにする。ページの中で同じ id を 2 度使わない -->
-      <section class="scene" id="title">…</section>
-      <section class="scene" id="problem">…</section>
+      <!-- 場面ごとのもの（film/scenes/*.html）が、名前の順にここへ入る -->
+      <!-- scenes -->
     </div>
     <script>
+      // #stage の物の動き。場面のファイルの動きは、それぞれのファイルの film.build に書く
       film.build(function (tl) {
-        var IN = "expo.out",
-          MOVE = "power2.inOut",
-          OUT = "power3.in";
-        tl.fromTo("#t-title", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, ease: IN }, film.at("title", 0.2));
-        tl.to("#token", { ...film.spot("#token", "#sts"), duration: 0.8, ease: MOVE }, film.at("sts", 0.6));
+        tl.to("#token", { ...film.spot("#token", "#sts"), duration: 0.8, ease: "power2.inOut" }, film.at("sts", 0.6));
       });
     </script>
   </body>
@@ -67,6 +64,9 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
 | `film.arc(tl, 要素, 相手, 秒, o)`    | `要素` を `相手` へ山なりに動かす。o: `dur`（既定 0.9）・`lift`（既定 120px）・`dx`・`dy` |
 | `film.breathe(tl, 要素, id, 秒, 量)` | `秒` から場面 `id` の終わりまで、`要素` を `量`（既定 0.01）だけゆっくり拡大縮小する      |
 | `film.typeIn(tl, 要素, 秒, o)`       | `要素` の文字を 1 文字ずつ下から立ち上げる。o: `dur`（既定 0.5）・`stagger`（既定 0.04）  |
+| `film.light(tl, 要素, 秒, o)`        | 部品の `step`・`card` を `秒` に光らせる。o: `off`（消す秒）・`dur`（既定 0.35）          |
+| `film.ticks(要素, o)`                | 部品の `ruler` に目盛りを付ける。o: `step`（間隔）・`label`（既定 `"{v}"`、`""` で無し）  |
+| `film.caption(tl, 要素, id, 秒)`     | 字幕を `秒` に出し、場面 `id` の終わりの 0.25 秒前までに消す                              |
 | `section.scene`                      | その場面の間だけ見える。`#stage` のように section の外に置いたものはずっと見える          |
 
 ## 作る前に決めること
@@ -82,6 +82,25 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
 - **文字の役割**: 見出し・本文・字幕・数字（`num`）の大きさと太さ
 - **動きの決まり**: 出る・移る・消えるの緩急と、止めて読ませる長さ。同じ役割の物には同じ動きを使う
 - **この 1 本で使わないもの**: 下の「抑えるもの」から、テーマに合わせて足す
+
+## 絵コンテと秒の計画
+
+場面を書き始める前に `<work>/plan.md` を書く。場面を手分けして書くときの共通の指示書であり、効果音を先に作る元でもある。
+秒は `timing.json` の場面の長さに収める。場面ごとに次の 5 つを書く。
+
+```markdown
+## flow（12.4 秒）
+- 見せるもの: 6 つの工程カードが左から並び、今の工程が光る
+- 部品: steps（6 枚）、caption
+- 動き: 0.3 カードが順に出る（0.08 ずつ）／ 1.6 「原稿」が光る ／ 4.2 「ナレーション」が光る ／ 8.0 字幕
+- 効果音: 0.3 soft UI pop 0.6 ／ 1.6 gentle glassy chime 1.0 ／ 4.2 gentle glassy chime 1.0
+- 残る物: #steps は入るとき無い → 出るとき上端に縮んで残る（次の場面 lanes が使う）
+```
+
+- 動きの秒は、その動きに渡す `film.at(場面, 秒)` の秒にする。書き手はこの秒を変えない
+- 残る物（`#stage` の物）は、場面の頭と終わりの状態（位置・大きさ・見えるか）を書く。
+  まとまりの境目の場面ほど詳しく書く。境目で物が飛ばないようにするため
+- 効果音は `prompt` と `duration` まで書く。そのまま `script.json` の `sfx` に写す
 
 ## 作風
 
@@ -120,6 +139,24 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
 - 作風が紙の目や揺れを足すので、ページでは模様や影を足さない
 - `Klee One` の太字は 600 まで。`font-weight: 700` は 600 で描かれる
 
+## 部品
+
+`kit/parts.css` に、解説の映像で毎回描く形がある。場面では中身と秒だけを書き、形を一から書かない。
+色はページの変数（`--panel` `--line` `--ink` `--muted` `--accent`）から取るので、どの作風でも使える。
+手描きの作風では `step`・`card` に `drawn` も付ける（線は作風が描き、部品は光らせるだけにする）。
+
+| 部品         | 書き方                                                                                                                                                                                                                                                                                                   | 動かし方                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 工程の列     | `<div class="steps layer-card" style="left:…; top:…">` の中に `<div class="step"><svg>…</svg><span>原稿</span></div>` を並べる                                                                                                                                                                           | `film.light(tl, "#s-script", 秒, { off: 秒 })`                           |
+| カード       | `<div class="card layer-card" style="position:absolute; left:…; top:…">` に `<span class="card-title">` と `<span class="card-body">`                                                                                                                                                                    | `film.light` で光らせる。出し方は自分で書く                              |
+| 時間のレーン | `<div class="lanes layer-card" style="--from: 0; --to: 20; left:…; top:…; width:…">` に `<span class="lane-name">語り</span><div class="track">…</div>` を組で並べる。`track` の中に `<div class="seg" style="--at: 2; --len: 5.8"><span>場面 1</span></div>` と `<i class="pin" style="--at: 7.5"></i>` | `seg`・`pin` を GSAP で出す（`scaleX` で伸ばす、`scale` で跳ねる）       |
+| 目盛り       | `<div class="ruler layer-line" style="--from: 14; --to: 26; left:…; top:…; width:…">`                                                                                                                                                                                                                    | `film.build` の中で `film.ticks("#ruler", { step: 2, label: "{v} 秒" })` |
+| 字幕         | `<p class="caption layer-caption">…</p>`                                                                                                                                                                                                                                                                 | `film.caption(tl, "#cap-flow", "flow", 秒)`                              |
+
+- `seg` と `pin` の位置は、`lanes` の `--from`〜`--to` を `track` の幅に当てて決まる。秒でも、ほかの単位でもよい
+- 1 本の `track` の中で `seg` と `pin` を重ねない（`check` が重なりとして出す）。印は別の `track` に置く
+- 大きさは変数で変えられる: `--step-w`（工程の幅）、`--steps-gap`、`--lane-h`（レーンの高さ）、`--ruler-pad`
+
 ## 配置の決まり
 
 `motion-render check` はこれを破った所を見つけて止める。最初から守って書く。
@@ -155,6 +192,40 @@ Claude は `<work>/film/index.html` だけを書く。描画中はネットワ�
 
 意図した重なり（グラフの基準線が棒を横切る、軸のラベルが目盛りの外に出る、わざと斜めに押す判子）は、
 その要素に `data-layout-ok` を付けると `check` が数えない。間違いを黙らせるためには使わない。
+
+## 場面を分けて書く
+
+場面は `film/scenes/<番号>-<名前>.html` に、続いた場面のまとまりごとに書く。プレーヤーが開くとき、
+`index.html` の `<!-- scenes -->` の行に、ファイル名の順で差し込まれる。1 つのファイルには、
+その場面の `<style>`、`<section class="scene">`、`<script>film.build(…)</script>` を書く。
+
+```html
+<style>
+  #flow .steps { left: 260px; top: 180px; }
+</style>
+<section class="scene" id="flow">…</section>
+<script>
+  film.build(function (tl) {
+    film.light(tl, "#flow-s1", film.at("flow", 1.6));
+  });
+</script>
+```
+
+- id はページ全体で 1 度だけ。場面の id を頭に付ける（`#flow-s1`）
+- スタイルは `#場面id` で始める。ほかの場面に効かせない
+- `index.html` は書き換えない。`#stage` の物は自分の場面の秒の間だけ動かし、場面の終わりに plan.md の状態にする
+- 自分のファイルだけを `motion-render check <work>/film <ファイル名>` で調べる。ほかのファイルを入れずに、
+  自分の場面の秒だけを調べる。`layout ok` になるまで直す
+
+サブエージェントに頼むときは、1 つのまとまりに 1 つ、次を渡す。
+
+```
+<work>/film/scenes/<番号>-<名前>.html に、場面 <id>, <id>, … を書いてください。
+- 先に読むもの: <skill>/references/html-film.md、<work>/plan.md、<work>/film/index.html、<work>/timing.json
+- plan.md の各場面の「動き」の秒と「残る物」の状態を守る。index.html は変えない
+- 書いたら `motion-render check <work>/film <番号>-<名前>.html` を `layout ok` になるまで直す（単体で実行する）
+- 返すもの: ファイル名、plan.md から変えた秒（無ければ「なし」）、直しきれなかった問題
+```
 
 ## 確認
 

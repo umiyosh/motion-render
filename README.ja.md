@@ -137,17 +137,18 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 
 動画 1 本ごとに作業フォルダ（`<work>`）を 1 つ使います。中身と `script.json` の書き方は [SKILL.md](skills/motion-render/SKILL.md) にあります。
 
-| コマンド                                         | やること                                                                                                                              |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `motion-render narrate <work>`                   | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く                                                         |
-| `motion-render bgm <work>`                       | `script.json` の `bgm` の指示から BGM を作る                                                                                          |
-| `motion-render sfx <work>`                       | `script.json` の `sfx` から効果音を作り、全部を順に聞ける `preview.m4a` を書く                                                        |
-| `motion-render prepare <storeDir> <work>/film`   | Motion: Motion から取得した映像データを、描画できる形に展開する                                                                       |
-| `motion-render kit <work>`                       | HTML: `<work>/film` にプレーヤー・スタイル・GSAP・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く        |
-| `motion-render check <work>/film`                | HTML: 0.1 秒ごとに配置を調べ、重なり、箱や画面からのはみ出し、ほかのものの下に隠れたもの、小さすぎる文字や薄すぎる文字を報告する      |
-| `motion-render stills <filmDir> <outDir> 0,5,12` | 確認用の静止画を書き出す（HTML の映像は先に配置を調べる）                                                                             |
-| `motion-render build <work> [out.mp4]`           | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする。どれかが足りないとき、HTML の映像が配置のチェックに通らないときは止まる |
-| `motion-render --version`                        | 版を表示する                                                                                                                          |
+| コマンド                                              | やること                                                                                                                                                                                                          |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `motion-render narrate <work>`                        | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く                                                                                                                                     |
+| `motion-render bgm <work>`                            | `script.json` の `bgm` の指示から BGM を作る                                                                                                                                                                      |
+| `motion-render sfx <work>`                            | `script.json` の `sfx` から効果音を作り、全部を順に聞ける `preview.m4a` を書く                                                                                                                                    |
+| `motion-render prepare <storeDir> <work>/film`        | Motion: Motion から取得した映像データを、描画できる形に展開する                                                                                                                                                   |
+| `motion-render kit <work>`                            | HTML: `<work>/film` にプレーヤー・スタイル・GSAP・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く                                                                                    |
+| `motion-render check <work>/film [<場面のファイル>…]` | HTML: 0.1 秒ごとに配置を調べ、重なり、箱や画面からのはみ出し、ほかのものの下に隠れたもの、小さすぎる文字や薄すぎる文字を報告する。場面のファイル（`film/scenes/` の名前）を渡すと、そのファイルの場面だけを調べる |
+| `motion-render stills <filmDir> <outDir> 0,5,12`      | 確認用の静止画を書き出す（HTML の映像は先に配置を調べる）                                                                                                                                                         |
+| `motion-render build <work> [out.mp4]`                | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする。どれかが足りないとき、HTML の映像が配置のチェックに通らないときは止まる                                                                             |
+| `motion-render times <work>`                          | 工程ごとにかかった時間を表にする（各コマンドの時間と、その間の Claude の作業の時間）                                                                                                                              |
+| `motion-render --version`                             | 版を表示する                                                                                                                                                                                                      |
 
 | 環境変数                | 効果                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------ |
@@ -233,7 +234,8 @@ skills/motion-render/     # スキル本体（skills CLI とプラグインの�
   SKILL.md                # Claude が読む手順（準備、絵コンテ・原稿・BGM の決め方を含む）
   package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one）
   references/html-film.md # Claude が HTML の映像を書くときの決まり（配置、動き、配置のチェックの読み方）
-  kit/                    # kit が HTML の映像に写すプレーヤーと基本のスタイル、作風のスタイル
+  references/pipeline.md  # 工程のつながり（何を待ち、何を裏で動かすか）と、工程を足すときの決まり
+  kit/                    # kit が HTML の映像に写すプレーヤーと基本のスタイル、作風のスタイル、部品（parts.css）
   scripts/cli.ts          # motion-render コマンド
   scripts/audio.ts        # ナレーションと BGM の生成、音声の合成
   scripts/sfx.ts          # 効果音の生成（ElevenLabs）、音量のそろえ方、試聴用ファイル
@@ -241,6 +243,8 @@ skills/motion-render/     # スキル本体（skills CLI とプラグインの�
   scripts/render.ts       # Motion と HTML の映像をブラウザで描画する部分
   scripts/kit.ts          # HTML の映像のフォルダを用意する
   scripts/layout.ts       # HTML の映像の配置のチェック
+  scripts/scenes.ts       # 場面のファイル（film/scenes/*.html）を index.html に差し込む
+  scripts/steps.ts        # 各コマンドの時間を残し、工程ごとの時間の表にする（times）
   scripts/snapshot.js     # 配置のチェックのため、映像のページの中で箱と文字を測る
   scripts/json.ts         # ファイル・API・プレーヤーから来る JSON を、形を確かめながら読む
   scripts/store.ts        # Motion の store を映像データのフォルダに展開する

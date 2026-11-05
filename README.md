@@ -137,17 +137,18 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 
 Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md).
 
-| Command                                          | What it does                                                                                                                                                         |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `motion-render narrate <work>`                   | Generates narration from `script.json` and writes scene lengths to `timing.json`                                                                                     |
-| `motion-render bgm <work>`                       | Generates the BGM from the `bgm` prompt in `script.json`                                                                                                             |
-| `motion-render sfx <work>`                       | Generates the sound effects in `script.json` and a `preview.m4a` of them in order                                                                                    |
-| `motion-render prepare <storeDir> <work>/film`   | Motion: expands a Motion film's data into a directory it can render                                                                                                  |
-| `motion-render kit <work>`                       | HTML: sets up `<work>/film` with the player, styles, GSAP, the Japanese fonts and the scene times. Claude then writes `film/index.html`                              |
-| `motion-render check <work>/film`                | HTML: checks the layout every 0.1 s for overlaps, things sticking out of their box or the frame, things hidden under others, and text that is too small or too faint |
-| `motion-render stills <filmDir> <outDir> 0,5,12` | Writes still frames for checking (an HTML film is checked first)                                                                                                     |
-| `motion-render build <work> [out.mp4]`           | Mixes narration, BGM and sound effects and renders the MP4. Stops if any is missing, or if an HTML film fails the layout check                                       |
-| `motion-render --version`                        | Prints the version                                                                                                                                                   |
+| Command                                           | What it does                                                                                                                                                                                                                                |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `motion-render narrate <work>`                    | Generates narration from `script.json` and writes scene lengths to `timing.json`                                                                                                                                                            |
+| `motion-render bgm <work>`                        | Generates the BGM from the `bgm` prompt in `script.json`                                                                                                                                                                                    |
+| `motion-render sfx <work>`                        | Generates the sound effects in `script.json` and a `preview.m4a` of them in order                                                                                                                                                           |
+| `motion-render prepare <storeDir> <work>/film`    | Motion: expands a Motion film's data into a directory it can render                                                                                                                                                                         |
+| `motion-render kit <work>`                        | HTML: sets up `<work>/film` with the player, styles, GSAP, the Japanese fonts and the scene times. Claude then writes `film/index.html`                                                                                                     |
+| `motion-render check <work>/film [<scene file>…]` | HTML: checks the layout every 0.1 s for overlaps, things sticking out of their box or the frame, things hidden under others, and text that is too small or too faint. Given scene files (names in `film/scenes/`), checks only their scenes |
+| `motion-render stills <filmDir> <outDir> 0,5,12`  | Writes still frames for checking (an HTML film is checked first)                                                                                                                                                                            |
+| `motion-render build <work> [out.mp4]`            | Mixes narration, BGM and sound effects and renders the MP4. Stops if any is missing, or if an HTML film fails the layout check                                                                                                              |
+| `motion-render times <work>`                      | Shows how long each step took, as a table (each command, and Claude's work between them)                                                                                                                                                    |
+| `motion-render --version`                         | Prints the version                                                                                                                                                                                                                          |
 
 | Environment variable    | Effect                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -233,7 +234,8 @@ skills/motion-render/     # The skill (read by both the skills CLI and the plugi
   SKILL.md                # Instructions for Claude (setup, storyboard, script and BGM choices)
   package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one)
   references/html-film.md # How Claude writes an HTML film: layout, motion, and reading the layout check
-  kit/                    # The player, base styles and drawing styles that `kit` copies into an HTML film
+  references/pipeline.md  # How the steps depend on each other (what waits, what runs in the background), and how to add a step
+  kit/                    # The player, base styles and drawing styles that `kit` copies into an HTML film, and the parts (parts.css)
   scripts/cli.ts          # The motion-render command
   scripts/audio.ts        # Narration and BGM generation, audio mixing
   scripts/sfx.ts          # Sound effect generation (ElevenLabs), leveling and the listening file
@@ -241,6 +243,8 @@ skills/motion-render/     # The skill (read by both the skills CLI and the plugi
   scripts/render.ts       # Rendering Motion and HTML films in the browser
   scripts/kit.ts          # Setting up an HTML film directory
   scripts/layout.ts       # The layout check of HTML films
+  scripts/scenes.ts       # Putting the scene files (film/scenes/*.html) into index.html
+  scripts/steps.ts        # Logging each command's time and making the per-step table (times)
   scripts/snapshot.js     # Measures boxes and text inside the film page for the layout check
   scripts/json.ts         # Reading JSON from files, APIs and the player without trusting its shape
   scripts/store.ts        # Expanding a Motion store into a film directory

@@ -27,9 +27,8 @@ vi.mock("node:child_process", async (importOriginal) => {
   };
 });
 
-const { checkSfx, makeSfx, narrationLevel, previewSfx, sfxKey, sfxTrack } = await import(
-  "../skills/motion-render/scripts/sfx.ts"
-);
+const { checkSfx, makeSfx, narrationLevel, previewSfx, sfxKey, sfxTrack } =
+  await import("../skills/motion-render/scripts/sfx.ts");
 const { volumeStats } = await import("../skills/motion-render/scripts/audio.ts");
 const { loadScript } = await import("../skills/motion-render/scripts/work.ts");
 
