@@ -1,0 +1,161 @@
+/* Parts that explainer films keep drawing, so a scene gives only its content and seconds: a row of
+   step cards, a card, lanes on a time axis, a scale with ticks, and the caption. Colors come from the
+   page's variables (--panel --line --ink --muted --accent), so the parts follow every style.
+   The player animates them: film.light (a step or card), film.ticks (a scale), film.caption. */
+
+/* A row of steps. --on is 0 (off) to 1 (lit); film.light tweens it. */
+.steps {
+  position: absolute;
+  display: flex;
+  gap: var(--steps-gap, 20px);
+}
+.step,
+.card {
+  --on: 0;
+  border: 3px solid color-mix(in srgb, var(--accent) calc(var(--on) * 100%), var(--line));
+  background: color-mix(in srgb, var(--accent) calc(var(--on) * 16%), var(--panel));
+  color: var(--ink);
+  border-radius: 14px;
+}
+/* In the hand-drawn styles add drawn: the style draws the line, and the part only lights it. */
+[data-style] :is(.step, .card).drawn {
+  border-color: transparent;
+}
+[data-style] :is(.step, .card).drawn::before {
+  border-color: color-mix(in srgb, var(--accent) calc(var(--on) * 100%), var(--line));
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: var(--step-w, 150px);
+  padding: 18px 16px;
+  font-size: 28px;
+}
+.step > svg {
+  width: 44px;
+  height: 44px;
+  color: color-mix(in srgb, var(--accent) calc(var(--on) * 100%), var(--muted));
+}
+/* A card with a title and a body. Place it with position: absolute and a layer class. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 28px;
+}
+.card-title {
+  font-size: 34px;
+  font-weight: 700;
+}
+.card-body {
+  font-size: 28px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Lanes on one time axis: names on the left, tracks on the right. --from and --to (seconds or any
+   unit) set the axis; a .seg starts at --at and lasts --len, a .pin sits at --at. */
+.lanes {
+  --from: 0;
+  --to: 10;
+  position: absolute;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px 20px;
+  align-items: center;
+}
+.lane-name {
+  font-size: 26px;
+  color: var(--muted);
+  text-align: right;
+}
+.track {
+  position: relative;
+  height: var(--lane-h, 52px);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.seg,
+.pin {
+  position: absolute;
+  left: calc((var(--at) - var(--from)) / (var(--to) - var(--from)) * 100%);
+}
+.seg {
+  top: 6px;
+  bottom: 6px;
+  width: calc(var(--len) / (var(--to) - var(--from)) * 100%);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  font-size: 24px;
+  white-space: nowrap;
+}
+.pin {
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* A scale: a line with ticks and labels, made by film.ticks. --from and --to set its ends. The line
+   runs --ruler-pad in from each side, so the labels at its ends stay inside the box. */
+.ruler {
+  --from: 0;
+  --to: 10;
+  --ruler-pad: 60px;
+  position: absolute;
+  height: 72px;
+}
+.ruler::before {
+  content: "";
+  position: absolute;
+  left: var(--ruler-pad);
+  right: var(--ruler-pad);
+  top: 10px;
+  border-top: 3px solid var(--line);
+}
+.tick {
+  position: absolute;
+  top: 0;
+  left: calc(
+    var(--ruler-pad) + (var(--at) - var(--from)) / (var(--to) - var(--from)) *
+      (100% - 2 * var(--ruler-pad))
+  );
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 24px;
+  font-style: normal;
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tick::before {
+  content: "";
+  width: 3px;
+  height: 23px;
+  background: var(--line);
+}
+
+/* The caption: one line across the bottom, inside the safe area. Add layer-caption. */
+.caption {
+  position: absolute;
+  left: var(--safe-x);
+  right: var(--safe-x);
+  bottom: calc(var(--safe-y) + 8px);
+  text-align: center;
+  font-size: 54px;
+  font-weight: 700;
+  color: var(--ink);
+}

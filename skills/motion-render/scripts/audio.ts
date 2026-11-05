@@ -150,7 +150,7 @@ export async function withRetries<T>(label: string, attempt: () => Promise<T>): 
   let last: unknown;
   let waited = 0,
     waits = 0;
-  for (let i = 1; i <= RETRIES;) {
+  for (let i = 1; i <= RETRIES; ) {
     try {
       return await attempt();
     } catch (e) {
