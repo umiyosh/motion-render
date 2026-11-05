@@ -124,12 +124,65 @@ describe("narrate", () => {
     const dir = workDir(SCRIPT);
     fetchMock.mockImplementation(
       async () =>
-        new Response(JSON.stringify({ error: { message: "quota exceeded" } }), { status: 429 })
+        new Response(JSON.stringify({ error: { message: "internal error" } }), { status: 500 })
+    );
+    await expect(narrate(dir, loadScript(dir))).rejects.toThrow(
+      "gemini-3.8-flash-tts: HTTP 500 internal error"
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(6); // both scenes run at once, 3 attempts each
+  });
+
+  it("narrates several scenes at once", async () => {
+    const scenes = Array.from({ length: 8 }, (_, i) => ({ id: `s${i}`, narration: `場面${i}` }));
+    const dir = workDir({ ...SCRIPT, scenes });
+    let running = 0,
+      most = 0;
+    fetchMock.mockImplementation(async () => {
+      most = Math.max(most, ++running);
+      await new Promise((ok) => setTimeout(ok, 10));
+      running--;
+      return audioResponse("audio/wav", wav(0.5));
+    });
+    await narrate(dir, loadScript(dir));
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(most).toBe(4);
+    for (const s of scenes) expect(existsSync(join(dir, "audio", `${s.id}.wav`))).toBe(true);
+  });
+
+  it("waits out a rate limit for the delay Gemini asks for, without using up an attempt", async () => {
+    const dir = workDir(SCRIPT);
+    const busy = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            message: "quota exceeded",
+            details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "0.01s" }],
+          },
+        }),
+        { status: 429 }
+      );
+    let calls = 0;
+    fetchMock.mockImplementation(async () =>
+      ++calls <= 4 ? busy() : audioResponse("audio/wav", wav(0.5))
+    );
+    await narrate(dir, loadScript(dir));
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(existsSync(join(dir, "audio", "flow.wav"))).toBe(true);
+  });
+
+  it("gives up on a rate limit that never lifts", async () => {
+    const dir = workDir({ ...SCRIPT, scenes: [SCRIPT.scenes[0]] });
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: { message: "quota exceeded" } }), {
+          status: 429,
+          headers: { "retry-after": "0" },
+        })
     );
     await expect(narrate(dir, loadScript(dir))).rejects.toThrow(
       "gemini-3.8-flash-tts: HTTP 429 quota exceeded"
     );
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(13); // 10 waits, then 3 attempts
   });
 
   it("fails when the response has no audio", async () => {

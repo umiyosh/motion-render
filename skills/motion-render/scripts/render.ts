@@ -10,6 +10,7 @@ import { chromium, type Browser, type LaunchOptions, type Page } from "playwrigh
 import { errorMessage, field, isRecord, readJson } from "./json.ts";
 import { parseBoxes, type LayoutBox } from "./layout.ts";
 import { limit } from "./limit.ts";
+import { filmPage } from "./scenes.ts";
 
 const require = createRequire(import.meta.url);
 const PLAYWRIGHT_CLI = join(dirname(require.resolve("playwright-core")), "cli.js");
@@ -96,14 +97,17 @@ export interface Film {
   close(): Promise<void>;
   // How many frame or inspect calls run at once: one per page.
   pages: number;
+  // The scenes on the page when only some scene files were opened (FilmOptions.scenes), else null.
+  only: string[] | null;
 }
 
 // The film as one page shows it.
-type PageFilm = Omit<Film, "close" | "pages">;
+type PageFilm = Omit<Film, "close" | "pages" | "only">;
 
 export interface FilmOptions {
   pageMs?: number; // time limit of each call into a page
   pages?: number; // pages that draw at the same time
+  scenes?: string[]; // html films: open only these files of film/scenes (scenes.ts)
 }
 
 // Pages that draw a film at the same time. Each page has its own browser and keeps about one core
@@ -286,13 +290,13 @@ async function waitReady(page: Page, call: Call): Promise<void> {
   }
 }
 
-async function htmlFilm(page: Page, dir: string, call: Call): Promise<PageFilm> {
+async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm> {
   const log: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "warning" || m.type() === "error") log.push(`${m.type()}: ${m.text()}`);
   });
   page.on("pageerror", (e) => log.push(`error: ${e.message}`));
-  await page.goto(pathToFileURL(resolve(dir, "index.html")).href);
+  await page.goto(pathToFileURL(resolve(file)).href);
   await page.waitForFunction(() => typeof window.__film === "object");
   let meta: unknown;
   try {
@@ -356,27 +360,33 @@ function onFreePage(films: PageFilm[]) {
 // captured no faster than 1), while separate browsers draw side by side. Each call into a page
 // fails after pageMs.
 export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Film> {
-  const { pageMs = PAGE_MS, pages = 1 } = opts;
+  const { pageMs = PAGE_MS, pages = 1, scenes = [] } = opts;
   if (!Number.isInteger(pages) || pages < 1)
     throw new Error(`pages must be 1 or more, got ${pages}`);
   checkFilmDir(dir);
-  // The first launch may download Chromium, so the others wait for it.
-  const browsers = [await launch()];
-  const closeAll = () => Promise.all(browsers.map((b) => b.close())).then(() => undefined);
+  const html = isHtmlFilm(dir);
+  if (scenes.length && !html) throw new Error("only an html film has scene files");
+  const entry = html ? filmPage(dir, scenes) : null;
+  const browsers: Browser[] = [];
+  const closeAll = () => Promise.all(browsers.map((b) => b.close())).then(() => entry?.close());
   const call: Call = (p, what) => limit(p, pageMs, `the film page's ${what}`);
-  const open = isHtmlFilm(dir) ? htmlFilm : motionFilm;
+  const open = (page: Page) =>
+    entry ? htmlFilm(page, entry.file, call) : motionFilm(page, dir, call);
   try {
+    // The first launch may download Chromium, so the others wait for it.
+    browsers.push(await launch());
     const more = await Promise.allSettled(Array.from({ length: pages - 1 }, () => launch()));
     for (const r of more) if (r.status === "fulfilled") browsers.push(r.value);
     const failed = more.find((r) => r.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
-    const films = await Promise.all(browsers.map(async (b) => open(await openPage(b), dir, call)));
+    const films = await Promise.all(browsers.map(async (b) => open(await openPage(b))));
     const [first] = films;
     if (!first) throw new Error("no film page opened");
     const run = onFreePage(films);
     return {
       meta: first.meta,
       pages,
+      only: entry?.ids ?? null,
       frame: (t) => run((f) => f.frame(t)),
       inspect:
         first.inspect && ((t) => run((f) => (f.inspect ? f.inspect(t) : Promise.resolve([])))),

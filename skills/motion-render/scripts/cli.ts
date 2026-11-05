@@ -16,6 +16,7 @@ import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx } from "./wo
 import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.ts";
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
+import { stepsTable, timed, workOf } from "./steps.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
@@ -27,14 +28,18 @@ const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
                                           Expand a Motion film's store (ArtifactData out_dir) into a film dir.
   motion-render kit <work>                Set up <work>/film for an html film: player, fonts, GSAP and
                                           the scene times from timing.json (write film/index.html after).
-  motion-render check <filmDir>           Check an html film's layout every 0.1s: overlaps, things
+  motion-render check <filmDir> [<scene file>...]
+                                          Check an html film's layout every 0.1s: overlaps, things
                                           sticking out of their box or the frame, things hidden under others,
-                                          and text too small or too faint to read.
+                                          and text too small or too faint to read. With scene files
+                                          (names in <filmDir>/scenes), only those are put in and checked.
   motion-render stills <filmDir> <outDir> <t1,t2,...>
                                           Write PNG stills at the given seconds (and run check).
   motion-render build <work> [out.mp4]    Mix narration + BGM + sound effects and render <work>/film to MP4.
                                           Stops if check finds a layout issue in an html film.
                                           Without out.mp4: $MOTION_RENDER_OUT_DIR or the current dir, <work name>.mp4.
+  motion-render times <work>              Show how long each step of this video took, as a table
+                                          (commands from <work>/steps.jsonl, and Claude's work between them).
 
 env:
   GEMINI_API_KEY         required by narrate and bgm
@@ -69,7 +74,7 @@ async function reportLayout(film: Film): Promise<number> {
 
 async function stills(filmDir: string, outDir: string, list: string): Promise<void> {
   const times = list.split(",").map(Number);
-  if (times.some((t) => !Number.isFinite(t))) die(`times must be numbers: ${list}`);
+  if (times.some((t) => !Number.isFinite(t))) throw new Error(`times must be numbers: ${list}`);
   mkdirSync(outDir, { recursive: true });
   const film = await openFilm(filmDir, { pages: capturePages() });
   try {
@@ -83,18 +88,19 @@ async function stills(filmDir: string, outDir: string, list: string): Promise<vo
   console.log(`done: ${times.length} stills in ${outDir}`);
 }
 
-async function check(filmDir: string): Promise<void> {
+async function check(filmDir: string, scenes: string[]): Promise<void> {
   if (!isHtmlFilm(filmDir))
-    die("check works on html films only (Motion films draw in their own player)");
-  const film = await openFilm(filmDir, { pages: capturePages() });
+    throw new Error("check works on html films only (Motion films draw in their own player)");
+  const film = await openFilm(filmDir, { pages: capturePages(), scenes });
   let n: number;
   try {
     n = await reportLayout(film);
   } finally {
     await film.close();
   }
-  if (n) die(`${n} layout issues in ${filmDir}`);
-  console.log(`layout ok: ${filmDir}`);
+  const what = scenes.length ? `${filmDir} (${scenes.join(", ")})` : filmDir;
+  if (n) throw new Error(`${n} layout issues in ${what}`);
+  console.log(`layout ok: ${what}`);
 }
 
 function runKit(work: string): void {
@@ -156,14 +162,16 @@ async function encode(film: Film, fps: number, audio: string, out: string): Prom
 }
 
 async function build(work: string, out: string, fps: number): Promise<void> {
-  if (!Number.isFinite(fps) || fps <= 0) die("--fps must be a positive number");
+  if (!Number.isFinite(fps) || fps <= 0) throw new Error("--fps must be a positive number");
   const script = loadScript(work);
   const timing = loadTiming(work);
   const missing = timing.scenes
     .filter((s) => !existsSync(join(work, "audio", `${s.id}.wav`)))
     .map((s) => s.id);
   if (missing.length)
-    die(`narration missing for: ${missing.join(", ")} (run "motion-render narrate ${work}")`);
+    throw new Error(
+      `narration missing for: ${missing.join(", ")} (run "motion-render narrate ${work}")`
+    );
   bgmFile(work);
   checkSfx(work, script);
   const filmDir = join(work, "film");
@@ -194,7 +202,7 @@ async function build(work: string, out: string, fps: number): Promise<void> {
 }
 
 interface Command {
-  args: number[]; // accepted argument counts
+  args: [number, number]; // fewest and most arguments
   run(args: string[], fps: number): Promise<void> | void;
 }
 
@@ -207,15 +215,19 @@ function runBuild([a, b]: string[], fps: number): Promise<void> {
 }
 
 const COMMANDS = new Map<string, Command>([
-  ["narrate", { args: [1], run: ([w]) => runNarrate(resolve(w!)) }],
-  ["bgm", { args: [1], run: ([w]) => runBgm(resolve(w!)) }],
-  ["sfx", { args: [1], run: ([w]) => runSfx(resolve(w!)) }],
-  ["kit", { args: [1], run: ([w]) => runKit(resolve(w!)) }],
-  ["prepare", { args: [2], run: ([s, f]) => runPrepare(s!, f!) }],
-  ["stills", { args: [3], run: ([f, o, t]) => stills(f!, o!, t!) }],
-  ["check", { args: [1], run: ([f]) => check(f!) }],
+  ["narrate", { args: [1, 1], run: ([w]) => runNarrate(resolve(w!)) }],
+  ["bgm", { args: [1, 1], run: ([w]) => runBgm(resolve(w!)) }],
+  ["sfx", { args: [1, 1], run: ([w]) => runSfx(resolve(w!)) }],
+  ["kit", { args: [1, 1], run: ([w]) => runKit(resolve(w!)) }],
+  ["prepare", { args: [2, 2], run: ([s, f]) => runPrepare(s!, f!) }],
+  ["stills", { args: [3, 3], run: ([f, o, t]) => stills(f!, o!, t!) }],
+  ["check", { args: [1, Infinity], run: ([f, ...s]) => check(f!, s) }],
   ["build", { args: [1, 2], run: runBuild }],
+  ["times", { args: [1, 1], run: ([w]) => console.log(stepsTable(resolve(w!))) }],
 ]);
+// Commands whose time is logged in the work dir of their first argument (steps.ts). prepare writes
+// to its second.
+const LOGGED = new Set(["narrate", "bgm", "sfx", "kit", "prepare", "stills", "check", "build"]);
 
 function version(): string {
   const v = field(readJson(fileURLToPath(new URL("../package.json", import.meta.url))), "version");
@@ -235,9 +247,12 @@ async function main(): Promise<void> {
   if (values.version) return console.log(version());
   if (values.help || !cmd) return console.log(USAGE);
   const command = COMMANDS.get(cmd);
-  if (!command || !command.args.includes(rest.length) || rest.some((a) => !a))
+  const [fewest, most] = command?.args ?? [0, 0];
+  if (!command || rest.length < fewest || rest.length > most || rest.some((a) => !a))
     die(`unknown command or wrong arguments\n\n${USAGE}`, 2);
-  return command.run(rest, Number(values.fps));
+  const target = cmd === "prepare" ? rest[1] : rest[0];
+  const work = LOGGED.has(cmd) && target ? workOf(target) : null;
+  return timed(work, cmd, () => command.run(rest, Number(values.fps)));
 }
 
 main().catch((e: unknown) => die(errorMessage(e)));

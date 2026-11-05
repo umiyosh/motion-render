@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inOrder } from "../skills/motion-render/scripts/inorder.ts";
+import { inOrder, inParallel } from "../skills/motion-render/scripts/inorder.ts";
 
 const wait = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 
@@ -30,5 +30,33 @@ describe("inOrder", () => {
       })()
     ).rejects.toThrow("frame 2 failed");
     expect(out).toEqual([0, 1]);
+  });
+});
+
+describe("inParallel", () => {
+  it("runs every item with no more than `n` at once", async () => {
+    let running = 0,
+      most = 0;
+    const done: number[] = [];
+    await inParallel([1, 2, 3, 4, 5], 2, async (i) => {
+      most = Math.max(most, ++running);
+      await wait(5);
+      running--;
+      done.push(i);
+    });
+    expect(done.sort()).toEqual([1, 2, 3, 4, 5]);
+    expect(most).toBe(2);
+  });
+
+  it("starts nothing new after a failure, lets the running ones finish and throws the first error", async () => {
+    const started: number[] = [];
+    await expect(
+      inParallel([1, 2, 3, 4, 5], 2, async (i) => {
+        started.push(i);
+        await wait(i === 1 ? 1 : 10);
+        if (i === 1) throw new Error("item 1 failed");
+      })
+    ).rejects.toThrow("item 1 failed");
+    expect(started).toEqual([1, 2]);
   });
 });
