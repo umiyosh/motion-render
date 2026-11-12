@@ -214,6 +214,7 @@ export interface Scored {
   hits: Hit[];
   map: number[];
   notes: string[]; // what does not look right
+  moments: string[]; // what a listener notices in the music, each needing an event in the story
 }
 
 // Film bar of each scene that starts a section, and where the final hit falls.
@@ -269,6 +270,34 @@ function judgeStops(timing: Timing, bar: number, lv: number[]): string[] {
   ];
 }
 
+// The moments a listener notices in the scored music: a bar where it drops out or comes back (9 dB
+// or more against the bar before) and a bar with only one or two drum hits among louder ones. Each
+// needs an event in the story at that time, or it sounds bolted on: the film should answer every one.
+function moments(timing: Timing, bar: number, lv: number[], hits: Hit[]): string[] {
+  const last = timing.end === undefined ? lv.length : Math.round(timing.end / bar) + 1;
+  const heads = new Map(cues(timing, bar).map((c) => [c.at, `${c.what}, ${c.section}`]));
+  const drums = (b: number): Hit[] =>
+    hits.filter(
+      (h) => h.slot >= b * 16 && h.slot < b * 16 + 16 && h.k !== "hat" && h.k !== "ghost"
+    );
+  const out: string[] = [];
+  for (let b = 1; b < Math.min(last, lv.length); b++) {
+    const d = lv[b]! - lv[b - 1]!,
+      n = drums(b).length;
+    let what = "";
+    if (d <= -9) what = `the music drops out (${lv[b - 1]} -> ${lv[b]} dB)`;
+    else if (d >= 9) what = `the music comes back (${lv[b - 1]} -> ${lv[b]} dB)`;
+    else if (n > 0 && n <= 2 && lv[b]! <= -6 && drums(b - 1).length >= 4)
+      what = `a lone hit at ${clock(drums(b)[0]!.t)} after a busy bar`;
+    if (!what) continue;
+    const at = heads.get(b);
+    out.push(
+      `${clock(b * bar)} bar ${b}: ${what}${at ? ` (start of ${at})` : " (no section starts here)"}`
+    );
+  }
+  return out;
+}
+
 // Renders script.score onto the film's bars: audio/score.wav and audio/hits.json.
 export function renderScore(work: string, script: Script, timing: Timing): Scored {
   const bpm = script.bpm,
@@ -316,6 +345,7 @@ export function renderScore(work: string, script: Script, timing: Timing): Score
     hits,
     map,
     notes: [...notes, ...judgeCues(timing, bar, rel, hits), ...judgeStops(timing, bar, rel)],
+    moments: moments(timing, bar, rel, hits),
   };
 }
 

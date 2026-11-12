@@ -10,6 +10,7 @@ import { psnr, repeatTimes } from "../skills/motion-render/scripts/repeat.ts";
 import { findFfmpeg, mediaSeconds, mix } from "../skills/motion-render/scripts/audio.ts";
 import { writeWav } from "../skills/motion-render/scripts/score.ts";
 import { measureSync } from "../skills/motion-render/scripts/sync.ts";
+import { writeSheet } from "../skills/motion-render/scripts/sheet.ts";
 import {
   runBeatBgm,
   runScore,
@@ -195,6 +196,39 @@ describe("sync", () => {
       /kicks in the drops: the picture moves on 100% of [1-9] \(an 8th later, with no hit: 0%\)/
     );
     expect(r.lines.join("\n")).toMatch(/drop "drop" 0:04\.00: .* [+-]?\d+ ms from the hit/);
+  });
+
+  it("times frames at the film's frame rate when the decoder drops a frame", async () => {
+    // the film is 8.02 s long but its MP4 decodes to 8 s of frames (the last frame lost)
+    const mp4 = join(tempDir(), "short.mp4");
+    testMp4(
+      mp4,
+      8,
+      KICKS.map((h) => h.t),
+      [4, 6]
+    );
+    const r = await measureSync(mp4, { ...SYNC_TIMING, total: 8.02 }, { lead: 0.25 }, KICKS);
+    expect(r.lines.join("\n")).toMatch(/final hit 0:06\.00: .* [+-]?\d ms from the hit/);
+  });
+
+  it("tiles the key moments of an MP4 into one sheet for a review", () => {
+    const dir = tempDir();
+    const mp4 = join(dir, "film.mp4");
+    testMp4(
+      mp4,
+      8,
+      KICKS.map((h) => h.t),
+      [4, 6]
+    );
+    const out = join(dir, "sheet.png");
+    const names = writeSheet(mp4, SYNC_TIMING, out);
+    // two scene middles, a beat before / on / after the drop, the final hit
+    expect(names).toHaveLength(6);
+    expect(names[0]).toMatch(/^1 \(row 1, column 1\): 0:02\.00 intro: middle/);
+    expect(names.join("\n")).toMatch(/0:04\.02 drop: the drop/);
+    expect(names.at(-1)).toMatch(/0:06\.05 the final hit$/);
+    expect(existsSync(out)).toBe(true);
+    expect(readFileSync(join(dir, "sheet.txt"), "utf8").trim().split("\n")).toHaveLength(6);
   });
 
   it("asks for kick reactions in the drops only", async () => {

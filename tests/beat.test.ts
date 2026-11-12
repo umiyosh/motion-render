@@ -149,6 +149,11 @@ describe("score", () => {
     expect(s.notes.join("\n")).toMatch(
       /the music stops dead 2 times \(bar 4 at 0:08\.00, bar 7 at 0:14\.00\): keep one stop per film/
     );
+    // each stop and each return is a moment the story has to answer; bar 5 is the drop scene
+    const m = s.moments.join("\n");
+    expect(m).toMatch(/0:08\.00 bar 4: the music drops out .* \(no section starts here\)/);
+    expect(m).toMatch(/0:10\.00 bar 5: the music comes back .* \(start of drop, drop\)/);
+    expect(m).toMatch(/bar 7: the music drops out/);
     const once = renderScore(
       work,
       { ...loadScript(work), score: { take: 1, bars: "9-12,8,9-13" } },

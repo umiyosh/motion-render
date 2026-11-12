@@ -53,6 +53,7 @@ export function runScore(work: string): void {
   const s = renderScore(work, script, timing);
   if (existsSync(join(work, "film", "kit"))) writeKitTiming(work);
   console.log(filmTable(timing, s, script.bpm));
+  for (const m of s.moments) console.log(`moment: ${m}`);
   for (const n of s.notes) console.log(`check: ${n}`);
   const n = (k: Hit["k"]): number => s.hits.filter((h) => h.k === k).length;
   console.log(

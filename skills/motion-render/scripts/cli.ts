@@ -19,6 +19,7 @@ import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.t
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 import { stepsTable, timed, workOf } from "./steps.ts";
+import { writeSheet } from "./sheet.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
@@ -30,7 +31,11 @@ const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
                                           hits for the film (audio/hits.json, kit/timing.js).
   motion-render sync <work> <mp4>         Beat-synced films: measure on the MP4 whether the narration runs
                                           on, the drops and the final hit change the picture on their
-                                          frame, and the picture moves on the kicks and snares.
+                                          frame, and the picture moves on the kicks in the drops.
+  motion-render sheet <work> <mp4> [out.png]
+                                          One contact sheet of the MP4's key moments for a review (the
+                                          middle of each scene, around each drop, the final hit), with
+                                          a .txt naming each tile. Default: <work>/sheet.png.
   motion-render sfx <work>                Make the scenes' sound effects (ElevenLabs) and write
                                           <work>/audio/sfx/preview.m4a to listen to them all in order.
   motion-render prepare <storeDir> <work>/film
@@ -257,12 +262,22 @@ function runBuild([a, b]: string[], fps: number): Promise<void> {
   return build(work, out, fps);
 }
 
+function runSheet(work: string, mp4: string, out?: string): void {
+  const file = out ? resolve(out) : join(work, "sheet.png");
+  const names = writeSheet(mp4, loadTiming(work), file);
+  for (const n of names) console.log(n);
+  console.log(
+    `sheet: ${file} (${names.length} frames; names in ${file.replace(/\.png$/, "")}.txt)`
+  );
+}
+
 const COMMANDS = new Map<string, Command>([
   ["narrate", { args: [1, 1], run: ([w]) => runNarrate(resolve(w!)) }],
   ["bgm", { args: [1, 1], run: ([w]) => runBgm(resolve(w!)) }],
   ["score", { args: [1, 1], run: ([w]) => runScore(resolve(w!)) }],
   ["sync", { args: [2, 2], run: ([w, m]) => runSync(resolve(w!), resolve(m!)) }],
   ["sfx", { args: [1, 1], run: ([w]) => runSfx(resolve(w!)) }],
+  ["sheet", { args: [2, 3], run: ([w, m, o]) => runSheet(resolve(w!), resolve(m!), o) }],
   ["kit", { args: [1, 1], run: ([w]) => runKit(resolve(w!)) }],
   ["prepare", { args: [2, 2], run: ([s, f]) => runPrepare(s!, f!) }],
   ["stills", { args: [3, 3], run: ([f, o, t]) => stills(f!, o!, t!) }],

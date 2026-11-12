@@ -120,7 +120,7 @@ function peaks(m: Motion, fps: number, timing: Timing): SyncResult {
     );
     if (x < 4)
       problems.push(
-        `${c.what} at ${clock(c.t)}: the picture changes only ${x.toFixed(1)}x its usual large change (needs 4x): flash, shake or cut on it`
+        `${c.what} at ${clock(c.t)}: the picture changes only ${x.toFixed(1)}x its usual large change (needs 4x): change the whole picture on this hit, in the way the story's event calls for`
       );
     else if (Math.abs(ms) > 1000 / fps + 10)
       problems.push(`${c.what} at ${clock(c.t)}: the change is ${ms.toFixed(0)} ms off the hit`);
@@ -196,7 +196,7 @@ function reactions(
     );
     if (name === "kicks" && (on.rate < 0.8 || on.rate - off.rate < 0.4))
       problems.push(
-        `kicks in the drops: the picture moves on ${pct(on.rate)} of them, ${pct(off.rate)} with no hit (needs 80%, and 40 points more than with no hit): let the drop's driving thing (an engine, a piston, a press) answer every kick, and settle within an 8th`
+        `kicks in the drops: the picture moves on ${pct(on.rate)} of them, ${pct(off.rate)} with no hit (needs 80%, and 40 points more than with no hit): let the thing that drives the story answer every kick, large enough to be seen, and settle within an 8th`
       );
   }
   return { lines, problems };
@@ -212,7 +212,9 @@ export async function measureSync(
   const bpm = timing.bpm;
   if (!bpm) throw new Error("timing.json has no bpm: sync measures beat-synced films only");
   const motion = await motionOf(mp4);
-  const fps = motion.frames / timing.total;
+  // The film renders at a whole frame rate. Its MP4 can decode a frame short, and frames/total would
+  // then time every later frame late (11 ms at 57 s of a 60 fps film).
+  const fps = Math.round(motion.frames / timing.total);
   const parts = [
     narration(timing, script, 240 / bpm),
     peaks(motion, fps, timing),

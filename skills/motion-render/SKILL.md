@@ -13,7 +13,8 @@ argument-hint: "<動画のテーマ。長さ・出力先などの指定があれ
 **音ハメを当たり前の品質にする。** 新しく作る動画は、次の順に時間を決める。
 
 1. **語り**が時間を決める。語りは途切れさせない（場面の間は 1 小節以内）
-2. **映像**は語りに合わせて山場を作る。山場では、多少過剰に感じても下の演出を全部入れる。
+2. **映像**は語りに合わせて山場を作る。演出は主題から生み、手法の見本を並べない（html-film.md の「演出」）。
+   山場では画面全体を一打で大きく切り替える。強さは切り替えの大きさで出し、飾りを足さない。
    山場の外では、場面の動き（出る、着く、引かれる）を拍と一打の時刻に置くだけにし、理由の無い物を一打で跳ねさせない
 3. **曲**はその山場に合わせて組み立てる。Lyria に「各時刻に画面で何が起き、曲がどうするか」を渡し、返ってきた生の演奏を
    小節単位で並べ替えて山場に合わせる。ドラムは打ち込まない。曲から一打ずつ検出し、全開ではキックに映像の動力を応えさせる
@@ -28,7 +29,7 @@ Claude Motion を使うのは、利用者が Motion を指定したときと、�
 | 項目           | 既定                                                                                                                                             |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 長さ           | テーマの中身から決める。上限はない。1 つの仕組みなら 60〜90 秒（8〜11 場面）、段階や比較が多いテーマは数分。最終的にはナレーションの長さで決まる |
-| 曲の作風・速さ | テーマから下の「曲の作風」の表で決める                                                                                                           |
+| 曲の作風・速さ | 題材の速さ・温度・質感から毎回決める（下の「曲の作風」）                                                                                         |
 | 見た目・配色   | テーマに合わせて決める（references/html-film.md の「作風」）。利用者の組織に既定のデザインシステムがあればその配色                               |
 | 声・話速       | `Kore`、1.1 倍速                                                                                                                                 |
 | 出力先         | 指定が無ければ `$MOTION_RENDER_OUT_DIR`、無ければカレントディレクトリ。カレントが git リポジトリなら `~/Movies` など作業用でない場所にする       |
@@ -80,14 +81,14 @@ Claude Motion を使うのは、利用者が Motion を指定したときと、�
 
 ```json
 {
-  "title": "ロケットが宇宙へ届くまで",
-  "bgm": "jazzy drum and bass, 172 BPM",
-  "bpm": 172,
+  "title": "<題>",
+  "bgm": "see score.txt",
+  "bpm": <題材から決めた速さ>,
   "scenes": [
-    { "id": "title", "name": "タイトル", "narration": "ロケットは、どうやって宇宙へ届くのか。…", "section": "intro" },
-    { "id": "count", "name": "最終確認", "narration": "発射の 1 分前。…", "section": "build" },
-    { "id": "ignite", "name": "点火", "narration": "3 秒前、9 基のエンジンが点火。…" },
-    { "id": "liftoff", "name": "リフトオフ", "narration": "リフトオフ。…", "section": "drop" }
+    { "id": "open", "name": "<場面の名前>", "narration": "<語り>", "section": "intro" },
+    { "id": "rise", "name": "<場面の名前>", "narration": "<語り>", "section": "build" },
+    { "id": "turn", "name": "<場面の名前>", "narration": "<語り>" },
+    { "id": "peak", "name": "<場面の名前>", "narration": "<語り>", "section": "drop" }
   ],
   "score": { "take": 3, "bars": "0-11,12-18,20-29,35-42,-1" }
 }
@@ -108,22 +109,26 @@ Claude Motion を使うのは、利用者が Motion を指定したときと、�
 
 ### 1. 原稿と山場を決める
 
-テーマを、1 場面 1 つの出来事に分ける。冒頭で「何の話か」、最後で「結局どうなるか」を 1 文で言う。
+先に html-film.md の「演出」を読み、主題の中の力と、起きたら戻らない出来事を見つけ、冒頭に置く問い（見る人が何を待つのか）を決める。
+題材が抽象的なら、その仕組みが実際に働いている具体的な場面を舞台にする。
+
+テーマを、1 場面 1 つの出来事に分ける。冒頭で問いを立て、最後で「結局どうなるか」を 1 文で言う。
 1 場面のナレーションは 1〜2 文（話して 4〜8 秒）。正確さを優先し、自信がない部分は公式ドキュメントで確かめる。
 
-続けて、話の盛り上がりから曲の区間を決め、場面に `section` を付ける。曲の起伏は話の起伏に従わせる。
-決まった型（溜め → 止め → 全開を 2 回）に話を当てはめない。
+**語りの決まり:**
 
-- **全開（`drop`）は 1〜2 回**（2 分を超えるなら 3 回まで）。話が動く場面に置く: 答えが出る、仕組みが動き出す、
-  限界を越える。2 回置くなら 2 回目を大きくする
-- **曲を止めるのは 1 本に 1 回まで。** 止める理由が話の中にある所にだけ置く: 秒読みの 0、エンジンが止まる、
-  ぶつかる直前、問いを投げて答えを待つ瞬間。止めるのは 1 小節までにし、次の小節で全開に入る。
-  止めを繰り返すと、曲が何度も切れたように聞こえ、止めの意味が薄れる（`score` が 2 回目から止める）
-- 止めを置かない全開は、溜め（`build`）から途切れずに上がって入る: 刻みが細かくなり、音が厚くなり、そのまま全開になる
-- 全開と全開の間は落ち着いた区間（`groove`）にする。刻みを残したまま音を減らし、次の溜めにつなぐ。
-  `break`（音を大きく減らす区間）は、話に理由があるときだけ 1 回置く。無音にはしない
-- 最初の場面は `intro`、最後の 1〜2 場面は `outro` か `groove`。最後の語りの後の小節の頭に「最後の一打」が来る（自動）
-- 区間は場面の頭にしか置けない。区間のない場面は前の区間を続ける
+- 語りは、今起きている出来事を言う。仕組みの解説は、出来事の合間に短く入れる
+- 山場の前の語りは、次に何が起きるかを話の言葉で告げ、その出来事の前に言い終える。止めの小節には声を置かない
+- 全開の場面の語りは、出来事の一部になる短い一声から始める（何かが始まった、届いた、つながった、を一言で）。
+  説明はその後に続ける
+- 映像や曲の演出そのもの（色が変わる、曲が止まる、もう一段上がる）を語りで説明しない
+
+続けて、話の起伏から曲の区間を決め、場面に `section` を付ける。曲の起伏は話の起伏と同じ形にする。
+どこで上がり、どこで引き、どこで休むかは話から決め、決まった型に話を当てはめない。
+
+- 山場（`drop`）の数は内容から決める。静かな内容なら、山場を置かなくてよい
+- 曲を止めるのは 1 本に 1 回まで（`score` が 2 回目から止める）。止めるなら、話の中に止まる理由がある所に置く
+- 区間は場面の頭にしか置けない。区間のない場面は前の区間を続ける。最後の語りの後の小節の頭に「最後の一打」が来る（自動）
 
 ### 2. ナレーションを作る（場面の秒数が決まる）
 
@@ -135,13 +140,15 @@ motion-render narrate <work>
 
 ### 3. 映像の計画を書く
 
-[references/html-film.md](references/html-film.md) を読む（特に「音ハメ」の節）。`motion-render kit <work>` で
+[references/html-film.md](references/html-film.md) を読む（特に「演出」と「音ハメ」の節）。`motion-render kit <work>` で
 `<work>/film/` にプレーヤー・部品・フォント・GSAP・場面の秒数を置き、`<work>/plan.md` を書く。
 
+- **演出の表**（html-film.md の「演出の表」）: 入れる演出ごとに、話の出来事・原因・告知・引き・曲の理由を 1 行で書く。
+  空欄が出たら、演出を削らず、原稿（手順 1）に戻って出来事や告知を足す
+- **強さの曲線**: 場面ごとの絵と曲の強さ（10 段階）。最大の瞬間を最重要の出来事に先に固定する
+- **一打の役**: 全開でキックに応える「動力」、溜めで一打ごとに進む物、一打で動かさない物（文字、背景、自分の拍を持つ物）。
+  どれも題材から決める
 - 場面ごとに、見せるもの、使う部品、動きとその秒、場面をまたいで残る物の状態（html-film.md の「絵コンテと秒の計画」）
-- 曲の区間ごとに、html-film.md の「必ず入れる演出」の表のどれをどの物で見せるか。まず全開でキックに応える
-  「動力」を 1 つ決める。一打で動く理由がその物にあること（例: ロケットならエンジンの炎、工場ならプレス、通信なら送信機のランプ）
-- 一打で動かさない物も決める: 自分の拍を持つ物（心臓、時計、歩み）、文字、背景
 
 ### 4. 曲の指示文を書き、候補を作る
 
@@ -155,7 +162,7 @@ motion-render bgm <work>
 
 ### 5. 映像を書く
 
-待つ間に `<work>/film/index.html` を書く。音ハメの動き（一打の反応、カメラ、閃光、揺れ、大きな文字、計器）は
+待つ間に `<work>/film/index.html` を書く。音ハメの動き（一打の反応、溜めで進む物、カメラ、山場の切り替え、大きな文字）は
 `film.draw` と `kit/beat.js` で、時刻だけから描く（html-film.md の「音ハメ」）。曲の一打の一覧は手順 6 の後に
 `kit/timing.js` に入るので、映像はその前に書いてよい。
 
@@ -172,8 +179,11 @@ motion-render score <work>
 ```
 
 選んだ小節を映像の速さに合わせて並べ（`audio/score.wav`）、その曲から一打ずつ検出して `audio/hits.json` と
-`film/kit/timing.js` に書く。映像の小節ごとの表と、山場の点検（`check:` の行）を出す。
+`film/kit/timing.js` に書く。映像の小節ごとの表と、曲の目立つ瞬間（`moment:` の行）と、山場の点検（`check:` の行）を出す。
 `check:` の行が無くなるまで `score` の並びを直して、`score` をやり直す（数秒）。
+
+続けて演出の表に戻る。`moment:` の行（曲が急に抜ける、戻る、単発の一打）ごとに、話の出来事を当てて映像に入れる。
+当てる出来事が無い瞬間は、小節を差し替えて消す（html-film.md の「曲が届いたら」）。
 
 ### 7. 確認する
 
@@ -185,6 +195,7 @@ motion-render stills <work>/film <work>/stills <秒をカンマ区切り>
 - `check` は配置に加え、短すぎる文字（大きな文字が 2 秒未満で消える）と、巻き戻しで変わる絵を止める。`layout ok` まで直す
 - 静止画は、各場面の中ほどと、全開の 1 拍前・全開の瞬間・その 1 拍後・最後の一打を見る。文字が読めるか、
   物が画面の外に出ていないか、地面と物の位置が合っているかを見る
+- 演出の良し悪しは、自分で判定しない。手順 8 の MP4 を、制作の経緯を知らない批評役に見せ、直す（html-film.md の「見直し」）
 
 ### 8. MP4 にする
 
@@ -212,56 +223,43 @@ motion-render build <work> [<出力.mp4>]
 
 ### 曲の作風
 
-生のドラムが入った作風にする（一打を検出して映像を動かすため）。テーマで選ぶ。
+作風は毎回、題材から決める。決まったジャンルの割り当ては無い。
 
-| テーマの種類                       | 作風（score.txt に書く言葉）                                                   | 速さ     |
-| ---------------------------------- | ------------------------------------------------------------------------------ | -------- |
-| 乗り物・宇宙・速さ・競争           | late-night jazz-flavoured drum and bass, live jazz breakbeat, Rhodes, sub bass | 170〜174 |
-| ソフトウェア・仕組み・データ・道具 | late-90s big beat, live funk breakbeat, filtered bass riff, guitar stabs       | 126〜136 |
-| 科学・自然・歴史・物語             | cinematic breakbeat, live drums, strings and piano                             | 110〜120 |
-| 製品・明るい話題・暮らし           | funk with a live drum kit, slap bass, clavinet, horns                          | 112〜122 |
-| 振り返り・しっとり・人の話         | liquid drum and bass, half-time feel, soft Rhodes and pads                     | 170〜174 |
+- 題材の速さ（展開が速いか、ゆっくりか）、温度（緊張、高揚、静けさ、温かさ）、質感（硬い・柔らかい、乾いた・湿った、機械・自然・人）から考える
+- ジャンルは広く探す。前に作った動画と同じ作風に寄せない
+- 条件は 3 つだけ: 打楽器の一打がはっきり聞こえる（一打を検出して映像を動かすため）、速さが一定、4/4 拍子（小節を 4 拍として数えるため）
+- 速さは話の速さから決める。100 未満にしない（1 小節が長いと、区間の頭を小節にそろえたときに語りの間が延びる）。
+  ゆっくりした題材は、速さを保ったまま打つ数を減らす（拍の半分の感じで刻む）
+- 歌は入れない（語りとぶつかる）
 
-EDM の上昇音、うねるベース、きらびやかなシンセの壁、歌は使わない（騒がしく安っぽくなる）。
-速さは 100 未満にしない。1 小節が長いと、区間の頭を小節にそろえたときに語りの間が延びる。
+曲の性格は、絵と同じく素材・質感・態度の語と、避ける語で書く（html-film.md の「演出」の「書く前に決める」）。
+依頼の言葉やジャンル名から連想される定番の楽器や奏法を並べると、型をなぞった曲になる。
+音の密度（音数と余白）、抑揚（どこまで上げ、どこで引くか）、質感、空間の広さで書く。
+山場は、音量や派手さでなく、それまで抑えていた要素が揃うことで作る。上昇音や音の壁のような足し算の効果に頼らない。
 
 ### 指示文（score.txt）の書き方
 
 演出の意図そのものを書く。曲の説明だけでなく、各時刻に画面で何が起き、曲がそのときどうするかを書く。
 時刻は narrate の表から写す（`m:ss.s`）。次の形にする。
 
+形式だけを示す（区間の数・並び・言葉は内容から決める）:
+
 ```
-Score for a 91-second animated film about a rocket launch, from the final countdown to reaching orbit.
-Write it as real music that follows the picture exactly: instrumental late-night jazz-flavoured drum and bass
-at exactly 172 BPM in 4/4, steady tempo throughout. Warm Rhodes electric piano with jazz chords, a deep sub
-bass and an upright bass, and a real, crisp, live-sounding jazz breakbeat with ghost notes, a hard snare on
-beats 2 and 4, rolling 16th-note hi-hats, rides and crash cymbals. Cool and cinematic, never cheesy: no EDM
-risers, no wobble bass, no supersaw, no vocals.
+Score for a <長さ>-second film about <題材と、その中で起きること>.
+Write it as real music that follows the picture exactly: instrumental <題材から決めた作風>, at exactly <bpm> BPM in 4/4,
+steady tempo throughout. <音の性格>. <避ける物>.
 
 What happens on screen, and what the music does at each moment:
 
-[0:00 - 0:08] Title. A rocket stands on the pad at night. Rhodes chords and a soft sub only, no drums. Intensity: 2/10
-[0:08 - 0:17] The final checks. A clock ticks: a closed hi-hat in 8th notes enters alone. Tension rises slowly. Intensity: 3/10
-[0:17 - 0:26] The nine engines ignite one after another, then thrust builds. Heavy kick hits come in, then a snare
-roll builds from quarter notes to 8ths to 16ths, getting louder and faster. At 0:25.1 everything cuts to complete
-silence for one bar. Intensity: 6/10 rising to 9/10
-[0:26 - 0:40] LIFTOFF at exactly 0:26.5: the full band and the breakbeat slam in on the downbeat with a crash cymbal.
-Driving rolling groove. Intensity: 9/10
-[0:48 - 0:56] The first stage burns out and falls away. The band drops back to bass, Rhodes and a soft hi-hat pulse,
-sparse but still moving, never silent. From 0:53.0 the drums build back bar by bar, kicks and snares getting
-busier and louder, rising straight into the next drop with no gap. Intensity: 4/10 rising to 8/10
-[0:56 - 1:13] At exactly 0:55.8 the second drop comes straight out of that build: the full breakbeat, even harder
-and busier. Intensity: 10/10
-[1:28 - 1:31] At 1:27.9 one final hit on the downbeat with a crash, then let it ring out to silence. Intensity: 3/10
+[<開始> - <終了>] <画面で起きること>. <曲がすること>. Intensity: <n>/10
+[<開始> - <終了>] <画面で起きること>. At exactly <秒> <曲に起きること>. Intensity: <n>/10
+…
 ```
 
-- 1 行目に、長さ・題材・作風・速さ（exactly ○ BPM in 4/4, steady tempo）・楽器（real, live-sounding drums）・避けるものを書く
-- 区間ごとに 1 行。「画面で起きること」「曲がすること」「Intensity: n/10」を書く
-- 山場は秒まで書き、言葉を強くする: 全開は `slam in on the downbeat at exactly m:ss.s with a crash`、
-  最後は `one final hit on the downbeat at m:ss.s, then let it ring out to silence`
-- `cuts to complete silence for one bar at m:ss.s` と書くのは、1 本に 1 回の止めだけ。ほかの全開の前は
-  `rising straight into the drop with no gap` と書く
-- 落ち着いた区間（`groove`・`break`）は `sparse but still moving, never silent` と書き、刻みを残させる
+- 1 行目に、長さ・題材・作風・速さ（exactly ○ BPM in 4/4, steady tempo）・音の性格・避けるものを書く
+- 区間ごとに 1 行。画面で起きること、曲がすること、強さ（`Intensity: n/10`）を書く
+- 山場・止め・最後の一打は、秒と、そこで曲に起きることを、曖昧さの無い言葉で書く。言い回しは内容に合わせて毎回考える
+- Lyria は秒の指示をずらすことがある。ずれは手順 6 の並べ替えで直す
 
 ### 候補と小節の選び方
 
@@ -276,14 +274,11 @@ Lyria は区間を 4・8 小節に丸め、0〜4 小節ずらし、ときに抜�
 1. **候補を選ぶ。** 指示した山場がそろっている候補にする: `full` の小節（全開の頭）、止めを指示した所の `quiet` か
    `no drums` の小節、終わり近くの「1 拍目に一打があり、次の小節から静かになる」小節（最後の一打）。
    速さの調整（表の 1 行目の「played ○% faster」）が 5% を超える候補は避ける
-2. **区間ごとに割り当てる。** narrate の表の各区間の頭の小節に、その区間に合う候補の小節が来るようにする
-   - `drop`: `full` の小節（`▲` があればそれ）を区間の頭に置き、続く `full` の小節を順に並べる
-   - 止め（1 本に 1 回）: その全開の直前の 1 小節に、候補の `quiet` か `no drums` の小節を置く
-   - 止めを置かない全開の直前: 大きさが上がっていく `drums` の小節（候補の、全開の 1 小節前の小節が一番つながる）
-   - `build`: `drums` で大きさが上がっていく小節、または刻みが細かくなる小節
-   - `groove`・`break`: 刻みの残る静かな `drums` の小節（`▼` の付いたものでよい）。`no drums` を続けない
-   - `intro`・`outro`: `no drums` か、静かな `drums` の小節
-   - 最後の一打の小節: 1 拍目に `K` か `X` があり、次から静かになる小節。そのあとは余韻の小節か `-1`
+2. **区間ごとに割り当てる。** 各区間に、演出の表と強さの曲線が求める性格の小節を、表の目印と大きさを見て置く。
+   `score` が検査する所だけは、次を満たす小節にする
+   - 山場の頭: 1 拍目に一打があり、前の小節より小さくない、大きな（`full`）小節
+   - 止めの小節: 大きく静かになる小節
+   - 最後の一打の小節: 1 拍目に一打があり、次の小節から静かになる小節。そのあとは余韻の小節か `-1`
 3. **区間の中は候補の小節を続けて並べる。** つなぎ目は区間の境目にだけ作る。同じ小節を 3 回以上続けない。
    `-1`（無音の小節）は最後の一打の後にだけ使う。曲の途中の無音は、演奏の止めより不自然に聞こえる
 4. `motion-render score <work>` の `check:` の行が無くなるまで直す。`the music stops dead N times` が出たら、
@@ -296,31 +291,17 @@ Lyria は区間を 4・8 小節に丸め、0〜4 小節ずらし、ときに抜�
 ## 効果音
 
 `ELEVENLABS_API_KEY` があるときだけ付ける。無ければ付けずに進め、報告で「効果音はキーが無いので付けていない」と書く。
-山場とドラムの一打は曲が鳴らすので、効果音はそれ以外の出来事（カードが出る、チップが着く、チェックが付く）にだけ付ける。
 
-置き方:
+効果音は、画面で目に見える出来事の音である。曲が鳴らしている一打と山場には置かず、曲と競わせない。
+何に音を付け、どんな音にするかは、内容と作風から決める。音は語りより前に出ないこと。
 
-- 画面で目に見える出来事にだけ置く: カードが現れる、チップが動く・着く、流れ図の段が光る、チェックが付く、
-  取り消し線が引かれる、拒否される。`at` は、その動きに渡した `film.at(場面, 秒)` の秒にする
-- 数: 1 場面 1〜3 個。0.4 秒以内に続く 2 つの動きには、目立つ方にだけ付ける。全開の頭から 1 小節の間には置かない
-- 同じ種類の出来事には同じ `prompt` と `duration` を使う（音がそろい、同じものは 1 回しか作られない）
-- 短く: 0.5〜1.5 秒。長い上昇音・環境音・音楽・声は頼まない
-- `prompt` は英語で、柔らかさを指定する（`soft`・`subtle`・`gentle`）。ナレーションより前に出ないこと
+道具の決まり:
 
-| 出来事             | `prompt` の例                          | `duration` |
-| ------------------ | -------------------------------------- | ---------- |
-| カード・部品が出る | soft UI pop                            | 0.6        |
-| カードが横から入る | soft paper slide swish                 | 0.6        |
-| チップが移動する   | quick airy whoosh                      | 0.8        |
-| チェックが付く     | soft tick click                        | 0.5        |
-| 取り消し線         | short soft marker strike               | 0.5        |
-| 段が光る・強調     | gentle glassy chime                    | 1.0        |
-| 拒否・失敗         | soft muted denial thud, short low bump | 0.6        |
-| 完了・成功         | soft positive notification chime       | 1.2        |
-
-`motion-render sfx <work>` で作る（裏で動かしてよい）。`build` は、効果音ごとに音量をナレーションの平均より 4 dB 下にそろえ、
-`volume` を掛け、`duration` で切り、両端をフェードしてから混ぜる。無音で返ってきた効果音は `sfx` が作り直し、3 回とも無音なら止まる。
-試聴用の `audio/sfx/preview.m4a` のパスと順番を報告し、合わない音があれば教えてほしいと頼む。
+- `script.json` の場面ごとの `sfx` に、`at`（その動きに渡した `film.at(場面, 秒)` の秒）・`prompt`（英語）・`duration`（0.5〜10 秒）を書く
+- 同じ `prompt` と `duration` の音は 1 回しか作られない。同じ種類の出来事には同じ音を使うと、音もそろう
+- `motion-render sfx <work>` で作る（裏で動かしてよい）。`build` は、効果音ごとに音量をナレーションの平均より 4 dB 下にそろえ、
+  `volume` を掛け、`duration` で切り、両端をフェードしてから混ぜる。無音で返ってきた効果音は `sfx` が作り直し、3 回とも無音なら止まる
+- 試聴用の `audio/sfx/preview.m4a` のパスと順番を報告し、合わない音があれば教えてほしいと頼む
 
 **表記**: 月額プランなしで作った効果音は、商用に使えず、公開するときは題名に `elevenlabs.io` か `11.ai` を入れる
 （ElevenLabs のヘルプ「Can I publish the content I generate on the platform?」）。効果音を付けた動画では、
