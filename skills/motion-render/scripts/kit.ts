@@ -1,10 +1,11 @@
 // Sets up <work>/film for an html film: the player, the stylesheets (and the parts of parts.css), GSAP, the Japanese fonts
 // and the scene times. Claude writes <work>/film/index.html against these files.
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { loadTiming } from "./work.ts";
+import { readJson } from "./json.ts";
 
 const require = createRequire(import.meta.url);
 const KIT = fileURLToPath(new URL("../kit/", import.meta.url));
@@ -30,14 +31,26 @@ function fontCss(file: string, out: string): string {
     });
 }
 
-// Rewrites kit/timing.js from timing.json. build runs this too, so the film always uses the
-// scene times of the current narration.
+// Rewrites kit/timing.js from timing.json, and the drum hits of the rendered score
+// (audio/hits.json) when there is one. build runs this too, so the film always uses the scene times
+// of the current narration and the hits of the current score.
 export function writeKitTiming(work: string): void {
-  const { total, scenes } = loadTiming(work);
-  const data = { total, scenes: scenes.map(({ id, start, dur }) => ({ id, start, dur })) };
+  const { total, scenes, bpm, end } = loadTiming(work);
+  const data = {
+    total,
+    ...(bpm === undefined ? {} : { bpm, end }),
+    scenes: scenes.map(({ id, start, dur, section }) => ({
+      id,
+      start,
+      dur,
+      ...(section ? { section } : {}),
+    })),
+  };
+  const hitsFile = join(work, "audio", "hits.json");
+  const hits = existsSync(hitsFile) ? JSON.stringify(readJson(hitsFile)) : "null";
   writeFileSync(
     join(work, "film", "kit", "timing.js"),
-    `window.__timing = ${JSON.stringify(data)};\n`
+    `window.__timing = ${JSON.stringify(data)};\nwindow.__hits = ${hits};\n`
   );
 }
 
@@ -45,7 +58,7 @@ export function writeKit(work: string): string {
   const film = join(work, "film");
   const kit = join(film, "kit");
   mkdirSync(join(kit, "fonts"), { recursive: true });
-  for (const f of ["player.js", "base.css", "styles.css", "parts.css"])
+  for (const f of ["player.js", "beat.js", "base.css", "styles.css", "parts.css"])
     copyFileSync(join(KIT, f), join(kit, f));
   const gsap = require.resolve("gsap/dist/gsap.min.js");
   copyFileSync(gsap, join(kit, basename(gsap)));

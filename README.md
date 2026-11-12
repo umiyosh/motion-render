@@ -8,7 +8,9 @@ An Agent Skill that turns a theme into an **animated explainer video with narrat
 /motion-render:motion-render Make a video that explains how GitHub Actions authenticates to Google Cloud with Workload Identity Federation
 ```
 
-From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and BGM that fits the theme (Lyria), builds the animation, and renders it to an MP4 on your machine. The animation is made with [Claude **Motion**](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) when your account has it, and as an HTML page when it does not.
+From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and music scored to the climaxes of the animation (Lyria), builds the animation, and renders it to an MP4 on your machine.
+
+**Every film is cut to the beat.** The narration sets the time, the animation builds its big moments inside it, and the music follows those moments (it builds into each drop, and stops dead at most once, where the story holds its breath). The music is Lyria's own performance, generated from a description of what happens on screen at each moment and rearranged bar by bar to land on the cues. Every drum hit is detected in the music: the scenes' own moves start on the beat, and in the drops the thing that drives the story (an engine, a press) answers every kick. The finished MP4 is measured for pauses in the narration, the timing of the big moments and the reactions to the hits.
 
 ## Demo
 
@@ -28,7 +30,7 @@ More videos, including one with sound effects, are in [Examples](https://github.
 
 ## Two ways to make the animation
 
-Narration, BGM, sound effects and the MP4 are the same either way. Only the animation is made differently, and Claude picks the way by itself: Motion if your account offers it, HTML otherwise.
+Narration, BGM, sound effects and the MP4 are the same either way. Only the animation is made differently. New films are made as HTML, since only an HTML film can react to every drum hit. [Claude **Motion**](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) is used when you ask for it, and for turning an existing Motion film into an MP4.
 
 |                        | Claude Motion                                                  | HTML                                                                                                                        |
 | ---------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -137,18 +139,20 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 
 Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md).
 
-| Command                                           | What it does                                                                                                                                                                                                                                |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `motion-render narrate <work>`                    | Generates narration from `script.json` and writes scene lengths to `timing.json`                                                                                                                                                            |
-| `motion-render bgm <work>`                        | Generates the BGM from the `bgm` prompt in `script.json`                                                                                                                                                                                    |
-| `motion-render sfx <work>`                        | Generates the sound effects in `script.json` and a `preview.m4a` of them in order                                                                                                                                                           |
-| `motion-render prepare <storeDir> <work>/film`    | Motion: expands a Motion film's data into a directory it can render                                                                                                                                                                         |
-| `motion-render kit <work>`                        | HTML: sets up `<work>/film` with the player, styles, GSAP, the Japanese fonts and the scene times. Claude then writes `film/index.html`                                                                                                     |
-| `motion-render check <work>/film [<scene file>…]` | HTML: checks the layout every 0.1 s for overlaps, things sticking out of their box or the frame, things hidden under others, and text that is too small or too faint. Given scene files (names in `film/scenes/`), checks only their scenes |
-| `motion-render stills <filmDir> <outDir> 0,5,12`  | Writes still frames for checking (an HTML film is checked first)                                                                                                                                                                            |
-| `motion-render build <work> [out.mp4]`            | Mixes narration, BGM and sound effects and renders the MP4. Stops if any is missing, or if an HTML film fails the layout check                                                                                                              |
-| `motion-render times <work>`                      | Shows how long each step took, as a table (each command, and Claude's work between them)                                                                                                                                                    |
-| `motion-render --version`                         | Prints the version                                                                                                                                                                                                                          |
+| Command                                           | What it does                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `motion-render narrate <work>`                    | Generates narration from `script.json` and writes scene lengths to `timing.json`. With `bpm`, scenes start on beats and sections on bar lines, and a table of the times is printed                                                                                                                                      |
+| `motion-render bgm <work>`                        | With `bpm`, generates four takes from `score.txt` and prints each bar by bar (level, kicks, snares, hats). Without it, one piece from the `bgm` prompt in `script.json`                                                                                                                                                 |
+| `motion-render score <work>`                      | Plays the bars chosen in `script.json`'s `score` onto the film's tempo and bars, hands the drum hits to the film, and checks that the music lands on the cues                                                                                                                                                           |
+| `motion-render sync <work> <mp4>`                 | Measures on the MP4 the pauses in the narration, the change of the picture on each drop and on the final hit, and the reactions to the kicks in the drops (`build` runs it too)                                                                                                                                         |
+| `motion-render sfx <work>`                        | Generates the sound effects in `script.json` and a `preview.m4a` of them in order                                                                                                                                                                                                                                       |
+| `motion-render prepare <storeDir> <work>/film`    | Motion: expands a Motion film's data into a directory it can render                                                                                                                                                                                                                                                     |
+| `motion-render kit <work>`                        | HTML: sets up `<work>/film` with the player, styles, GSAP, the Japanese fonts and the scene times. Claude then writes `film/index.html`                                                                                                                                                                                 |
+| `motion-render check <work>/film [<scene file>…]` | HTML: checks the layout every 0.1 s for overlaps, things sticking out of their box or the frame, things hidden under others, text that is too small or too faint, big text gone before it can be read, and frames that change after seeking back. Given scene files (names in `film/scenes/`), checks only their scenes |
+| `motion-render stills <filmDir> <outDir> 0,5,12`  | Writes still frames for checking (an HTML film is checked first)                                                                                                                                                                                                                                                        |
+| `motion-render build <work> [out.mp4]`            | Mixes narration, BGM and sound effects and renders the MP4 (a film cut to the beat at 60 fps, measured with `sync` afterwards). Stops if any is missing, or if an HTML film fails the layout check                                                                                                                      |
+| `motion-render times <work>`                      | Shows how long each step took, as a table (each command, and Claude's work between them)                                                                                                                                                                                                                                |
+| `motion-render --version`                         | Prints the version                                                                                                                                                                                                                                                                                                      |
 
 | Environment variable    | Effect                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -231,13 +235,20 @@ package.json              # Plugin dependencies, installed by Claude Code with t
 package-lock.json
 tsconfig.json             # TypeScript settings (type check only; Node runs the .ts files directly)
 skills/motion-render/     # The skill (read by both the skills CLI and the plugin)
-  SKILL.md                # Instructions for Claude (setup, storyboard, script and BGM choices)
+  SKILL.md                # Instructions for Claude (setup, script and big moments, music style, music direction and choosing bars)
   package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one)
-  references/html-film.md # How Claude writes an HTML film: layout, motion, and reading the layout check
+  references/html-film.md # How Claude writes an HTML film: cutting to the beat, layout, motion, and reading the checks
   references/pipeline.md  # How the steps depend on each other (what waits, what runs in the background), and how to add a step
-  kit/                    # The player, base styles and drawing styles that `kit` copies into an HTML film, and the parts (parts.css)
+  kit/                    # The player, the beat helpers (beat.js), base styles and drawing styles that `kit` copies into an HTML film, and the parts (parts.css)
   scripts/cli.ts          # The motion-render command
-  scripts/audio.ts        # Narration and BGM generation, audio mixing
+  scripts/beatcli.ts      # The commands of a film cut to the beat (timing table, takes, score, sync)
+  scripts/audio.ts        # Narration and BGM generation, the takes, audio mixing
+  scripts/score.ts        # Measures takes bar by bar and plays the chosen bars onto the film's bars
+  scripts/signal.ts       # Decoding audio, filters and envelopes
+  scripts/tempo.ts        # Tempo and downbeat
+  scripts/hits.ts         # Drum hits per 16th note
+  scripts/sync.ts         # Measures narration, big moments and hits on the MP4
+  scripts/repeat.ts       # Finds frames that change after seeking back
   scripts/sfx.ts          # Sound effect generation (ElevenLabs), leveling and the listening file
   scripts/work.ts         # script.json validation and scene timing
   scripts/render.ts       # Rendering Motion and HTML films in the browser

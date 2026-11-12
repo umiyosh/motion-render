@@ -51,6 +51,7 @@
   });
   var timeline = gsap.timeline({ paused: true });
   var builders = [];
+  var draws = [];
 
   function el(x) {
     var e = typeof x === "string" ? document.querySelector(x) : x;
@@ -125,6 +126,12 @@
     // Runs fn(timeline) once the fonts are in, so text has its real size when the page measures it.
     build: function (fn) {
       builders.push(fn);
+    },
+    // Calls fn(t) on every frame, after the timeline, with the time in seconds. fn sets every value
+    // it owns from t alone, so a frame is the same however the film got there (beat-synced motion:
+    // kit/beat.js). GSAP tweens remember their start values and can differ after seeking back.
+    draw: function (fn) {
+      draws.push(fn);
     },
     // GSAP x/y that put the center of `what` on the center of `target`, moved by (dx, dy).
     // Use it to send a chip to a card instead of working out pixel offsets by hand. Either may be an
@@ -372,6 +379,9 @@
       boil(t);
       // suppressEvents=false so onUpdate callbacks (count-ups) run on every seek.
       timeline.seek(t, false);
+      draws.forEach(function (fn) {
+        fn(t);
+      });
     },
   };
 })();

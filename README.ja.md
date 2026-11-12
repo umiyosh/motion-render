@@ -8,7 +8,9 @@
 /motion-render:motion-render Workload Identity Federation による GitHub Actions から Google Cloud への認証の仕組みを説明する動画つくって
 ```
 
-この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）とテーマに合う BGM（Lyria）を作ります。最後に、アニメーションを作って手元の MP4 に書き出します。アニメーションは、[Claude **Motion**](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) が使えるアカウントなら Motion で、使えなければ HTML で作ります。
+この一言で、Claude が絵コンテと原稿を書きます。続けて、ナレーション（Gemini TTS）と、映像の山場に合わせて組み立てた BGM（Lyria）を作ります。最後に、アニメーションを作って手元の MP4 に書き出します。
+
+**音ハメが標準です。** 語りが時間を決め、映像がその中に山場を作り、曲がその山場に合わせて入ります（溜めて全開へ。曲を止めるのは、話が息をのむ所の 1 回まで）。曲は、各時刻に画面で何が起きるかを伝えて Lyria に作らせた生の演奏を、小節単位で並べ替えたものです。曲から一打ずつ検出し、場面の動きを拍に乗せ、全開では話を動かす物（エンジン、プレス）がキックのたびに応えます。書き出した MP4 で、語りの途切れ・山場のずれ・一打への反応を測って確かめます。
 
 ## デモ動画
 
@@ -28,7 +30,7 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ## アニメーションの 2 つの作り方
 
-ナレーション・BGM・効果音・MP4 への書き出しは、どちらでも同じです。違うのはアニメーションの作り方だけで、Claude が自動で選びます。Motion が使えるアカウントなら Motion、使えなければ HTML です。
+ナレーション・BGM・効果音・MP4 への書き出しは、どちらでも同じです。違うのはアニメーションの作り方です。新しく作る動画は HTML で作ります（一打ごとの反応を書けるのは HTML だけのため）。[Claude **Motion**](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) は、Motion を指定したときと、既存の Motion の動画を MP4 にするときに使います。
 
 |                  | Claude Motion                                           | HTML                                                                                                                            |
 | ---------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -137,18 +139,20 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 
 動画 1 本ごとに作業フォルダ（`<work>`）を 1 つ使います。中身と `script.json` の書き方は [SKILL.md](skills/motion-render/SKILL.md) にあります。
 
-| コマンド                                              | やること                                                                                                                                                                                                          |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `motion-render narrate <work>`                        | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く                                                                                                                                     |
-| `motion-render bgm <work>`                            | `script.json` の `bgm` の指示から BGM を作る                                                                                                                                                                      |
-| `motion-render sfx <work>`                            | `script.json` の `sfx` から効果音を作り、全部を順に聞ける `preview.m4a` を書く                                                                                                                                    |
-| `motion-render prepare <storeDir> <work>/film`        | Motion: Motion から取得した映像データを、描画できる形に展開する                                                                                                                                                   |
-| `motion-render kit <work>`                            | HTML: `<work>/film` にプレーヤー・スタイル・GSAP・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く                                                                                    |
-| `motion-render check <work>/film [<場面のファイル>…]` | HTML: 0.1 秒ごとに配置を調べ、重なり、箱や画面からのはみ出し、ほかのものの下に隠れたもの、小さすぎる文字や薄すぎる文字を報告する。場面のファイル（`film/scenes/` の名前）を渡すと、そのファイルの場面だけを調べる |
-| `motion-render stills <filmDir> <outDir> 0,5,12`      | 確認用の静止画を書き出す（HTML の映像は先に配置を調べる）                                                                                                                                                         |
-| `motion-render build <work> [out.mp4]`                | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする。どれかが足りないとき、HTML の映像が配置のチェックに通らないときは止まる                                                                             |
-| `motion-render times <work>`                          | 工程ごとにかかった時間を表にする（各コマンドの時間と、その間の Claude の作業の時間）                                                                                                                              |
-| `motion-render --version`                             | 版を表示する                                                                                                                                                                                                      |
+| コマンド                                              | やること                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `motion-render narrate <work>`                        | `script.json` の原稿からナレーションを作り、場面の秒数を `timing.json` に書く。`bpm` があると場面の頭を拍に、区間の頭を小節にそろえ、時刻表を出す                                                                                                               |
+| `motion-render bgm <work>`                            | `bpm` があると `score.txt` の指示から曲の候補を 4 本作り、小節ごとの表（大きさ・キック・スネア・ハイハット）を出す。無ければ `script.json` の `bgm` の指示から BGM を 1 曲作る                                                                                  |
+| `motion-render score <work>`                          | `script.json` の `score`（候補と小節の並び）を映像の速さと小節に合わせて書き出し、曲の一打の一覧を映像に渡す。山場で曲が入るかを点検する                                                                                                                        |
+| `motion-render sync <work> <mp4>`                     | MP4 で、語りの途切れ、全開と最後の一打での画面の変化、全開の区間のキックへの反応を測る（`build` も実行する）                                                                                                                                                    |
+| `motion-render sfx <work>`                            | `script.json` の `sfx` から効果音を作り、全部を順に聞ける `preview.m4a` を書く                                                                                                                                                                                  |
+| `motion-render prepare <storeDir> <work>/film`        | Motion: Motion から取得した映像データを、描画できる形に展開する                                                                                                                                                                                                 |
+| `motion-render kit <work>`                            | HTML: `<work>/film` にプレーヤー・スタイル・GSAP・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く                                                                                                                                  |
+| `motion-render check <work>/film [<場面のファイル>…]` | HTML: 0.1 秒ごとに配置を調べ、重なり、箱や画面からのはみ出し、ほかのものの下に隠れたもの、小さすぎる文字や薄すぎる文字、読む前に消える大きな文字、巻き戻すと変わる絵を報告する。場面のファイル（`film/scenes/` の名前）を渡すと、そのファイルの場面だけを調べる |
+| `motion-render stills <filmDir> <outDir> 0,5,12`      | 確認用の静止画を書き出す（HTML の映像は先に配置を調べる）                                                                                                                                                                                                       |
+| `motion-render build <work> [out.mp4]`                | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする（音ハメの動画は 60fps で、書き出した後に `sync` を測る）。どれかが足りないとき、HTML の映像が配置のチェックに通らないときは止まる                                                                  |
+| `motion-render times <work>`                          | 工程ごとにかかった時間を表にする（各コマンドの時間と、その間の Claude の作業の時間）                                                                                                                                                                            |
+| `motion-render --version`                             | 版を表示する                                                                                                                                                                                                                                                    |
 
 | 環境変数                | 効果                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------ |
@@ -231,13 +235,20 @@ package.json              # プラグインの依存。Claude Code がプラグ�
 package-lock.json
 tsconfig.json             # TypeScript の設定（型の検査用。実行時は Node が .ts をそのまま動かす）
 skills/motion-render/     # スキル本体（skills CLI とプラグインの両方がここを読む）
-  SKILL.md                # Claude が読む手順（準備、絵コンテ・原稿・BGM の決め方を含む）
+  SKILL.md                # Claude が読む手順（準備、原稿と山場、曲の作風・指示文・小節の選び方を含む）
   package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one）
-  references/html-film.md # Claude が HTML の映像を書くときの決まり（配置、動き、配置のチェックの読み方）
+  references/html-film.md # Claude が HTML の映像を書くときの決まり（音ハメの演出と書き方、配置、動き、チェックの読み方）
   references/pipeline.md  # 工程のつながり（何を待ち、何を裏で動かすか）と、工程を足すときの決まり
-  kit/                    # kit が HTML の映像に写すプレーヤーと基本のスタイル、作風のスタイル、部品（parts.css）
+  kit/                    # kit が HTML の映像に写すプレーヤー、音ハメの部品（beat.js）、基本のスタイル、作風のスタイル、部品（parts.css）
   scripts/cli.ts          # motion-render コマンド
-  scripts/audio.ts        # ナレーションと BGM の生成、音声の合成
+  scripts/beatcli.ts      # 音ハメのコマンド（時刻表、曲の候補の表、score、sync）
+  scripts/audio.ts        # ナレーションと BGM の生成、曲の候補、音声の合成
+  scripts/score.ts        # 曲の候補を小節ごとに測り、選んだ小節を映像の小節に並べて書き出す
+  scripts/signal.ts       # 音の読み込みとフィルタ・包絡
+  scripts/tempo.ts        # テンポと小節の頭
+  scripts/hits.ts         # 16 分音符ごとの打音の検出
+  scripts/sync.ts         # MP4 で語り・山場・一打の同期を測る
+  scripts/repeat.ts       # 巻き戻すと変わる絵を見つける
   scripts/sfx.ts          # 効果音の生成（ElevenLabs）、音量のそろえ方、試聴用ファイル
   scripts/work.ts         # script.json の検証と場面の秒数の計算
   scripts/render.ts       # Motion と HTML の映像をブラウザで描画する部分

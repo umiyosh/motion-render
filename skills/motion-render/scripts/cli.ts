@@ -9,10 +9,12 @@ import { fileURLToPath } from "node:url";
 import { openFilm, checkFilmDir, isHtmlFilm, capturePages, type Film } from "./render.ts";
 import { inOrder } from "./inorder.ts";
 import { checkLayout, formatIssue } from "./layout.ts";
+import { repeatIssues } from "./repeat.ts";
 import { writeKit, writeKitTiming } from "./kit.ts";
 import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs, exited, FFMPEG_MS } from "./audio.ts";
 import { limit } from "./limit.ts";
-import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx } from "./work.ts";
+import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx, type Script } from "./work.ts";
+import { runBeatBgm, runScore, runSync, scoreInput, syncReport, timingTable } from "./beatcli.ts";
 import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.ts";
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
@@ -21,7 +23,14 @@ import { stepsTable, timed, workOf } from "./steps.ts";
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
                                           and write the scene lengths to <work>/timing.json.
-  motion-render bgm <work>                Make the BGM from script.json's "bgm" prompt (Lyria).
+  motion-render bgm <work>                Make the BGM from script.json's "bgm" prompt (Lyria). With "bpm":
+                                          four takes from <work>/score.txt, each shown bar by bar.
+  motion-render score <work>              Beat-synced films: play script.json's "score" (a take and its
+                                          bars) onto the film's bars (audio/score.wav) and write its drum
+                                          hits for the film (audio/hits.json, kit/timing.js).
+  motion-render sync <work> <mp4>         Beat-synced films: measure on the MP4 whether the narration runs
+                                          on, the drops and the final hit change the picture on their
+                                          frame, and the picture moves on the kicks and snares.
   motion-render sfx <work>                Make the scenes' sound effects (ElevenLabs) and write
                                           <work>/audio/sfx/preview.m4a to listen to them all in order.
   motion-render prepare <storeDir> <work>/film
@@ -64,9 +73,12 @@ function runPrepare(storeDir: string, filmDir: string): void {
 }
 
 // Prints the layout issues and returns how many there are (0 for a Motion film, which is not checked).
-async function reportLayout(film: Film): Promise<number> {
-  const issues = await checkLayout(film);
-  if (!issues) return 0;
+// After the layout check, frames are compared with a new page to catch frames that change after
+// seeking back (repeat.ts).
+async function reportLayout(film: Film, dir: string, scenes: string[] = []): Promise<number> {
+  const layout = await checkLayout(film);
+  if (!layout) return 0;
+  const issues = [...layout, ...(await repeatIssues(film, dir, scenes))];
   for (const i of issues) console.error(`layout: ${formatIssue(i)}`);
   console.error(issues.length ? `layout: ${issues.length} issues` : "layout: ok");
   return issues.length;
@@ -80,7 +92,7 @@ async function stills(filmDir: string, outDir: string, list: string): Promise<vo
   try {
     for (const t of times)
       writeFileSync(join(outDir, `t_${t.toFixed(2)}.png`), await film.frame(t));
-    await reportLayout(film);
+    await reportLayout(film, filmDir);
     for (const w of await film.warnings()) console.error("runner", w);
   } finally {
     await film.close();
@@ -94,7 +106,7 @@ async function check(filmDir: string, scenes: string[]): Promise<void> {
   const film = await openFilm(filmDir, { pages: capturePages(), scenes });
   let n: number;
   try {
-    n = await reportLayout(film);
+    n = await reportLayout(film, filmDir, scenes);
     // Errors from the page's own code (a path built from NaN, a failed selector) draw nothing and
     // break no layout rule, so the layout check alone would pass them.
     for (const w of await film.warnings()) console.error("runner", w);
@@ -115,12 +127,15 @@ async function runNarrate(work: string): Promise<void> {
   const script = loadScript(work);
   await narrate(work, script);
   const timing = writeTiming(work, script);
-  for (const s of timing.scenes) console.log(`${s.id}\tstart ${s.start}s\tdur ${s.dur}s`);
+  if (timing.bpm) console.log(timingTable(timing));
+  else for (const s of timing.scenes) console.log(`${s.id}\tstart ${s.start}s\tdur ${s.dur}s`);
   console.log(`total: ${timing.total}s -> ${join(work, "timing.json")}`);
 }
 
 async function runBgm(work: string): Promise<void> {
-  const file = await bgm(work, loadScript(work), loadTiming(work).total);
+  const script = loadScript(work);
+  if (script.bpm) return runBeatBgm(work, script, script.bpm);
+  const file = await bgm(work, script, loadTiming(work).total);
   console.log(`bgm: ${file}`);
 }
 
@@ -164,36 +179,60 @@ async function encode(film: Film, fps: number, audio: string, out: string): Prom
   return count;
 }
 
-async function build(work: string, out: string, fps: number): Promise<void> {
-  if (!Number.isFinite(fps) || fps <= 0) throw new Error("--fps must be a positive number");
-  const script = loadScript(work);
-  const timing = loadTiming(work);
-  const missing = timing.scenes
-    .filter((s) => !existsSync(join(work, "audio", `${s.id}.wav`)))
+// The layout check (and the repeat check) of an html film, on pages of its own: they seek back and
+// forth, and frames are captured on new pages that only go forward, as a viewer's player does.
+async function checkBeforeCapture(filmDir: string): Promise<void> {
+  if (!isHtmlFilm(filmDir)) return;
+  const film = await openFilm(filmDir, { pages: capturePages() });
+  try {
+    if (await reportLayout(film, filmDir))
+      throw new Error(
+        `fix the layout issues above in ${join(filmDir, "index.html")}, then build again`
+      );
+  } finally {
+    await film.close();
+  }
+}
+
+function checkInputs(work: string, script: Script): void {
+  const missing = loadTiming(work)
+    .scenes.filter((s) => !existsSync(join(work, "audio", `${s.id}.wav`)))
     .map((s) => s.id);
   if (missing.length)
     throw new Error(
       `narration missing for: ${missing.join(", ")} (run "motion-render narrate ${work}")`
     );
-  bgmFile(work);
+  if (!script.bpm) bgmFile(work);
   checkSfx(work, script);
+}
+
+// Beat-synced films are drawn at 60 fps: at 30, a hit can land up to 33 ms off its frame.
+async function build(work: string, out: string, fpsArg: number): Promise<void> {
+  const script = loadScript(work);
+  const timing = loadTiming(work);
+  const fps = Number.isNaN(fpsArg) ? (script.bpm ? 60 : 30) : fpsArg;
+  if (!Number.isFinite(fps) || fps <= 0) throw new Error("--fps must be a positive number");
+  checkInputs(work, script);
   const filmDir = join(work, "film");
   checkFilmDir(filmDir);
   if (isHtmlFilm(filmDir)) writeKitTiming(work);
+  await checkBeforeCapture(filmDir);
 
   const film = await openFilm(filmDir, { pages: capturePages() });
   console.error(`capture: ${film.pages} pages`);
   try {
-    if (await reportLayout(film))
-      throw new Error(
-        `fix the layout issues above in ${join(filmDir, "index.html")}, then build again`
-      );
     const warn = (w: string) => console.error(`warning: ${w}`);
     const scenes = placeOnFilm(timing, film.meta, script, warn);
     const narration = await narrationLevel(work, script);
     const sfx = placeSfx(script, film.meta.parts, warn).map((c) => sfxTrack(work, c, narration));
     const audio = join(work, "audio", "mix.m4a");
-    await mix(work, script, { scenes, total: film.meta.duration, sfx }, audio);
+    const score = script.bpm ? scoreInput(work, script, narration) : undefined;
+    await mix(
+      work,
+      script,
+      { scenes, total: film.meta.duration, sfx, ...(score ? { score } : {}) },
+      audio
+    );
     mkdirSync(dirname(out), { recursive: true });
     const count = await encode(film, fps, audio, out);
     for (const w of await film.warnings()) console.error("runner", w);
@@ -202,6 +241,7 @@ async function build(work: string, out: string, fps: number): Promise<void> {
   } finally {
     await film.close();
   }
+  if (timing.bpm) await syncReport(work, script, timing, out);
 }
 
 interface Command {
@@ -220,6 +260,8 @@ function runBuild([a, b]: string[], fps: number): Promise<void> {
 const COMMANDS = new Map<string, Command>([
   ["narrate", { args: [1, 1], run: ([w]) => runNarrate(resolve(w!)) }],
   ["bgm", { args: [1, 1], run: ([w]) => runBgm(resolve(w!)) }],
+  ["score", { args: [1, 1], run: ([w]) => runScore(resolve(w!)) }],
+  ["sync", { args: [2, 2], run: ([w, m]) => runSync(resolve(w!), resolve(m!)) }],
   ["sfx", { args: [1, 1], run: ([w]) => runSfx(resolve(w!)) }],
   ["kit", { args: [1, 1], run: ([w]) => runKit(resolve(w!)) }],
   ["prepare", { args: [2, 2], run: ([s, f]) => runPrepare(s!, f!) }],
@@ -230,7 +272,17 @@ const COMMANDS = new Map<string, Command>([
 ]);
 // Commands whose time is logged in the work dir of their first argument (steps.ts). prepare writes
 // to its second.
-const LOGGED = new Set(["narrate", "bgm", "sfx", "kit", "prepare", "stills", "check", "build"]);
+const LOGGED = new Set([
+  "narrate",
+  "bgm",
+  "score",
+  "sfx",
+  "kit",
+  "prepare",
+  "stills",
+  "check",
+  "build",
+]);
 
 function version(): string {
   const v = field(readJson(fileURLToPath(new URL("../package.json", import.meta.url))), "version");
@@ -241,7 +293,7 @@ async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: {
-      fps: { type: "string", default: "30" },
+      fps: { type: "string" }, // build: 30, or 60 for a beat-synced film
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
