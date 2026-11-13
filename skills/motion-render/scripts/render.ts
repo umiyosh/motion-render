@@ -312,6 +312,18 @@ async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm>
     throw new Error("film failed to load: " + errorMessage(e));
   }
   let injected = false;
+  // Chromium's own capture with its fast PNG settings: the same pixels (PNG is lossless) in about
+  // half the time of Playwright's screenshot, whose PNG compression took most of each frame.
+  const cdp = await page.context().newCDPSession(page);
+  const capture = async (): Promise<Buffer> => {
+    const r: unknown = await cdp.send("Page.captureScreenshot", {
+      format: "png",
+      optimizeForSpeed: true,
+    });
+    const data = field(r, "data");
+    if (typeof data !== "string") throw new Error("Chromium returned no picture");
+    return Buffer.from(data, "base64");
+  };
   const seek = async (t: number, still = t) => {
     await call(
       page.evaluate(([tt, ss]) => window.__film.seek(tt, ss), [t, still] as const),
@@ -323,7 +335,7 @@ async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm>
     meta: parseMeta(meta),
     async frame(t, still) {
       await seek(t, still);
-      return call(page.screenshot({ type: "png" }), `screenshot at ${sec(t)}s`);
+      return call(capture(), `screenshot at ${sec(t)}s`);
     },
     async inspect(t) {
       await seek(t);
