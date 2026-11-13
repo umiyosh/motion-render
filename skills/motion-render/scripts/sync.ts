@@ -44,7 +44,17 @@ function frameChange(f: Buffer, prev: Buffer | null): Float32Array {
 async function motionOf(mp4: string): Promise<Motion> {
   const ff = spawn(
     findFfmpeg(),
-    ["-v", "error", "-i", mp4, "-vf", `scale=${W}:${H},format=gray`, "-f", "rawvideo", "-"],
+    [
+      "-v",
+      "error",
+      "-i",
+      mp4,
+      "-vf",
+      `scale=${W}:${H}:flags=area,format=gray`,
+      "-f",
+      "rawvideo",
+      "-",
+    ],
     { stdio: ["ignore", "pipe", "inherit"] }
   );
   const size = W * H;
