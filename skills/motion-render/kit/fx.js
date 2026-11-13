@@ -117,6 +117,22 @@
     return c.getContext("2d");
   }
 
+  // A picture drawn once and kept: draw(ctx) paints a w x h canvas the first time `key` is asked
+  // for, and later calls return the same canvas, to drawImage on every frame. Things whose shape
+  // does not change (a card with its soft shadow, a strip of patterned paper) cost a shadow blur or
+  // a pattern fill once instead of on every frame, which made a film draw 2 to 3 times slower.
+  var sprites = {};
+  function sprite(key, w, h, draw) {
+    if (!sprites[key]) {
+      var c = document.createElement("canvas");
+      c.width = Math.ceil(w);
+      c.height = Math.ceil(h);
+      draw(c.getContext("2d"));
+      sprites[key] = c;
+    }
+    return sprites[key];
+  }
+
   // Film grain over a 2D context: a fresh but repeatable pattern per frame (seeded by the frame
   // number), so a still frame is never dead flat. amount 0..1 (0.06 is subtle).
   function grain(ctx, t, amount) {
@@ -171,6 +187,7 @@
     boil: boil,
     project: project,
     canvas: canvas,
+    sprite: sprite,
     grain: grain,
     three: three,
   };
