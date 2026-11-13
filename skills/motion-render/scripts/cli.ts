@@ -24,12 +24,20 @@ import {
 } from "./audio.ts";
 import { limit } from "./limit.ts";
 import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx, type Script } from "./work.ts";
-import { runBeatBgm, runScore, runSync, scoreInput, syncReport, timingTable } from "./beatcli.ts";
+import {
+  runBeatBgm,
+  runScore,
+  runSync,
+  scoreInput,
+  syncPreview,
+  syncReport,
+  timingTable,
+} from "./beatcli.ts";
 import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.ts";
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 import { stepsTable, timed, workOf } from "./steps.ts";
-import { writeSheet } from "./sheet.ts";
+import { mp4Picture, writeSheet } from "./sheet.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
@@ -59,6 +67,9 @@ const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
                                           (names in <filmDir>/scenes), only those are put in and checked.
   motion-render stills <filmDir> <outDir> <t1,t2,...>
                                           Write PNG stills at the given seconds (and run check).
+  motion-render preview <work> [out.png]  Before building: run check, draw the contact sheet and, for a
+                                          beat-synced film, the sync report, from only the frames they
+                                          read (no MP4). Default sheet: <work>/sheet.png.
   motion-render build <work> [out.mp4]    Mix narration + BGM + sound effects and render <work>/film to MP4.
                                           Stops if check finds a layout issue in an html film.
                                           Without out.mp4: $MOTION_RENDER_OUT_DIR or the current dir, <work name>.mp4.
@@ -283,13 +294,40 @@ function runBuild([a, b]: string[], fps: number): Promise<void> {
   return build(work, out, fps);
 }
 
-function runSheet(work: string, mp4: string, out?: string): void {
-  const file = out ? resolve(out) : join(work, "sheet.png");
-  const names = writeSheet(mp4, loadTiming(work), file);
+function printSheet(file: string, names: string[]): void {
   for (const n of names) console.log(n);
   console.log(
     `sheet: ${file} (${names.length} frames; names in ${file.replace(/\.png$/, "")}.txt)`
   );
+}
+
+async function runSheet(work: string, mp4: string, out?: string): Promise<void> {
+  const file = out ? resolve(out) : join(work, "sheet.png");
+  printSheet(file, await writeSheet(mp4Picture(mp4), loadTiming(work), file));
+}
+
+// What a review needs, before any build: the layout check, the contact sheet and, for a beat-synced
+// film, the sync report, from only the frames they read (drawn by the film's pages). The film is then
+// built once, after the review.
+async function preview(work: string, out?: string): Promise<void> {
+  const script = loadScript(work);
+  const timing = loadTiming(work);
+  const filmDir = join(work, "film");
+  checkFilmDir(filmDir);
+  if (isHtmlFilm(filmDir)) writeKitTiming(work);
+  await checkBeforeCapture(filmDir);
+  const film = await openFilm(filmDir, { pages: capturePages() });
+  let problems: string[] = [];
+  try {
+    const file = out ? resolve(out) : join(work, "sheet.png");
+    printSheet(file, await writeSheet((t) => film.frame(t), timing, file));
+    if (timing.bpm) problems = await syncPreview(work, script, timing, film);
+    for (const w of await film.warnings()) console.error("runner", w);
+  } finally {
+    await film.close();
+  }
+  if (problems.length)
+    throw new Error(`${problems.length} sync problems: fix them, then preview again`);
 }
 
 const COMMANDS = new Map<string, Command>([
@@ -299,6 +337,7 @@ const COMMANDS = new Map<string, Command>([
   ["sync", { args: [2, 2], run: ([w, m]) => runSync(resolve(w!), resolve(m!)) }],
   ["sfx", { args: [1, 1], run: ([w]) => runSfx(resolve(w!)) }],
   ["sheet", { args: [2, 3], run: ([w, m, o]) => runSheet(resolve(w!), resolve(m!), o) }],
+  ["preview", { args: [1, 2], run: ([w, o]) => preview(resolve(w!), o) }],
   ["kit", { args: [1, 1], run: ([w]) => runKit(resolve(w!)) }],
   ["prepare", { args: [2, 2], run: ([s, f]) => runPrepare(s!, f!) }],
   ["stills", { args: [3, 3], run: ([f, o, t]) => stills(f!, o!, t!) }],
@@ -318,6 +357,7 @@ const LOGGED = new Set([
   "stills",
   "check",
   "build",
+  "preview",
 ]);
 
 function version(): string {

@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { bgmTakes } from "./audio.ts";
 import { clock, loadScript, loadTiming, type Script, type Timing } from "./work.ts";
 import { filmTable, measureTake, renderScore, takeTable } from "./score.ts";
-import { measureSync } from "./sync.ts";
+import { measureSync, measureSyncPictures, type SyncResult } from "./sync.ts";
+import type { Film } from "./render.ts";
 import { writeKitTiming } from "./kit.ts";
 import { isRecord, readJson } from "./json.ts";
 import type { Hit } from "./hits.ts";
@@ -107,6 +108,13 @@ function loadHits(work: string): Hit[] {
   return hits;
 }
 
+function printSync(r: SyncResult): string[] {
+  for (const l of r.lines) console.log(`sync: ${l}`);
+  for (const p of r.problems) console.log(`sync problem: ${p}`);
+  console.log(r.problems.length ? `sync: ${r.problems.length} problems` : "sync: ok");
+  return r.problems;
+}
+
 // Prints the measurements of the MP4 and returns the problems found.
 export async function syncReport(
   work: string,
@@ -114,11 +122,22 @@ export async function syncReport(
   timing: Timing,
   mp4: string
 ): Promise<string[]> {
-  const r = await measureSync(mp4, timing, script, loadHits(work));
-  for (const l of r.lines) console.log(`sync: ${l}`);
-  for (const p of r.problems) console.log(`sync problem: ${p}`);
-  console.log(r.problems.length ? `sync: ${r.problems.length} problems` : "sync: ok");
-  return r.problems;
+  return printSync(await measureSync(mp4, timing, script, loadHits(work)));
+}
+
+// The same measurements from the film's pages, at the 60 fps a beat-synced film is built at, before
+// any build.
+export async function syncPreview(
+  work: string,
+  script: Script,
+  timing: Timing,
+  film: Film
+): Promise<string[]> {
+  const fps = 60;
+  const draw = (f: number) => film.frame(f / fps);
+  return printSync(
+    await measureSyncPictures({ draw, fps, ahead: film.pages }, timing, script, loadHits(work))
+  );
 }
 
 export async function runSync(work: string, mp4: string): Promise<void> {

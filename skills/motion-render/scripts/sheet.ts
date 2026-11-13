@@ -34,30 +34,43 @@ function sheetShots(timing: Timing): Shot[] {
   return shots.filter((s) => s.t >= 0 && s.t < timing.total).sort((a, b) => a.t - b.t);
 }
 
-// Writes the sheet and, next to it, a .txt naming each tile; returns those names.
-export function writeSheet(mp4: string, timing: Timing, out: string): string[] {
+// A picture of the MP4 at t, as PNG.
+export function mp4Picture(mp4: string): (t: number) => Promise<Buffer> {
+  const ff = findFfmpeg();
+  return (t) => {
+    const r = spawnSync(
+      ff,
+      ["-v", "error", "-ss", t.toFixed(3), "-i", mp4, "-frames:v", "1"].concat([
+        "-f",
+        "image2",
+        "-c:v",
+        "png",
+        "-",
+      ]),
+      { maxBuffer: 64 * 1024 * 1024 }
+    );
+    if (r.status !== 0) throw new Error(`ffmpeg could not read ${mp4} at ${t}: ${r.stderr}`);
+    return Promise.resolve(r.stdout);
+  };
+}
+
+// Writes the sheet and, next to it, a .txt naming each tile; returns those names. `picture` gives
+// the film at a time: from its MP4 (mp4Picture), or drawn by the film's pages before any build.
+export async function writeSheet(
+  picture: (t: number) => Promise<Buffer>,
+  timing: Timing,
+  out: string
+): Promise<string[]> {
   const ff = findFfmpeg();
   const shots = sheetShots(timing);
   const dir = mkdtempSync(join(tmpdir(), "mr-sheet-"));
-  const files = shots.map((s, i) => {
-    const f = join(dir, `${String(i).padStart(3, "0")}.png`);
-    const r = spawnSync(ff, [
-      "-v",
-      "error",
-      "-y",
-      "-ss",
-      s.t.toFixed(3),
-      "-i",
-      mp4,
-      "-frames:v",
-      "1",
-      "-vf",
-      `scale=${W}:${H}`,
-      f,
-    ]);
-    if (r.status !== 0) throw new Error(`ffmpeg could not read ${mp4} at ${s.t}: ${r.stderr}`);
-    return f;
-  });
+  const files = await Promise.all(
+    shots.map(async (s, i) => {
+      const f = join(dir, `${String(i).padStart(3, "0")}.png`);
+      writeFileSync(f, await picture(s.t));
+      return f;
+    })
+  );
   const rows = Math.ceil(files.length / COLS),
     n = rows * COLS;
   const inputs = files.flatMap((f) => ["-i", f]);
@@ -67,14 +80,15 @@ export function writeSheet(mp4: string, timing: Timing, out: string): string[] {
     { length: n },
     (_, i) => `${(i % COLS) * W}_${Math.floor(i / COLS) * H}`
   ).join("|");
-  const stack = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
+  const scaled = Array.from({ length: n }, (_, i) => `[${i}:v]scale=${W}:${H}[s${i}];`).join("");
+  const stack = Array.from({ length: n }, (_, i) => `[s${i}]`).join("");
   const r = spawnSync(ff, [
     "-v",
     "error",
     "-y",
     ...inputs,
     "-filter_complex",
-    `${stack}xstack=inputs=${n}:layout=${layout}`,
+    `${scaled}${stack}xstack=inputs=${n}:layout=${layout}`,
     "-frames:v",
     "1",
     out,

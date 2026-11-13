@@ -234,10 +234,11 @@ GSAP のプラグイン（`kit/gsap/`）:
 
 作り手は、自分の作品を判定しない。見直しは 1 回だけ行い、それで仕上げる。
 
-1. 書き出した MP4 から、要所のコマを 1 枚に並べる: `motion-render sheet <work> <mp4> <work>/sheet.png`（並びの説明は `sheet.txt`）
+1. 書き出す前に、要所のコマを 1 枚に並べる: `motion-render preview <work>`（`<work>/sheet.png`、並びの説明は `sheet.txt`）。
+   MP4 は要らない。書き出し済みの MP4 から作るときは `motion-render sheet <work> <mp4>`
 2. 制作の経緯を知らないサブエージェント（批評役）に、`sheet.png` と `sheet.txt` と語りの原稿と次の問いだけを渡し、答えを
    `<work>/critique.md` に書かせる。何を狙ったか、何を直したかは伝えない
-3. 答えの悪い順の 3 つまでを直し、もう 1 回だけ書き出して終える。2 回目の批評はしない
+3. 答えの悪い順の 3 つまでを直し、`preview` で `sync: ok` を確かめてから、1 回だけ書き出して終える。2 回目の批評はしない
 
 問い:
 

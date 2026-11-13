@@ -186,7 +186,7 @@ motion-render score <work>
 続けて演出の表に戻る。`moment:` の行（曲が急に抜ける、戻る、単発の一打）ごとに、話の出来事を当てて映像に入れる。
 当てる出来事が無い瞬間は、小節を差し替えて消す（html-film.md の「曲が届いたら」）。
 
-### 7. 確認する
+### 7. 確認する（書き出す前に）
 
 ```bash
 motion-render check <work>/film
@@ -196,7 +196,21 @@ motion-render stills <work>/film <work>/stills <秒をカンマ区切り>
 - `check` は配置に加え、短すぎる文字（大きな文字が 2 秒未満で消える）と、巻き戻しで変わる絵を止める。`layout ok` まで直す
 - 静止画は、各場面の中ほどと、全開の 1 拍前・全開の瞬間・その 1 拍後・最後の一打を見る。文字が読めるか、
   物が画面の外に出ていないか、地面と物の位置が合っているかを見る
-- 演出の良し悪しは、自分で判定しない。手順 8 の MP4 を、制作の経緯を知らない批評役に見せ、直す（html-film.md の「見直し」）
+
+続けて、書き出す前の見直しをする。
+
+```bash
+motion-render preview <work>
+```
+
+`preview` は MP4 を作らずに、書き出しで測るのと同じものを、必要なコマだけ描いて出す（数十秒）。
+
+- 配置の確認（`check` と同じ）
+- 要所のコマを 4 列に並べた 1 枚（`<work>/sheet.png` と、各コマの名前を書いた `sheet.txt`）
+- 音ハメの動画では、書き出し後と同じ `sync:` の行（語り・山場・一打。下の手順 8）
+
+`sync: ok` になるまで映像を直して `preview` をやり直す。演出の良し悪しは、自分で判定しない。`sheet.png` を、
+制作の経緯を知らない批評役に見せて直す（html-film.md の「見直し」）。書き出しは、見直しの後に 1 回だけ行う。
 
 ### 8. MP4 にする
 
@@ -205,14 +219,14 @@ motion-render build <work> [<出力.mp4>]
 ```
 
 ナレーションを各場面の頭に置き、並べた曲をナレーションに対する音量（`scoreLevel`）で重ね、60fps で書き出す。
-書き出した後、MP4 そのもので同期を測って `sync:` の行に出す。
+書き出した後、MP4 そのもので同期を測って `sync:` の行に出す（`preview` と同じ項目）。
 
 - 語り: 声の割合と、一番長い間
 - 山場: 全開と最後の一打で、画面全体がその瞬間に大きく変わるか（ずれの ms）
 - 一打: 全開の区間で、キックのたびに画面が動くか（打音の無い 8 分音符後と比べる）。スネアは測って出すだけ
 
-`sync: ok` になるまで映像を直して書き出し直す。`sync problem:` の直し方は html-film.md の「確認」。
-`motion-render sync <work> <mp4>` で測り直せる。
+`preview` で `sync: ok` なら、書き出しでも ok になる。ならなかったときだけ、直して書き出し直す。
+`sync problem:` の直し方は html-film.md の「確認」。`motion-render sync <work> <mp4>` で MP4 を測り直せる。
 
 ### 9. 報告する
 
@@ -339,7 +353,7 @@ URL を渡された場合も音を付ける。映像データを取得し（上�
 - `scripts/audio.ts`: Gemini TTS・Lyria の呼び出し（90 秒の上限と再試行付き）、曲の候補、音声の合成
 - `scripts/score.ts`: 曲の候補を小節ごとに測った表、選んだ小節の並べ替えと書き出し、山場の点検（`score`）
 - `scripts/signal.ts`・`scripts/tempo.ts`・`scripts/hits.ts`: 音の読み込み、テンポと小節の頭、16 分音符ごとの打音の検出
-- `scripts/sync.ts`: MP4 で語り・山場・一打の同期を測る（`sync`。`build` も実行する）
+- `scripts/sync.ts`: 語り・山場・一打の同期を、MP4 か、必要なコマだけを描いて測る（`sync`・`preview`。`build` も実行する）
 - `scripts/sfx.ts`: ElevenLabs による効果音の生成（`sfx`）、音量の測定とそろえ方、試聴用ファイル
 - `scripts/work.ts`: `script.json` の検証、`timing.json` の計算（拍と小節にそろえる）、ナレーションを場面の開始時刻に置く処理
 - `scripts/render.ts`: プレーヤーを開いてコマを返す。描画中は外部への通信を遮断し、Chromium の sandbox を有効にする

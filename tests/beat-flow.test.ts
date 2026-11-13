@@ -9,8 +9,8 @@ import { findLayoutIssues, type LayoutBox } from "../skills/motion-render/script
 import { psnr, repeatTimes } from "../skills/motion-render/scripts/repeat.ts";
 import { findFfmpeg, mediaSeconds, mix } from "../skills/motion-render/scripts/audio.ts";
 import { writeWav } from "../skills/motion-render/scripts/score.ts";
-import { measureSync } from "../skills/motion-render/scripts/sync.ts";
-import { writeSheet } from "../skills/motion-render/scripts/sheet.ts";
+import { measureSync, measureSyncPictures } from "../skills/motion-render/scripts/sync.ts";
+import { mp4Picture, writeSheet } from "../skills/motion-render/scripts/sheet.ts";
 import {
   runBeatBgm,
   runScore,
@@ -198,6 +198,32 @@ describe("sync", () => {
     expect(r.lines.join("\n")).toMatch(/drop "drop" 0:04\.00: .* [+-]?\d+ ms from the hit/);
   });
 
+  it("measures the same from the frames it reads, drawn one by one, as from the whole MP4", async () => {
+    const dir = tempDir();
+    const mp4 = join(dir, "on.mp4");
+    testMp4(
+      mp4,
+      8,
+      KICKS.filter((h) => h.t >= 4).map((h) => h.t),
+      [4, 6]
+    );
+    spawnSync(findFfmpeg(), ["-v", "error", "-i", mp4, join(dir, "f%04d.png")]);
+    const draw = (f: number) =>
+      Promise.resolve(readFileSync(join(dir, `f${String(f + 1).padStart(4, "0")}.png`)));
+    const whole = await measureSync(mp4, SYNC_TIMING, { lead: 0.25 }, KICKS);
+    const drawn = await measureSyncPictures(
+      { draw, fps: 60, ahead: 4 },
+      SYNC_TIMING,
+      { lead: 0.25 },
+      KICKS
+    );
+    expect(drawn.problems).toEqual(whole.problems);
+    expect(drawn.lines.filter((l) => !/drop|final/.test(l))).toEqual(
+      whole.lines.filter((l) => !/drop|final/.test(l))
+    );
+    expect(drawn.lines.join("\n")).toMatch(/drop "drop" 0:04\.00: .* [+-]?\d+ ms from the hit/);
+  });
+
   it("times frames at the film's frame rate when the decoder drops a frame", async () => {
     // the film is 8.02 s long but its MP4 decodes to 8 s of frames (the last frame lost)
     const mp4 = join(tempDir(), "short.mp4");
@@ -211,7 +237,7 @@ describe("sync", () => {
     expect(r.lines.join("\n")).toMatch(/final hit 0:06\.00: .* [+-]?\d ms from the hit/);
   });
 
-  it("tiles the key moments of an MP4 into one sheet for a review", () => {
+  it("tiles the key moments of an MP4 into one sheet for a review", async () => {
     const dir = tempDir();
     const mp4 = join(dir, "film.mp4");
     testMp4(
@@ -221,7 +247,7 @@ describe("sync", () => {
       [4, 6]
     );
     const out = join(dir, "sheet.png");
-    const names = writeSheet(mp4, SYNC_TIMING, out);
+    const names = await writeSheet(mp4Picture(mp4), SYNC_TIMING, out);
     // two scene middles, a beat before / on / after the drop, the final hit
     expect(names).toHaveLength(6);
     expect(names[0]).toMatch(/^1 \(row 1, column 1\): 0:02\.00 intro: middle/);

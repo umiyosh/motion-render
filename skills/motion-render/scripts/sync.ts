@@ -3,6 +3,8 @@
 // moves on the frame of each kick in the drops. Each hit is compared with the same measure taken an
 // 8th note later, where there is no hit, so a picture that is always moving does not pass.
 import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { inOrder } from "./inorder.ts";
 import { findFfmpeg, exited } from "./audio.ts";
 import { clock, type Script, type Timing } from "./work.ts";
 import type { Hit } from "./hits.ts";
@@ -16,12 +18,15 @@ const COLS = 8,
   ROWS = 6,
   BLOCKS = COLS * ROWS;
 const E = 0.008; // films show a hit this much early (kit/beat.js)
+// Frames sampled across a preview for the film's usual change (the MP4 report reads them all).
+const USUAL_SAMPLES = 300;
 
 // Per frame, the mean absolute change of each block from the frame before, in gray levels.
 interface Motion {
   frames: number;
   block(f: number, b: number): number;
   whole(f: number): number; // mean over the blocks
+  sampled: number[]; // the frames whose change is known: all of an MP4, some of a preview
 }
 
 function blockOf(i: number): number {
@@ -76,6 +81,7 @@ async function motionOf(mp4: string): Promise<Motion> {
     frames: out.length,
     block: (f, b) => out[f]?.[b] ?? 0,
     whole: (f) => (out[f] ? out[f].reduce((a, v) => a + v, 0) / BLOCKS : 0),
+    sampled: out.map((_, f) => f),
   };
 }
 
@@ -110,8 +116,13 @@ function narration(timing: Timing, script: Pick<Script, "lead">, bar: number): S
 // The big moments: each drop and the final hit should change the whole picture on their frame, by
 // far more than the film's usual large changes (its 90th percentile).
 function peaks(m: Motion, fps: number, timing: Timing): SyncResult {
-  const wholes = Float64Array.from({ length: m.frames }, (_, f) => m.whole(f));
-  const usual = Math.max(0.5, percentile(wholes, 0.9));
+  const usual = Math.max(
+    0.5,
+    percentile(
+      Float64Array.from(m.sampled, (f) => m.whole(f)),
+      0.9
+    )
+  );
   const cues = timing.scenes
     .filter((s) => s.section === "drop")
     .map((s) => ({ what: `drop "${s.id}"`, t: s.start, need: true }));
@@ -125,9 +136,9 @@ function peaks(m: Motion, fps: number, timing: Timing): SyncResult {
     const f0 = Math.round(c.t * fps);
     let best = f0;
     for (let f = Math.max(1, f0 - 3); f <= Math.min(m.frames - 1, f0 + 3); f++)
-      if (wholes[f]! > wholes[best]!) best = f;
+      if (m.whole(f) > m.whole(best)) best = f;
     const ms = (best / fps - c.t) * 1000,
-      x = (wholes[best] ?? 0) / usual;
+      x = m.whole(best) / usual;
     lines.push(
       `${c.what} ${clock(c.t)}: the whole picture changes ${x.toFixed(0)}x the film's usual large change, ${ms >= 0 ? "+" : ""}${ms.toFixed(0)} ms from the hit`
     );
@@ -174,6 +185,23 @@ function dropSpans(timing: Timing): [number, number][] {
   );
 }
 
+// The hit times in the drops, and the same an 8th later where no hit is, for kicks and for snares.
+function reactionTimes(
+  hits: Hit[],
+  bpm: number,
+  spans: [number, number][]
+): { name: "kicks" | "snares"; on: number[]; off: number[] }[] {
+  const eighth = 30 / bpm;
+  const inDrop = (t: number): boolean => spans.some(([a, b]) => t >= a && t < b);
+  return (["kicks", "snares"] as const).flatMap((name) => {
+    const kinds: Hit["k"][] = name === "kicks" ? ["kick"] : ["snare", "rim"];
+    const list = hits.filter((h) => kinds.includes(h.k) && h.v >= 0.5 && inDrop(h.t));
+    if (!list.length) return [];
+    const free = list.filter((h) => !hits.some((o) => Math.abs(o.t - (h.t + eighth)) < 0.04));
+    return [{ name, on: list.map((h) => h.t), off: free.map((h) => h.t + eighth) }];
+  });
+}
+
 // Kicks and snares in the drops: the share whose frame moves, against the same share an 8th later
 // where no hit is, so a picture that is always moving does not pass. Only the drops need a reaction
 // to every kick: outside them, a thing that jumps on every hit without a reason of its own looks
@@ -185,25 +213,11 @@ function reactions(
   bpm: number,
   spans: [number, number][]
 ): SyncResult {
-  const eighth = 30 / bpm;
   const lines: string[] = [],
     problems: string[] = [];
-  const inDrop = (t: number): boolean => spans.some(([a, b]) => t >= a && t < b);
-  for (const kinds of [["kick"], ["snare", "rim"]] as Hit["k"][][]) {
-    const list = hits.filter((h) => kinds.includes(h.k) && h.v >= 0.5 && inDrop(h.t));
-    if (!list.length) continue;
-    const free = list.filter((h) => !hits.some((o) => Math.abs(o.t - (h.t + eighth)) < 0.04));
-    const on = rateOf(
-        m,
-        fps,
-        list.map((h) => h.t)
-      ),
-      off = rateOf(
-        m,
-        fps,
-        free.map((h) => h.t + eighth)
-      );
-    const name = kinds[0] === "kick" ? "kicks" : "snares";
+  for (const { name, on: onTimes, off: offTimes } of reactionTimes(hits, bpm, spans)) {
+    const on = rateOf(m, fps, onTimes),
+      off = rateOf(m, fps, offTimes);
     const pct = (x: number): string => `${(x * 100).toFixed(0)}%`;
     lines.push(
       `${name} in the drops: the picture moves on ${pct(on.rate)} of ${on.n} (an 8th later, with no hit: ${pct(off.rate)})`
@@ -216,6 +230,27 @@ function reactions(
   return { lines, problems };
 }
 
+function bpmOf(timing: Timing): number {
+  if (!timing.bpm) throw new Error("timing.json has no bpm: sync measures beat-synced films only");
+  return timing.bpm;
+}
+
+function measure(
+  motion: Motion,
+  fps: number,
+  timing: Timing,
+  script: Pick<Script, "lead">,
+  hits: Hit[]
+): SyncResult {
+  const bpm = bpmOf(timing);
+  const parts = [
+    narration(timing, script, 240 / bpm),
+    peaks(motion, fps, timing),
+    reactions(motion, fps, hits, bpm, dropSpans(timing)),
+  ];
+  return { lines: parts.flatMap((p) => p.lines), problems: parts.flatMap((p) => p.problems) };
+}
+
 // The whole report for one MP4 of a beat-synced film.
 export async function measureSync(
   mp4: string,
@@ -223,16 +258,111 @@ export async function measureSync(
   script: Pick<Script, "lead">,
   hits: Hit[]
 ): Promise<SyncResult> {
-  const bpm = timing.bpm;
-  if (!bpm) throw new Error("timing.json has no bpm: sync measures beat-synced films only");
+  bpmOf(timing);
   const motion = await motionOf(mp4);
   // The film renders at a whole frame rate. Its MP4 can decode a frame short, and frames/total would
   // then time every later frame late (11 ms at 57 s of a 60 fps film).
   const fps = Math.round(motion.frames / timing.total);
-  const parts = [
-    narration(timing, script, 240 / bpm),
-    peaks(motion, fps, timing),
-    reactions(motion, fps, hits, bpm, dropSpans(timing)),
-  ];
-  return { lines: parts.flatMap((p) => p.lines), problems: parts.flatMap((p) => p.problems) };
+  return measure(motion, fps, timing, script, hits);
+}
+
+// The frames whose change the report reads: around each drop and the final hit, the frames before
+// and on each hit (and an 8th later) in the drops, and an even sample of the film for its usual
+// change. A preview draws only these (and the frame before each), not the whole film.
+function framesToMeasure(
+  timing: Timing,
+  hits: Hit[],
+  fps: number
+): { frames: number[]; usual: number[] } {
+  const n = Math.round(timing.total * fps);
+  const want = new Set<number>();
+  const span = (a: number, b: number) => {
+    for (let f = Math.max(1, a); f <= Math.min(n - 1, b); f++) want.add(f);
+  };
+  const cues = timing.scenes.filter((s) => s.section === "drop").map((s) => s.start);
+  if (timing.end !== undefined) cues.push(timing.end);
+  for (const t of cues) span(Math.round(t * fps) - 3, Math.round(t * fps) + 3);
+  for (const r of reactionTimes(hits, bpmOf(timing), dropSpans(timing)))
+    for (const t of [...r.on, ...r.off]) {
+      const f0 = Math.ceil((t - E) * fps - 1e-6);
+      span(f0 - 5, f0 + 1);
+    }
+  // The usual change comes from an even sample only: the frames around hits move more than most,
+  // and counting them would raise the usual change and shrink every peak.
+  const step = Math.max(1, Math.floor(n / USUAL_SAMPLES));
+  const usual: number[] = [];
+  for (let f = step; f < n; f += step) usual.push(f);
+  for (const f of usual) want.add(f);
+  return { frames: [...want].sort((a, b) => a - b), usual };
+}
+
+// The change of each frame in `frames` from the frame before, from pictures drawn on demand. The
+// pictures stream through ffmpeg in order, `ahead` at a time, so only gray thumbnails are kept.
+async function motionOfPictures(
+  frames: number[],
+  usual: number[],
+  draw: (f: number) => Promise<Buffer>,
+  total: number,
+  ahead: number
+): Promise<Motion> {
+  const need = [...new Set(frames.flatMap((f) => [f - 1, f]))].sort((a, b) => a - b);
+  const ff = spawn(
+    findFfmpeg(),
+    [
+      "-v",
+      "error",
+      "-f",
+      "image2pipe",
+      "-i",
+      "-",
+      "-vf",
+      `scale=${W}:${H}:flags=area,format=gray`,
+    ].concat(["-f", "rawvideo", "-"]),
+    { stdio: ["pipe", "pipe", "inherit"] }
+  );
+  const size = W * H;
+  const gray: Buffer[] = [];
+  let rest = Buffer.alloc(0);
+  ff.stdout.on("data", (d: Buffer) => {
+    rest = Buffer.concat([rest, d]);
+    for (; rest.length >= size; rest = rest.subarray(size))
+      gray.push(Buffer.from(rest.subarray(0, size)));
+  });
+  const exit = exited(ff);
+  ff.stdin.on("error", () => {}); // EPIPE when ffmpeg dies early; its exit code reports the cause.
+  try {
+    for await (const png of inOrder(need.length, ahead, (i) => draw(need[i]!)))
+      if (!ff.stdin.write(png)) await once(ff.stdin, "drain");
+  } finally {
+    ff.stdin.end();
+  }
+  if ((await exit) !== 0) throw new Error("ffmpeg could not read the preview's pictures");
+  const at = new Map(need.map((f, i) => [f, gray[i]!]));
+  const change = new Map(
+    frames.map((f) => [f, frameChange(at.get(f)!, at.get(f - 1) ?? null)] as const)
+  );
+  return {
+    frames: total,
+    block: (f, b) => change.get(f)?.[b] ?? 0,
+    whole: (f) => {
+      const c = change.get(f);
+      return c ? c.reduce((a, v) => a + v, 0) / BLOCKS : 0;
+    },
+    sampled: usual,
+  };
+}
+
+// The same report as measureSync, from only the frames it reads, drawn at `fps` by `draw` (a
+// picture of frame f): no MP4 is needed, so a film can be measured before it is built.
+export async function measureSyncPictures(
+  pictures: { draw: (f: number) => Promise<Buffer>; fps: number; ahead: number },
+  timing: Timing,
+  script: Pick<Script, "lead">,
+  hits: Hit[]
+): Promise<SyncResult> {
+  const { draw, fps, ahead } = pictures;
+  const { frames, usual } = framesToMeasure(timing, hits, fps);
+  const total = Math.round(timing.total * fps);
+  const motion = await motionOfPictures(frames, usual, draw, total, ahead);
+  return measure(motion, fps, timing, script, hits);
 }
