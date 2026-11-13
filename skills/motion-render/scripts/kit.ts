@@ -39,10 +39,11 @@ export function writeKitTiming(work: string): void {
   const data = {
     total,
     ...(bpm === undefined ? {} : { bpm, end }),
-    scenes: scenes.map(({ id, start, dur, section }) => ({
+    scenes: scenes.map(({ id, start, dur, speech, section }) => ({
       id,
       start,
       dur,
+      speech,
       ...(section ? { section } : {}),
     })),
   };
@@ -54,14 +55,55 @@ export function writeKitTiming(work: string): void {
   );
 }
 
+// GSAP's plugins a film may load from kit/gsap/ (all free since GSAP 3.13). Each defines a global
+// of its own name, to pass to gsap.registerPlugin.
+const GSAP_PLUGINS = [
+  "CustomEase",
+  "CustomWiggle",
+  "CustomBounce",
+  "EasePack",
+  "DrawSVGPlugin",
+  "MorphSVGPlugin",
+  "MotionPathPlugin",
+  "SplitText",
+  "ScrambleTextPlugin",
+  "TextPlugin",
+  "Physics2DPlugin",
+  "Flip",
+];
+
+// three.js ships only as an ES module, and a page opened from file:// cannot import modules. The
+// module is self-contained and ends in one export list, so it becomes a classic script that sets
+// window.THREE.
+function threeAsScript(src: string): string {
+  const at = src.lastIndexOf("export{");
+  if (at < 0) throw new Error("three.module.min.js: no export list at the end");
+  const list = src.slice(at + "export{".length, src.lastIndexOf("}"));
+  const pairs = list.split(",").map((p) => {
+    const [local, name] = p.trim().split(/\s+as\s+/);
+    return `${name ?? local}:${local}`;
+  });
+  return `(()=>{${src.slice(0, at)}window.THREE=Object.freeze({${pairs.join(",")}});})();\n`;
+}
+
+function copyLibraries(kit: string): void {
+  const gsap = require.resolve("gsap/dist/gsap.min.js");
+  copyFileSync(gsap, join(kit, basename(gsap)));
+  mkdirSync(join(kit, "gsap"), { recursive: true });
+  for (const p of GSAP_PLUGINS)
+    copyFileSync(join(dirname(gsap), `${p}.min.js`), join(kit, "gsap", `${p}.min.js`));
+  // The package exports only its entry points; the minified module sits next to the CommonJS one.
+  const three = join(dirname(require.resolve("three")), "three.module.min.js");
+  writeFileSync(join(kit, "three.min.js"), threeAsScript(readFileSync(three, "utf8")));
+}
+
 export function writeKit(work: string): string {
   const film = join(work, "film");
   const kit = join(film, "kit");
   mkdirSync(join(kit, "fonts"), { recursive: true });
-  for (const f of ["player.js", "beat.js", "base.css", "styles.css", "parts.css"])
+  for (const f of ["player.js", "beat.js", "fx.js", "base.css", "styles.css", "parts.css"])
     copyFileSync(join(KIT, f), join(kit, f));
-  const gsap = require.resolve("gsap/dist/gsap.min.js");
-  copyFileSync(gsap, join(kit, basename(gsap)));
+  copyLibraries(kit);
   writeFileSync(join(kit, "fonts.css"), FONT_CSS.map((f) => fontCss(f, kit)).join("\n"));
   writeKitTiming(work);
   writeFileSync(join(film, "film.json"), JSON.stringify({ kind: "html" }) + "\n");

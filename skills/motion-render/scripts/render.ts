@@ -293,6 +293,8 @@ async function waitReady(page: Page, call: Call): Promise<void> {
 async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm> {
   const log: string[] = [];
   page.on("console", (m) => {
+    // Software WebGL notes every read of the canvas as a "GPU stall": the capture, not the film.
+    if (/GL Driver Message .*Performance/.test(m.text())) return;
     if (m.type() === "warning" || m.type() === "error") log.push(`${m.type()}: ${m.text()}`);
   });
   page.on("pageerror", (e) => log.push(`error: ${e.message}`));
