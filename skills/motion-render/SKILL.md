@@ -100,6 +100,7 @@ Claude Motion を使うのは、利用者が Motion を指定したときと、�
 - `section` はその場面から始まる曲の区間: `intro`（入り）・`build`（溜め）・`drop`（全開）・`break`（音を大きく減らす。無音にはしない）・`groove`（落ち着いた刻み）・`outro`（終わり）
 - `score` は、曲の候補のどれを使い、映像の小節ごとにその候補のどの小節を鳴らすか（手順 6）
 - 任意: `voice`・`speed`・`scoreLevel`（曲の大きな小節の、ナレーションに対する音量。既定 +4.1 dB）・`sfxVolume`・`lead`・`tail`・`endHold`、
+  `motionBlur`（1 コマに重ねる絵の枚数。既定 1。速く動く物がある映像で使う。references/html-film.md の「表現の道具」）、
   場面ごとの `sfx`（下の「効果音」）
 
 ## 手順

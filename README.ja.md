@@ -32,13 +32,13 @@ https://github.com/user-attachments/assets/eb1bf7e6-a880-4bbe-b575-7f4ec5c21672
 
 ナレーション・BGM・効果音・MP4 への書き出しは、どちらでも同じです。違うのはアニメーションの作り方です。新しく作る動画は HTML で作ります（一打ごとの反応を書けるのは HTML だけのため）。[Claude **Motion**](https://support.claude.com/ja/articles/17454997-claude-motion%E3%82%92%E5%A7%8B%E3%82%81%E3%82%8B) は、Motion を指定したときと、既存の Motion の動画を MP4 にするときに使います。
 
-|                  | Claude Motion                                           | HTML                                                                                                                            |
-| ---------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 使えるプラン     | Team・Enterprise（ベータ版）                            | Pro・Max・Team・Enterprise と API キー                                                                                          |
-| 作り方           | Claude が Motion で作り、motion-render がそれを取得する | Claude が 1 枚の HTML を書く。土台（アニメーションのプレーヤー（GSAP）・スタイル・日本語フォント）は motion-render に入っている |
-| 書き出す前の確認 | Claude が静止画を見る                                   | 配置の自動チェック（重なり、はみ出し、隠れ、小さすぎる文字や薄すぎる文字）のあと、静止画を見る                                  |
-| 見られるもの     | claude.ai 上の Motion の動画と MP4                      | 手元の静止画と MP4（MP4 ができる前に共有できるリンクはない）                                                                    |
-| 追加の準備       | なし                                                    | なし（土台は motion-render と一緒に入る）                                                                                       |
+|                  | Claude Motion                                           | HTML                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 使えるプラン     | Team・Enterprise（ベータ版）                            | Pro・Max・Team・Enterprise と API キー                                                                                                                                 |
+| 作り方           | Claude が Motion で作り、motion-render がそれを取得する | Claude が 1 枚の HTML を書く。土台（アニメーションのプレーヤー（GSAP とそのプラグイン）・three.js・描画の道具・スタイル・日本語フォント）は motion-render に入っている |
+| 書き出す前の確認 | Claude が静止画を見る                                   | 配置の自動チェック（重なり、はみ出し、隠れ、小さすぎる文字や薄すぎる文字）のあと、静止画を見る                                                                         |
+| 見られるもの     | claude.ai 上の Motion の動画と MP4                      | 手元の静止画と MP4（MP4 ができる前に共有できるリンクはない）                                                                                                           |
+| 追加の準備       | なし                                                    | なし（土台は motion-render と一緒に入る）                                                                                                                              |
 
 ## 必要なもの
 
@@ -148,7 +148,7 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 | `motion-render sheet <work> <mp4> [out.png]`          | MP4 の要所（各場面の中ほど、山場の前後、最後の一打）のコマを、見直し用に 1 枚の画像に並べる。各コマの説明を .txt に書く                                                                                                                                         |
 | `motion-render sfx <work>`                            | `script.json` の `sfx` から効果音を作り、全部を順に聞ける `preview.m4a` を書く                                                                                                                                                                                  |
 | `motion-render prepare <storeDir> <work>/film`        | Motion: Motion から取得した映像データを、描画できる形に展開する                                                                                                                                                                                                 |
-| `motion-render kit <work>`                            | HTML: `<work>/film` にプレーヤー・スタイル・GSAP・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く                                                                                                                                  |
+| `motion-render kit <work>`                            | HTML: `<work>/film` にプレーヤー・スタイル・GSAP とそのプラグイン・three.js・描画の道具・日本語フォント・場面の秒数を置く。Claude はそのあと `film/index.html` を書く                                                                                           |
 | `motion-render check <work>/film [<場面のファイル>…]` | HTML: 0.1 秒ごとに配置を調べ、重なり、箱や画面からのはみ出し、ほかのものの下に隠れたもの、小さすぎる文字や薄すぎる文字、読む前に消える大きな文字、巻き戻すと変わる絵を報告する。場面のファイル（`film/scenes/` の名前）を渡すと、そのファイルの場面だけを調べる |
 | `motion-render stills <filmDir> <outDir> 0,5,12`      | 確認用の静止画を書き出す（HTML の映像は先に配置を調べる）                                                                                                                                                                                                       |
 | `motion-render build <work> [out.mp4]`                | ナレーション・BGM・効果音を合成し、映像と合わせて MP4 にする（音ハメの動画は 60fps で、書き出した後に `sync` を測る）。どれかが足りないとき、HTML の映像が配置のチェックに通らないときは止まる                                                                  |
