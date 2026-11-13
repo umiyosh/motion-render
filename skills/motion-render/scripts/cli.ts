@@ -306,6 +306,23 @@ async function runSheet(work: string, mp4: string, out?: string): Promise<void> 
   printSheet(file, await writeSheet(mp4Picture(mp4), loadTiming(work), file));
 }
 
+// How long the build will spend drawing, from pictures spread over the film: a heavy page (a large
+// shadow blur or pattern fill on every frame) shows here, before a build of many minutes.
+const ENCODE_SHARE = 1.5;
+
+async function buildEstimate(film: Film, fps: number, blur: number): Promise<string> {
+  const n = 4 * film.pages,
+    total = film.meta.duration;
+  const t0 = performance.now();
+  await Promise.all(Array.from({ length: n }, (_, i) => film.frame(((i + 0.5) / n) * total)));
+  const each = (performance.now() - t0) / n;
+  const pictures = Math.round(total * fps) * blur;
+  // During a build the encoder shares the CPU: capture took 1.4 to 1.75 times the pictures drawn
+  // here alone (a 73 s flat film and an 84 s textured one, 2026-11-13).
+  const min = (ENCODE_SHARE * each * pictures) / 60_000;
+  return `build estimate: about ${min.toFixed(1)} min for ${pictures} pictures (${each.toFixed(0)} ms each drawn alone, ${film.pages} pages at once)`;
+}
+
 // What a review needs, before any build: the layout check, the contact sheet and, for a beat-synced
 // film, the sync report, from only the frames they read (drawn by the film's pages). The film is then
 // built once, after the review.
@@ -321,6 +338,7 @@ async function preview(work: string, out?: string): Promise<void> {
   try {
     const file = out ? resolve(out) : join(work, "sheet.png");
     printSheet(file, await writeSheet((t) => film.frame(t), timing, file));
+    console.log(await buildEstimate(film, script.bpm ? 60 : 30, script.motionBlur));
     if (timing.bpm) problems = await syncPreview(work, script, timing, film);
     for (const w of await film.warnings()) console.error("runner", w);
   } finally {
