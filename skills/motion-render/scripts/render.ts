@@ -66,6 +66,10 @@ const LAUNCH: LaunchOptions = {
     "--proxy-server=http://127.0.0.1:9",
     "--proxy-bypass-list=<-loopback>",
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+    // three.js films need WebGL, which machines without a GPU (CI, headless servers) only have in
+    // software. Chromium's silent fallback to it is deprecated: opt in, so WebGL keeps working there.
+    // The page still has no network and runs inside Chromium's sandbox.
+    "--enable-unsafe-swiftshader",
   ],
 };
 
