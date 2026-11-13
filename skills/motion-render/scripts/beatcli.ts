@@ -1,10 +1,12 @@
 // The commands of a beat-synced film: the timing table Claude writes the music direction from, the
 // takes shown bar by bar, scoring the film with the chosen bars, and measuring the MP4.
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bgmTakes } from "./audio.ts";
 import { clock, loadScript, loadTiming, type Script, type Timing } from "./work.ts";
 import { filmTable, measureTake, renderScore, takeTable } from "./score.ts";
+import { draftScores, type Draft } from "./draft.ts";
 import { measureSync, measureSyncPictures, type SyncResult } from "./sync.ts";
 import type { Film } from "./render.ts";
 import { writeKitTiming } from "./kit.ts";
@@ -32,15 +34,38 @@ export function timingTable(t: Timing): string {
   return lines.join("\n");
 }
 
+// Each take's draft played as "score" would play it (in a temp dir, so the work's own score is left
+// as it was), ranked by what score would say: its check lines first, then the moments a listener
+// notices (each needs an event in the story).
+function rankDrafts(
+  work: string,
+  script: Script,
+  drafts: Draft[]
+): (Draft & { checks: number; moments: number })[] {
+  const timing = loadTiming(work);
+  const tmp = mkdtempSync(join(tmpdir(), "mr-draft-"));
+  return drafts
+    .map((d) => {
+      const tried = { ...script, score: { take: d.take, bars: d.bars } };
+      const s = renderScore(work, tried, timing, tmp);
+      return { ...d, checks: s.notes.length, moments: s.moments.length };
+    })
+    .sort((a, b) => a.checks - b.checks || a.moments - b.moments || a.joins - b.joins);
+}
+
 export async function runBeatBgm(work: string, script: Script, bpm: number): Promise<void> {
   const files = await bgmTakes(work, script, bpm);
   const takes = files.map((f) => measureTake(work, f, Number(/take(\d+)/.exec(f)?.[1] ?? 0), bpm));
   writeFileSync(join(work, "audio", "bgm", "takes.json"), JSON.stringify(takes));
-  const text = takes.map((t) => takeTable(t, bpm)).join("\n\n");
+  const drafts = rankDrafts(work, script, draftScores(takes, loadTiming(work), bpm)).map(
+    (d) =>
+      `draft: { "take": ${d.take}, "bars": "${d.bars}" }  (${d.checks} check lines, ${d.moments} moments, ${d.joins} joins)`
+  );
+  const text = [...takes.map((t) => takeTable(t, bpm)), drafts.join("\n")].join("\n\n");
   writeFileSync(join(work, "audio", "bgm", "takes.txt"), `${text}\n`);
   console.log(text);
   console.log(
-    `\nchoose a take and its bars, write them to "score" in script.json, then run "motion-render score ${work}" (the tables: ${join(work, "audio", "bgm", "takes.txt")})`
+    `\nstart from a draft (the first fits best), change it to fit the story, write it to "score" in script.json, then run "motion-render score ${work}" (the tables: ${join(work, "audio", "bgm", "takes.txt")})`
   );
 }
 

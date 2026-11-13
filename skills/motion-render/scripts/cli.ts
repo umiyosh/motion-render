@@ -43,7 +43,8 @@ const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
                                           and write the scene lengths to <work>/timing.json.
   motion-render bgm <work>                Make the BGM from script.json's "bgm" prompt (Lyria). With "bpm":
-                                          four takes from <work>/score.txt, each shown bar by bar.
+                                          four takes from <work>/score.txt, each shown bar by bar, and a
+                                          draft of the bars to play for each, best first.
   motion-render score <work>              Beat-synced films: play script.json's "score" (a take and its
                                           bars) onto the film's bars (audio/score.wav) and write its drum
                                           hits for the film (audio/hits.json, kit/timing.js).

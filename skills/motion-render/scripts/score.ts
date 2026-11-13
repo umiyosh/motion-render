@@ -19,7 +19,7 @@ function lockFilter(measured: number, target: number): string {
   return `aresample=${RATE},asetrate=${Math.round((RATE * target) / measured)},aresample=${RATE}`;
 }
 
-interface TakeBar {
+export interface TakeBar {
   t: number; // start in the tempo-locked take, s
   lvl: number; // dB against the take's loud bars
   kick: number;
@@ -298,8 +298,14 @@ function moments(timing: Timing, bar: number, lv: number[], hits: Hit[]): string
   return out;
 }
 
-// Renders script.score onto the film's bars: audio/score.wav and audio/hits.json.
-export function renderScore(work: string, script: Script, timing: Timing): Scored {
+// Renders script.score onto the film's bars: audio/score.wav and audio/hits.json (or into `out`, to
+// try a score without touching the work's own files).
+export function renderScore(
+  work: string,
+  script: Script,
+  timing: Timing,
+  out = join(work, "audio")
+): Scored {
   const bpm = script.bpm,
     cut = script.score;
   if (!bpm || !cut)
@@ -327,16 +333,16 @@ export function renderScore(work: string, script: Script, timing: Timing): Score
     bpm,
     timing.total
   );
-  const wav = join(work, "audio", "score.wav");
+  const wav = join(out, "score.wav");
   writeWav(audio, wav);
   const mono = decodeMono(wav);
   const lv = barLevels(mono, 0, bar, filmBars);
   const loud = percentile(lv, 0.85);
   const rel = lv.map((v) => Math.round(v - loud));
   const hits = detectHits(mono, bpm, 0);
-  writeFileSync(join(work, "audio", "hits.json"), JSON.stringify({ bpm, bar, hits }));
+  writeFileSync(join(out, "hits.json"), JSON.stringify({ bpm, bar, hits }));
   writeFileSync(
-    join(work, "audio", "score.json"),
+    join(out, "score.json"),
     JSON.stringify({ take: cut.take, bars: cut.bars, loud: Math.round(loud * 10) / 10 }, null, 2)
   );
   return {

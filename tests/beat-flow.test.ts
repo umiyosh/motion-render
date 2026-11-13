@@ -349,9 +349,15 @@ describe("takes, scoring, mixing and measuring a beat-synced work", () => {
     expect(sent.contents[0].parts[0].text).toMatch(
       /\[0:06\] drop\.\n\nInstrumental only.*exactly 120 BPM/s
     );
-    expect(readFileSync(join(work, "audio", "bgm", "takes.txt"), "utf8")).toMatch(
-      /^take 1: audio\/bgm\/take1\.wav/
-    );
+    const tables = readFileSync(join(work, "audio", "bgm", "takes.txt"), "utf8");
+    expect(tables).toMatch(/^take 1: audio\/bgm\/take1\.wav/);
+    // a draft per take, tried as score would play it, without leaving a score behind
+    expect(
+      tables.match(
+        /^draft: \{ "take": \d, "bars": "[-\d,]+" \} {2}\(\d+ check lines, \d+ moments, \d+ joins\)$/gm
+      )
+    ).toHaveLength(4);
+    expect(existsSync(join(work, "audio", "score.wav"))).toBe(false);
     expect(JSON.parse(readFileSync(join(work, "audio", "bgm", "takes.json"), "utf8"))).toHaveLength(
       4
     );
