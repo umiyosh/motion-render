@@ -226,6 +226,14 @@
     var items = list.map(function (w) {
       var e = node(w.el);
       e.style.transformOrigin = "left bottom";
+      // The layout check measures an element that holds text by its text, and the underline <b>
+      // then sticks out of it: the words go in a span of their own.
+      Array.prototype.slice.call(e.childNodes).forEach(function (c) {
+        if (c.nodeType !== 3 || !c.textContent.trim()) return;
+        var s = document.createElement("span");
+        e.replaceChild(s, c);
+        s.appendChild(c);
+      });
       var u = e.querySelector("b");
       if (u) u.style.transformOrigin = "left center";
       return {
@@ -263,8 +271,9 @@
       }
       if (it.next) {
         var up = ease.out2(prog(t, it.next.t0 - 0.15, 0.15));
+        // Sent up to make room, it stays large enough to read (0.4 of its size was not).
         y -= (1.06 * it.el.offsetHeight + 8) * up;
-        s *= 1 - 0.6 * up;
+        s *= 1 - 0.3 * up;
       }
       if (t >= end) {
         var q = ease.in2(prog(t, end, 0.35));

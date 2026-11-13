@@ -102,7 +102,9 @@ function textFindings(b: LayoutBox): Finding[] {
 // What is wrong with one still box on its own: cut by the frame, out of its box, or hidden.
 function boxFindings(b: LayoutBox, byKey: Map<number, LayoutBox>, quiet: Set<number>): Finding[] {
   const out: Finding[] = [];
-  if (b.cut)
+  // A marked thing with no text of its own (a tilted desk, a canvas bigger than the frame) may run
+  // off the frame on purpose; text never may.
+  if (b.cut && !(b.ok && !b.text))
     out.push({
       id: `frame:${b.key}`,
       kind: "frame",

@@ -48,7 +48,7 @@ function film(script: string): string {
 <body><div id="root">
   <div id="ball" class="layer-chip"></div>
   <div id="w1" class="word layer-caption"><span>点火</span><b></b></div>
-  <div id="w2" class="word layer-caption"><span>全開</span><b></b></div>
+  <div id="w2" class="word layer-caption">全開<b></b></div>
   <i id="flash" class="layer-caption" data-layout-ok style="position: absolute; inset: 0; background: #fff"></i>
   <section class="scene" id="drop"><p id="inside" class="layer-caption" style="position: absolute; left: 144px; top: 120px; font-size: 48px">全開の場面</p></section>
 </div>
@@ -58,7 +58,7 @@ function film(script: string): string {
   return dir;
 }
 
-// Two words land on hits and stay; the ball beats on every kick; the drop flashes.
+// Two words land on hits and stay (全開 written as bare text, which beat.words wraps itself); the ball beats on every kick; the drop flashes.
 const DRAWN = `
   var kicks = beat.pick({ k: "kick" });
   var words = beat.words([{ el: "#w1", t: 1 }, { el: "#w2", t: 2 }]);
@@ -108,7 +108,9 @@ describe("beat-synced html film", () => {
         under = await word(2.5, "全開");
       expect(alone && above && under).toBeTruthy();
       expect(above!.y + above!.h).toBeLessThanOrEqual(under!.y + 2);
-      expect(above!.h).toBeLessThan(alone!.h * 0.6);
+      // smaller, yet still large enough to read
+      expect(above!.h).toBeLessThan(alone!.h * 0.8);
+      expect(above!.h).toBeGreaterThan(alone!.h * 0.55);
       // the drop flashes on its frame
       expect((await f.frame(2)).equals(await f.frame(2.4))).toBe(false);
       expect(await f.warnings()).toEqual([]);

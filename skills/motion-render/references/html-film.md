@@ -69,6 +69,7 @@ Claude は `<work>/film/index.html` と、場面を書いた `<work>/film/scenes
 | `film.light(tl, 要素, 秒, o)`        | 部品の `step`・`card` を `秒` に光らせる。o: `off`（消す秒）・`dur`（既定 0.35）               |
 | `film.ticks(要素, o)`                | 部品の `ruler` に目盛りを付ける。o: `step`（間隔）・`label`（既定 `"{v}"`、`""` で無し）       |
 | `film.caption(tl, 要素, id, 秒)`     | 字幕を `秒` に出し、場面 `id` の終わりの 0.25 秒前までに消す                                   |
+| `film.scenes[id]`                    | 場面の `start`・`dur`（秒）・`speech`（語りの長さ。場面の頭から `lead` 秒後に始まる）・`name`  |
 | `section.scene`                      | その場面の間だけ見える。`#stage` のように section の外に置いたものはずっと見える               |
 
 ## 表現の道具

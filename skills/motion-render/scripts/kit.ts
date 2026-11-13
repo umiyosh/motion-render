@@ -39,8 +39,9 @@ export function writeKitTiming(work: string): void {
   const data = {
     total,
     ...(bpm === undefined ? {} : { bpm, end }),
-    scenes: scenes.map(({ id, start, dur, speech, section }) => ({
+    scenes: scenes.map(({ id, name, start, dur, speech, section }) => ({
       id,
+      name,
       start,
       dur,
       speech,
