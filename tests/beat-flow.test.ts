@@ -267,6 +267,18 @@ describe("sync", () => {
       measureSync(mp4, { ...SYNC_TIMING, bpm: undefined }, { lead: 0.25 }, KICKS)
     ).rejects.toThrow(/no bpm/);
   });
+
+  it("only reports the final hit of a film with no drop", async () => {
+    const mp4 = join(tempDir(), "quiet.mp4");
+    testMp4(mp4, 8, [], []);
+    const calm = {
+      ...SYNC_TIMING,
+      scenes: SYNC_TIMING.scenes.map((s) => ({ ...s, section: "intro" as const })),
+    };
+    const r = await measureSync(mp4, calm, { lead: 0.25 }, KICKS);
+    expect(r.lines.join("\n")).toMatch(/final hit 0:06\.00: the whole picture changes/);
+    expect(r.problems.join("\n")).not.toMatch(/final hit/);
+  });
 });
 
 function takeResponse(): Response {

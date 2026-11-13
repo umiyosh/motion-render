@@ -104,8 +104,11 @@ function peaks(m: Motion, fps: number, timing: Timing): SyncResult {
   const usual = Math.max(0.5, percentile(wholes, 0.9));
   const cues = timing.scenes
     .filter((s) => s.section === "drop")
-    .map((s) => ({ what: `drop "${s.id}"`, t: s.start }));
-  if (timing.end !== undefined) cues.push({ what: "final hit", t: timing.end });
+    .map((s) => ({ what: `drop "${s.id}"`, t: s.start, need: true }));
+  // A film with no drop has no peak for its last hit to answer: its ending is measured, not required
+  // to turn the whole picture over, which would bolt a jolt onto a calm film.
+  if (timing.end !== undefined)
+    cues.push({ what: "final hit", t: timing.end, need: cues.length > 0 });
   const lines: string[] = [],
     problems: string[] = [];
   for (const c of cues) {
@@ -118,6 +121,7 @@ function peaks(m: Motion, fps: number, timing: Timing): SyncResult {
     lines.push(
       `${c.what} ${clock(c.t)}: the whole picture changes ${x.toFixed(0)}x the film's usual large change, ${ms >= 0 ? "+" : ""}${ms.toFixed(0)} ms from the hit`
     );
+    if (!c.need) continue;
     if (x < 4)
       problems.push(
         `${c.what} at ${clock(c.t)}: the picture changes only ${x.toFixed(1)}x its usual large change (needs 4x): change the whole picture on this hit, in the way the story's event calls for`

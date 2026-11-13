@@ -94,7 +94,7 @@ For sound effects, add an ElevenLabs key as well ([step by step](docs/elevenlabs
 export ELEVENLABS_API_KEY="your key"
 ```
 
-Sound effects made without a subscription are for non-commercial use only and must be credited in the title (for example with `11.ai`) when published. motion-render puts `🎧:11.ai` on the title of a video with sound effects.
+Sound effects made without a subscription are for non-commercial use only and must be credited in the title (for example with `11.ai`) when published. motion-render puts `SFX: 11.ai` on the title of a video with sound effects.
 
 ### 3. Only if you use the Claude Code sandbox: add settings
 

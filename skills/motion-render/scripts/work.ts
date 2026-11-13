@@ -82,6 +82,8 @@ const DEFAULTS = {
 
 const SFX_DURATION = 1.5; // asked for when a sound effect gives no length, so none runs long
 const ID = /^[a-z][a-z0-9-]{0,31}$/;
+// Scene narration is written to audio/<id>.wav, next to these files of the film's own.
+const RESERVED = ["bgm", "score", "mix", "hits", "sfx"];
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 function fail(msg: string): never {
@@ -118,6 +120,10 @@ function parseScenes(value: unknown, sfxVolume: number): Scene[] {
     const { id, name, narration, section } = sc;
     if (typeof id !== "string" || !ID.test(id)) fail(`scenes[${i}].id must match ${ID}`);
     if (seen.has(id)) fail(`scenes[${i}].id "${id}" is duplicated`);
+    if (RESERVED.includes(id))
+      fail(
+        `scenes[${i}].id "${id}" is taken: audio/${id}.* holds the film's own audio (use another id)`
+      );
     seen.add(id);
     if (typeof narration !== "string" || !narration.trim())
       fail(`scenes[${i}].narration is required (every scene is narrated)`);
