@@ -74,6 +74,39 @@
     return 1 - Math.exp(-z * w * s) * (Math.cos(wd * s) + ((z * w) / wd) * Math.sin(wd * s));
   }
 
+  // A value that follows a list of targets [[t0, value], ...] (in time order), settling on each new
+  // target without overshoot (a critically damped spring per change, summed): an object that is
+  // sent somewhere new several times stays a pure function of t. o: { freq = 3 (Hz) }.
+  function follow(t, targets, o) {
+    var w = 2 * Math.PI * ((o && o.freq) || 3),
+      v = targets.length ? targets[0][1] : 0;
+    for (var i = 1; i < targets.length; i++) {
+      var s = t - targets[i][0];
+      if (s <= 0) break;
+      v += (targets[i][1] - targets[i - 1][1]) * (1 - (1 + w * s) * Math.exp(-w * s));
+    }
+    return v;
+  }
+
+  // A hand-drawn line that boils: the points of `pts` ([[x, y], ...]) moved by up to `amp` px,
+  // with a new wobble `rate` times a second (a held drawing still feels drawn by hand).
+  function boil(pts, t, amp, rate) {
+    var phase = Math.floor(t * (rate || 8));
+    return pts.map(function (p, i) {
+      return [
+        p[0] + (amp || 1.5) * noise(i * 0.37, phase * 1.7, 11),
+        p[1] + (amp || 1.5) * noise(i * 0.37, phase * 1.7, 29),
+      ];
+    });
+  }
+
+  // Where a point of a three.js scene appears on the frame, in px: for HTML labels that ride on
+  // 3D objects. `v` is a THREE.Vector3 in world space.
+  function project(v, camera) {
+    var p = v.clone().project(camera);
+    return { x: ((p.x + 1) / 2) * W, y: ((1 - p.y) / 2) * H, behind: p.z > 1 };
+  }
+
   // A <canvas> filling the frame (1920 x 1080 px) for 2D drawing; returns its context. Call it once,
   // outside film.draw, and clear or repaint the whole canvas in every draw.
   function canvas(sel) {
@@ -134,6 +167,9 @@
     noise: noise,
     fbm: fbm,
     spring: spring,
+    follow: follow,
+    boil: boil,
+    project: project,
     canvas: canvas,
     grain: grain,
     three: three,

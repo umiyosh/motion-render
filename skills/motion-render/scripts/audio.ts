@@ -474,12 +474,33 @@ export async function mix(
   ]);
 }
 
+// The time of picture j of the `blur` pictures averaged into frame k: spread over half a frame (a
+// 180° shutter) around the frame's own time, so a hit stays on its frame.
+export function pictureTime(k: number, j: number, fps: number, blur: number): number {
+  return Math.max(0, k / fps + ((j + 0.5) / blur - 0.5) * (0.5 / fps));
+}
+
 // ffmpeg arguments that read PNG frames from stdin and mux them with the mixed audio into an MP4.
-export function encodeArgs(fps: number, audio: string, out: string): string[] {
+// With blur > 1, stdin carries `blur` pictures per frame, which are averaged into one: the motion
+// blur of a camera shutter.
+export function encodeArgs(fps: number, audio: string, out: string, blur = 1): string[] {
+  const n = blur;
+  const average =
+    n > 1
+      ? [
+          "-vf",
+          `tmix=frames=${n},select='eq(mod(n\\,${n})\\,${n - 1})',setpts=N/(${fps}*TB)`,
+          "-fps_mode",
+          "cfr",
+          "-r",
+          String(fps),
+        ]
+      : [];
   return [
     ["-y", "-loglevel", "error"],
-    ["-f", "image2pipe", "-framerate", String(fps), "-i", "-", "-i", audio],
+    ["-f", "image2pipe", "-framerate", String(fps * n), "-i", "-", "-i", audio],
     ["-map", "0:v", "-map", "1:a"],
+    average,
     ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"],
     ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out],
   ].flat();

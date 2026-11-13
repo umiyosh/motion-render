@@ -47,6 +47,7 @@ export interface Script {
   bpm?: number; // beat-synced film: scenes start on beats, sections on bar lines
   score?: ScoreCut;
   scoreLevel: number; // dB of the score's loud bars against the narration's mean level
+  motionBlur: number; // pictures averaged into each frame of the MP4 (1 = no blur)
 }
 
 export interface TimingScene {
@@ -78,6 +79,7 @@ const DEFAULTS = {
   // Loud bars of the score against the narration's mean. At +5 dB the voice sank under the drops;
   // the same film with the score at 0.9 times that (+4.1 dB) was judged right (2026-11-12).
   scoreLevel: 4.1,
+  motionBlur: 1,
 };
 
 const SFX_DURATION = 1.5; // asked for when a sound effect gives no length, so none runs long
@@ -164,6 +166,12 @@ function num(s: Json, key: string, min: number, max: number, path?: string): num
   return v;
 }
 
+function whole(s: Json, key: string, min: number, max: number): number {
+  const v = num(s, key, min, max);
+  if (!Number.isInteger(v)) fail(`"${key}" must be a whole number between ${min} and ${max}`);
+  return v;
+}
+
 function name(s: Json, key: string): string {
   const v = s[key];
   if (typeof v !== "string" || !NAME.test(v)) fail(`"${key}" must match ${NAME}`);
@@ -195,6 +203,7 @@ export function loadScript(work: string): Script {
     ttsModel: name(s, "ttsModel"),
     bgmModel: name(s, "bgmModel"),
     scoreLevel: num(s, "scoreLevel", -20, 12),
+    motionBlur: whole(s, "motionBlur", 1, 8),
     ...(s.bpm === undefined ? {} : { bpm: num(s, "bpm", 60, 200) }),
     ...(s.score === undefined ? {} : { score: parseScore(s.score) }),
   };

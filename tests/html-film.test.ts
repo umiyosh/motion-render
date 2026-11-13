@@ -174,6 +174,14 @@ canvas { position:absolute; left:0; top:0; width:1920px; height:1080px; }
       ctx.fillRect(r() * 1920, r() * 1080, 8, 8);
     }
     fx.grain(ctx, t, 0.08);
+    var x = fx.follow(t, [[0, 200], [0.5, 1400], [1, 800]]);
+    var line = fx.boil([[x, 900], [x + 300, 960], [x + 600, 900]], t, 3);
+    ctx.strokeStyle = "#f2efe8";
+    ctx.beginPath();
+    line.forEach(function (p, i) { i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); });
+    ctx.stroke();
+    var at = fx.project(cube.position, g.camera);
+    ctx.fillRect(at.x - 4, at.y - 4, 8, 8);
     cube.scale.setScalar(0.2 + fx.spring(t, 0.3));
     cube.rotation.set(t, t * 1.3, 0);
     g.render();

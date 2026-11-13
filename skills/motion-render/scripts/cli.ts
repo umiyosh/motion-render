@@ -11,7 +11,17 @@ import { inOrder } from "./inorder.ts";
 import { checkLayout, formatIssue } from "./layout.ts";
 import { repeatIssues } from "./repeat.ts";
 import { writeKit, writeKitTiming } from "./kit.ts";
-import { narrate, bgm, bgmFile, mix, findFfmpeg, encodeArgs, exited, FFMPEG_MS } from "./audio.ts";
+import {
+  narrate,
+  bgm,
+  bgmFile,
+  mix,
+  findFfmpeg,
+  encodeArgs,
+  pictureTime,
+  exited,
+  FFMPEG_MS,
+} from "./audio.ts";
 import { limit } from "./limit.ts";
 import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx, type Script } from "./work.ts";
 import { runBeatBgm, runScore, runSync, scoreInput, syncReport, timingTable } from "./beatcli.ts";
@@ -161,19 +171,28 @@ const FRAME_MS = 60_000;
 
 // Pipes rendered frames straight into ffmpeg (no temp files) and muxes the mixed audio. The whole
 // encode runs as long as capture does, so the limits are per frame and for the final mux.
-async function encode(film: Film, fps: number, audio: string, out: string): Promise<number> {
+async function encode(
+  film: Film,
+  fps: number,
+  audio: string,
+  out: string,
+  blur: number
+): Promise<number> {
   const count = Math.round(film.meta.duration * fps);
-  const args = encodeArgs(fps, audio, out);
+  const args = encodeArgs(fps, audio, out, blur);
   const ff = spawn(findFfmpeg(), args, { stdio: ["pipe", "inherit", "inherit"] });
   const kill = () => ff.kill("SIGKILL");
   const exit = exited(ff);
   ff.stdin.on("error", () => {}); // EPIPE when ffmpeg dies early; its exit code reports the cause.
+  const pictures = count * blur;
+  const at = (i: number) => pictureTime(Math.floor(i / blur), i % blur, fps, blur);
   try {
     let i = 0;
-    for await (const png of inOrder(count, film.pages, (k) => film.frame(k / fps))) {
+    for await (const png of inOrder(pictures, film.pages, (p) => film.frame(at(p)))) {
       if (!ff.stdin.write(png))
-        await limit(once(ff.stdin, "drain"), FRAME_MS, `ffmpeg taking frame ${i}`, kill);
-      if (i % Math.max(1, Math.round(count / 10)) === 0) console.error(`frames: ${i}/${count}`);
+        await limit(once(ff.stdin, "drain"), FRAME_MS, `ffmpeg taking picture ${i}`, kill);
+      if (i % Math.max(1, Math.round(pictures / 10)) === 0)
+        console.error(`frames: ${Math.floor(i / blur)}/${count}`);
       i++;
     }
   } finally {
@@ -239,7 +258,7 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
       audio
     );
     mkdirSync(dirname(out), { recursive: true });
-    const count = await encode(film, fps, audio, out);
+    const count = await encode(film, fps, audio, out, script.motionBlur);
     for (const w of await film.warnings()) console.error("runner", w);
     const extra = sfx.length ? ` + ${sfx.length} sound effects` : "";
     console.log(`done: ${out} (${film.meta.duration}s, ${count} frames, narration + BGM${extra})`);
