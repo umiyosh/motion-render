@@ -90,7 +90,8 @@ interface FilmMeta {
 
 export interface Film {
   meta: FilmMeta;
-  frame(t: number): Promise<Buffer>;
+  // `still`: the time of the MP4 frame the picture at t goes into (motion blur), t when omitted.
+  frame(t: number, still?: number): Promise<Buffer>;
   // html films only: what paints on screen at t, for the layout check.
   inspect?(t: number): Promise<LayoutBox[]>;
   warnings(): Promise<string[]>;
@@ -134,7 +135,7 @@ declare global {
     // An html film's hook: the page lays itself out at time t and the runner screenshots it.
     __film: {
       load(): unknown;
-      seek(t: number): unknown;
+      seek(t: number, frame?: number): unknown;
       // Optional: false while the page is still settling. Polled from Node, since a film page may
       // control its own timers.
       ready?(): unknown;
@@ -311,17 +312,17 @@ async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm>
     throw new Error("film failed to load: " + errorMessage(e));
   }
   let injected = false;
-  const seek = async (t: number) => {
+  const seek = async (t: number, still = t) => {
     await call(
-      page.evaluate((tt) => window.__film.seek(tt), t),
+      page.evaluate(([tt, ss]) => window.__film.seek(tt, ss), [t, still] as const),
       `__film.seek(${sec(t)})`
     );
     await waitReady(page, call);
   };
   return {
     meta: parseMeta(meta),
-    async frame(t) {
-      await seek(t);
+    async frame(t, still) {
+      await seek(t, still);
       return call(page.screenshot({ type: "png" }), `screenshot at ${sec(t)}s`);
     },
     async inspect(t) {
@@ -389,7 +390,7 @@ export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Fil
       meta: first.meta,
       pages,
       only: entry?.ids ?? null,
-      frame: (t) => run((f) => f.frame(t)),
+      frame: (t, still) => run((f) => f.frame(t, still)),
       inspect:
         first.inspect && ((t) => run((f) => (f.inspect ? f.inspect(t) : Promise.resolve([])))),
       // Every page logs the same film, so the same warning comes once.

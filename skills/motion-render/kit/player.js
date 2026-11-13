@@ -133,6 +133,9 @@
     draw: function (fn) {
       draws.push(fn);
     },
+    // The time of the MP4 frame being drawn (fn's second argument too): equal to t except under motion
+    // blur. Read changing text from it.
+    frameTime: 0,
     // GSAP x/y that put the center of `what` on the center of `target`, moved by (dx, dy).
     // Use it to send a chip to a card instead of working out pixel offsets by hand. Either may be an
     // SVG element, such as an <svg> icon or a shape inside a diagram.
@@ -374,13 +377,18 @@
         }),
       };
     },
-    seek: function (t) {
+    // `frame` is the time of the MP4 frame this picture goes into. With motion blur, several pictures
+    // at times around it are averaged into one frame, and text that changes (a count-up) must take
+    // its value from the frame's time, or the digits of the pictures blur into each other.
+    seek: function (t, frame) {
+      var f = frame === undefined ? t : frame;
+      window.film.frameTime = f;
       show(t);
       boil(t);
       // suppressEvents=false so onUpdate callbacks (count-ups) run on every seek.
       timeline.seek(t, false);
       draws.forEach(function (fn) {
-        fn(t);
+        fn(t, f);
       });
     },
   };

@@ -188,7 +188,9 @@ async function encode(
   const at = (i: number) => pictureTime(Math.floor(i / blur), i % blur, fps, blur);
   try {
     let i = 0;
-    for await (const png of inOrder(pictures, film.pages, (p) => film.frame(at(p)))) {
+    for await (const png of inOrder(pictures, film.pages, (p) =>
+      film.frame(at(p), Math.floor(p / blur) / fps)
+    )) {
       if (!ff.stdin.write(png))
         await limit(once(ff.stdin, "drain"), FRAME_MS, `ffmpeg taking picture ${i}`, kill);
       if (i % Math.max(1, Math.round(pictures / 10)) === 0)
