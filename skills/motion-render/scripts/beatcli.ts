@@ -69,7 +69,7 @@ const MAX_SHIFT = 0.05; // locking a take to the film's tempo moves its pitch by
 // When every take came back more than 5% off the asked tempo, locking one to it would move its pitch
 // by over a semitone and change its sound. Lyria often holds a tempo of its own for a style, and the
 // film's tempo can follow it instead: the scenes move to the new beat grid, the speech stays.
-export function tempoAdvice(takes: Take[], bpm: number, work: string): string | null {
+function tempoAdvice(takes: Take[], bpm: number, work: string): string | null {
   const off = takes.map((t) => t.measured);
   if (!off.length || off.some((m) => Math.abs(bpm / m - 1) <= MAX_SHIFT)) return null;
   const near = Math.round([...off].sort((a, b) => a - b)[off.length >> 1]!);
