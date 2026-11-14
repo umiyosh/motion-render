@@ -1,6 +1,5 @@
 // Audio as numbers for the beat analysis: decoding with ffmpeg, band filters and 1 ms envelopes.
-import { spawnSync } from "node:child_process";
-import { findFfmpeg } from "./audio.ts";
+import { ffmpegSync } from "./audio.ts";
 
 export const SR = 24000; // analysis rate
 const HOP = 24; // samples per envelope frame
@@ -8,11 +7,9 @@ export const FPS = SR / HOP; // envelope frames per second: one per millisecond
 export const RATE = 44100; // rate of the rendered score
 
 function pcm(args: string[]): Float32Array {
-  const r = spawnSync(findFfmpeg(), ["-v", "error", ...args, "-f", "f32le", "-"], {
+  const b = ffmpegSync(["-v", "error", ...args, "-f", "f32le", "-"], "decode", {
     maxBuffer: 2 ** 31 - 1,
   });
-  if (r.status !== 0) throw new Error(`ffmpeg could not decode: ${r.stderr.toString().trim()}`);
-  const b = r.stdout;
   return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + (b.byteLength & ~3)));
 }
 

@@ -229,19 +229,35 @@ async function launch(): Promise<Browser> {
 }
 
 // Opens the film page with the network cut off: only files under the film dir and data:/blob: load.
-async function openPage(browser: Browser): Promise<Page> {
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-  await page.context().addInitScript(() => {
-    for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection"])
-      Reflect.deleteProperty(globalThis, k);
-  });
+async function openPage(browser: Browser, call: Call): Promise<Page> {
+  const page = await call(browser.newPage({ viewport: { width: 1920, height: 1080 } }), "opening");
+  await call(
+    page.context().addInitScript(() => {
+      for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection"])
+        Reflect.deleteProperty(globalThis, k);
+    }),
+    "setup"
+  );
   let here: string | null = null;
-  await page.context().route("**/*", (r) => {
-    const u = r.request().url();
-    if (!here && r.request().isNavigationRequest()) here = u.slice(0, u.lastIndexOf("/") + 1);
-    return (here && u.startsWith(here)) || /^(data|blob):/.test(u) ? r.continue() : r.abort();
-  });
+  await call(
+    page.context().route("**/*", (r) => {
+      const u = r.request().url();
+      if (!here && r.request().isNavigationRequest()) here = u.slice(0, u.lastIndexOf("/") + 1);
+      return (here && u.startsWith(here)) || /^(data|blob):/.test(u) ? r.continue() : r.abort();
+    }),
+    "network cut-off"
+  );
   return page;
+}
+
+// Closes a browser, but gives up after ms: a wedged Chromium must not keep the command from ending
+// (#51). Playwright kills the browsers it launched when the process exits.
+async function closeBrowser(b: Browser, ms: number): Promise<void> {
+  try {
+    await limit(b.close(), ms, "closing Chromium");
+  } catch (e) {
+    console.error(`motion-render: ${errorMessage(e)}; leaving it to be killed on exit`);
+  }
 }
 
 async function motionFilm(page: Page, dir: string, call: Call): Promise<PageFilm> {
@@ -318,7 +334,7 @@ async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm>
   let injected = false;
   // Chromium's own capture with its fast PNG settings: the same pixels (PNG is lossless) in about
   // half the time of Playwright's screenshot, whose PNG compression took most of each frame.
-  const cdp = await page.context().newCDPSession(page);
+  const cdp = await call(page.context().newCDPSession(page), "capture session");
   const capture = async (): Promise<Buffer> => {
     const r: unknown = await cdp.send("Page.captureScreenshot", {
       format: "png",
@@ -387,7 +403,8 @@ export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Fil
   if (scenes.length && !html) throw new Error("only an html film has scene files");
   const entry = html ? filmPage(dir, scenes) : null;
   const browsers: Browser[] = [];
-  const closeAll = () => Promise.all(browsers.map((b) => b.close())).then(() => entry?.close());
+  const closeAll = () =>
+    Promise.all(browsers.map((b) => closeBrowser(b, pageMs))).then(() => entry?.close());
   const call: Call = (p, what) => limit(p, pageMs, `the film page's ${what}`);
   const open = (page: Page) =>
     entry ? htmlFilm(page, entry.file, call) : motionFilm(page, dir, call);
@@ -398,7 +415,7 @@ export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Fil
     for (const r of more) if (r.status === "fulfilled") browsers.push(r.value);
     const failed = more.find((r) => r.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
-    const films = await Promise.all(browsers.map(async (b) => open(await openPage(b))));
+    const films = await Promise.all(browsers.map(async (b) => open(await openPage(b, call))));
     const [first] = films;
     if (!first) throw new Error("no film page opened");
     const run = onFreePage(films);

@@ -415,4 +415,10 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((e: unknown) => die(errorMessage(e)));
+// Exits once the output is written. A Chromium that would not close (#51) holds its pipe open and
+// would keep Node running; exiting lets Playwright kill it.
+function exitWhenWritten(): void {
+  process.stdout.write("", () => process.stderr.write("", () => process.exit()));
+}
+
+main().then(exitWhenWritten, (e: unknown) => die(errorMessage(e)));

@@ -1,11 +1,10 @@
 // One contact sheet of a film's MP4 for a critic: the middle of every scene, a beat before, on and
 // after each drop, and the final hit, four to a row. A critic reads one image instead of a hundred
 // frames, which keeps a review round to minutes.
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findFfmpeg } from "./audio.ts";
+import { ffmpegSync } from "./audio.ts";
 import { clock, type Timing } from "./work.ts";
 
 interface Shot {
@@ -36,22 +35,19 @@ function sheetShots(timing: Timing): Shot[] {
 
 // A picture of the MP4 at t, as PNG.
 export function mp4Picture(mp4: string): (t: number) => Promise<Buffer> {
-  const ff = findFfmpeg();
-  return (t) => {
-    const r = spawnSync(
-      ff,
-      ["-v", "error", "-ss", t.toFixed(3), "-i", mp4, "-frames:v", "1"].concat([
-        "-f",
-        "image2",
-        "-c:v",
-        "png",
-        "-",
-      ]),
-      { maxBuffer: 64 * 1024 * 1024 }
+  return (t) =>
+    Promise.resolve(
+      ffmpegSync(
+        ["-v", "error", "-ss", t.toFixed(3), "-i", mp4, "-frames:v", "1"].concat([
+          "-f",
+          "image2",
+          "-c:v",
+          "png",
+          "-",
+        ]),
+        `read ${mp4} at ${t}s`
+      )
     );
-    if (r.status !== 0) throw new Error(`ffmpeg could not read ${mp4} at ${t}: ${r.stderr}`);
-    return Promise.resolve(r.stdout);
-  };
 }
 
 // Writes the sheet and, next to it, a .txt naming each tile; returns those names. `picture` gives
@@ -61,7 +57,6 @@ export async function writeSheet(
   timing: Timing,
   out: string
 ): Promise<string[]> {
-  const ff = findFfmpeg();
   const shots = sheetShots(timing);
   const dir = mkdtempSync(join(tmpdir(), "mr-sheet-"));
   const files = await Promise.all(
@@ -82,18 +77,20 @@ export async function writeSheet(
   ).join("|");
   const scaled = Array.from({ length: n }, (_, i) => `[${i}:v]scale=${W}:${H}[s${i}];`).join("");
   const stack = Array.from({ length: n }, (_, i) => `[s${i}]`).join("");
-  const r = spawnSync(ff, [
-    "-v",
-    "error",
-    "-y",
-    ...inputs,
-    "-filter_complex",
-    `${scaled}${stack}xstack=inputs=${n}:layout=${layout}`,
-    "-frames:v",
-    "1",
-    out,
-  ]);
-  if (r.status !== 0) throw new Error(`ffmpeg could not tile the sheet: ${r.stderr}`);
+  ffmpegSync(
+    [
+      "-v",
+      "error",
+      "-y",
+      ...inputs,
+      "-filter_complex",
+      `${scaled}${stack}xstack=inputs=${n}:layout=${layout}`,
+      "-frames:v",
+      "1",
+      out,
+    ],
+    "tile the sheet"
+  );
   const names = shots.map(
     (s, i) =>
       `${i + 1} (row ${Math.floor(i / COLS) + 1}, column ${(i % COLS) + 1}): ${clock(s.t)} ${s.label}`

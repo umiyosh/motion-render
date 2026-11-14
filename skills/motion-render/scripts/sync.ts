@@ -5,7 +5,10 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { inOrder } from "./inorder.ts";
-import { findFfmpeg, exited } from "./audio.ts";
+import { findFfmpeg, exited, FFMPEG_MS } from "./audio.ts";
+import { limit } from "./limit.ts";
+
+const FRAME_MS = 60_000; // ffmpeg taking one picture, or finishing after the last
 import { clock, type Script, type Timing } from "./work.ts";
 import type { Hit } from "./hits.ts";
 import { percentile } from "./signal.ts";
@@ -75,7 +78,9 @@ async function motionOf(mp4: string): Promise<Motion> {
       rest = rest.subarray(size);
     }
   });
-  const code = await exited(ff);
+  const code = await limit(exited(ff), FFMPEG_MS, `ffmpeg reading ${mp4}`, () =>
+    ff.kill("SIGKILL")
+  );
   if (code !== 0) throw new Error(`ffmpeg could not read ${mp4}`);
   return {
     frames: out.length,
@@ -318,14 +323,21 @@ function framesToMeasure(
   return { frames: [...want].sort((a, b) => a - b), usual };
 }
 
+// Pictures drawn on demand: `draw` gives frame f, `ahead` of them are drawn at once, and ffmpeg
+// gets `ffmpegMs` to take each one and to finish (#51: a stalled ffmpeg is killed, not waited on).
+interface Pictures {
+  draw: (f: number) => Promise<Buffer>;
+  ahead: number;
+  ffmpegMs?: number;
+}
+
 // The change of each frame in `frames` from the frame before, from pictures drawn on demand. The
 // pictures stream through ffmpeg in order, `ahead` at a time, so only gray thumbnails are kept.
 async function motionOfPictures(
   frames: number[],
   usual: number[],
-  draw: (f: number) => Promise<Buffer>,
   total: number,
-  ahead: number
+  { draw, ahead, ffmpegMs = FRAME_MS }: Pictures
 ): Promise<Motion> {
   const need = [...new Set(frames.flatMap((f) => [f - 1, f]))].sort((a, b) => a - b);
   const ff = spawn(
@@ -351,14 +363,23 @@ async function motionOfPictures(
       gray.push(Buffer.from(rest.subarray(0, size)));
   });
   const exit = exited(ff);
+  const kill = () => ff.kill("SIGKILL");
   ff.stdin.on("error", () => {}); // EPIPE when ffmpeg dies early; its exit code reports the cause.
   try {
-    for await (const png of inOrder(need.length, ahead, (i) => draw(need[i]!)))
-      if (!ff.stdin.write(png)) await once(ff.stdin, "drain");
+    let i = 0;
+    for await (const png of inOrder(need.length, ahead, (k) => draw(need[k]!))) {
+      if (!ff.stdin.write(png))
+        await limit(once(ff.stdin, "drain"), ffmpegMs, `ffmpeg taking picture ${i}`, kill);
+      i++;
+    }
+  } catch (e) {
+    kill(); // a picture that failed to draw leaves ffmpeg waiting for the rest
+    throw e;
   } finally {
     ff.stdin.end();
   }
-  if ((await exit) !== 0) throw new Error("ffmpeg could not read the preview's pictures");
+  const code = await limit(exit, ffmpegMs, "ffmpeg reading the preview's pictures", kill);
+  if (code !== 0) throw new Error("ffmpeg could not read the preview's pictures");
   const at = new Map(need.map((f, i) => [f, gray[i]!]));
   const change = new Map(
     frames.map((f) => [f, frameChange(at.get(f)!, at.get(f - 1) ?? null)] as const)
@@ -377,14 +398,14 @@ async function motionOfPictures(
 // The same report as measureSync, from only the frames it reads, drawn at `fps` by `draw` (a
 // picture of frame f): no MP4 is needed, so a film can be measured before it is built.
 export async function measureSyncPictures(
-  pictures: { draw: (f: number) => Promise<Buffer>; fps: number; ahead: number },
+  pictures: Pictures & { fps: number },
   timing: Timing,
   script: Pick<Script, "lead">,
   hits: Hit[]
 ): Promise<SyncResult> {
-  const { draw, fps, ahead } = pictures;
+  const { fps } = pictures;
   const { frames, usual } = framesToMeasure(timing, hits, fps);
   const total = Math.round(timing.total * fps);
-  const motion = await motionOfPictures(frames, usual, draw, total, ahead);
+  const motion = await motionOfPictures(frames, usual, total, pictures);
   return measure(motion, fps, timing, script, hits);
 }

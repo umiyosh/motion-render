@@ -67,6 +67,21 @@ export function findFfmpeg(): string {
   throw new Error("ffmpeg not found: install ffmpeg or set FFMPEG_PATH");
 }
 
+// Runs ffmpeg to the end and returns what it wrote to stdout. `what` names the job in errors
+// ("tile the sheet"). An ffmpeg that runs past ms is killed instead of waited on (#51).
+export function ffmpegSync(
+  args: string[],
+  what: string,
+  { ms = FFMPEG_MS, maxBuffer = 64 * 1024 * 1024 } = {}
+): Buffer {
+  const r = spawnSync(findFfmpeg(), args, { maxBuffer, timeout: ms, killSignal: "SIGKILL" });
+  if (r.error && "code" in r.error && r.error.code === "ETIMEDOUT")
+    throw new Error(`ffmpeg did not ${what} in ${ms / 1000}s`);
+  if (r.status !== 0)
+    throw new Error(`ffmpeg could not ${what}: ${r.error?.message ?? String(r.stderr).trim()}`);
+  return r.stdout;
+}
+
 // Resolves with ffmpeg's exit code once it has exited.
 export function exited(ff: ChildProcess): Promise<number | null> {
   return new Promise((ok, fail) => {
