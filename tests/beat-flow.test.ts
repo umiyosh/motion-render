@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { loadScript, loadTiming, writeTiming } from "../skills/motion-render/scripts/work.ts";
 import { findLayoutIssues, type LayoutBox } from "../skills/motion-render/scripts/layout.ts";
 import { psnr, repeatTimes } from "../skills/motion-render/scripts/repeat.ts";
@@ -446,7 +446,12 @@ describe("takes, scoring, mixing and measuring a beat-synced work", () => {
     const made = vi.mocked(fetch).mock.calls.length;
     writeFileSync(join(work, "script.json"), JSON.stringify({ ...BEAT_SCRIPT, bpm: 118 }));
     writeTiming(work, loadScript(work));
-    await runBeatBgm(work, loadScript(work), 118, true);
+    // through the command line, as the guide says it (no new takes, so no API key is needed)
+    const cli = join(import.meta.dirname, "..", "skills", "motion-render", "scripts", "cli.ts");
+    execFileSync(process.execPath, [cli, "bgm", work, "--again"], {
+      stdio: "pipe",
+      env: { ...process.env, GEMINI_API_KEY: "" },
+    });
     expect(vi.mocked(fetch).mock.calls.length).toBe(made);
     const again = readFileSync(takes, "utf8");
     expect(again).toMatch(/played -?0\.\d% faster to 118 BPM/);

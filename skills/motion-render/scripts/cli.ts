@@ -160,11 +160,10 @@ async function runNarrate(work: string): Promise<void> {
   console.log(`total: ${timing.total}s -> ${join(work, "timing.json")}`);
 }
 
-async function runBgm(work: string, flag?: string): Promise<void> {
-  if (flag !== undefined && flag !== "--again") throw new Error(`bgm: unknown option ${flag}`);
+async function runBgm(work: string, again: boolean): Promise<void> {
   const script = loadScript(work);
-  if (script.bpm) return runBeatBgm(work, script, script.bpm, flag === "--again");
-  if (flag) throw new Error('bgm --again measures the takes of a beat-synced film (with "bpm")');
+  if (script.bpm) return runBeatBgm(work, script, script.bpm, again);
+  if (again) throw new Error('bgm --again measures the takes of a beat-synced film (with "bpm")');
   const file = await bgm(work, script, loadTiming(work).total);
   console.log(`bgm: ${file}`);
 }
@@ -285,12 +284,17 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
   if (timing.bpm) await syncReport(work, script, timing, out);
 }
 
-interface Command {
-  args: [number, number]; // fewest and most arguments
-  run(args: string[], fps: number): Promise<void> | void;
+interface Options {
+  fps: number; // build: --fps
+  again: boolean; // bgm: --again
 }
 
-function runBuild([a, b]: string[], fps: number): Promise<void> {
+interface Command {
+  args: [number, number]; // fewest and most arguments
+  run(args: string[], options: Options): Promise<void> | void;
+}
+
+function runBuild([a, b]: string[], { fps }: Options): Promise<void> {
   const work = resolve(a!);
   const out = resolve(
     b ?? join(process.env.MOTION_RENDER_OUT_DIR || process.cwd(), `${basename(work)}.mp4`)
@@ -354,7 +358,7 @@ async function preview(work: string, out?: string): Promise<void> {
 
 const COMMANDS = new Map<string, Command>([
   ["narrate", { args: [1, 1], run: ([w]) => runNarrate(resolve(w!)) }],
-  ["bgm", { args: [1, 2], run: ([w, f]) => runBgm(resolve(w!), f) }],
+  ["bgm", { args: [1, 1], run: ([w], { again }) => runBgm(resolve(w!), again) }],
   ["score", { args: [1, 1], run: ([w]) => runScore(resolve(w!)) }],
   ["sync", { args: [2, 2], run: ([w, m]) => runSync(resolve(w!), resolve(m!)) }],
   ["sfx", { args: [1, 1], run: ([w]) => runSfx(resolve(w!)) }],
@@ -392,6 +396,7 @@ async function main(): Promise<void> {
     allowPositionals: true,
     options: {
       fps: { type: "string" }, // build: 30, or 60 for a beat-synced film
+      again: { type: "boolean" }, // bgm: measure the last takes again, without new ones
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -405,7 +410,9 @@ async function main(): Promise<void> {
     die(`unknown command or wrong arguments\n\n${USAGE}`, 2);
   const target = cmd === "prepare" ? rest[1] : rest[0];
   const work = LOGGED.has(cmd) && target ? workOf(target) : null;
-  return timed(work, cmd, () => command.run(rest, Number(values.fps)));
+  return timed(work, cmd, () =>
+    command.run(rest, { fps: Number(values.fps), again: values.again === true })
+  );
 }
 
 main().catch((e: unknown) => die(errorMessage(e)));
