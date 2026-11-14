@@ -103,6 +103,9 @@
   // Where a point of a three.js scene appears on the frame, in px: for HTML labels that ride on
   // 3D objects. `v` is a THREE.Vector3 in world space.
   function project(v, camera) {
+    // The camera's matrices follow its position only when the scene is rendered: a film that moves
+    // the camera and asks where a point shows before rendering would get the last frame's answer.
+    camera.updateMatrixWorld();
     var p = v.clone().project(camera);
     return { x: ((p.x + 1) / 2) * W, y: ((1 - p.y) / 2) * H, behind: p.z > 1 };
   }

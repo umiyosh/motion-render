@@ -71,7 +71,43 @@ canvas { position:absolute; left:0; top:0; width:1920px; height:1080px; }
   });
 </script></body></html>`;
 
+// A camera that moves with t, and a mark put where the cube shows before the scene is rendered.
+const PROJECT_PAGE = `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/base.css">
+<script src="kit/gsap.min.js"></script><script src="kit/three.min.js"></script>
+<script src="kit/timing.js"></script><script src="kit/player.js"></script><script src="kit/fx.js"></script>
+<style>body { background: #000; } canvas { position:absolute; left:0; top:0; width:1920px; height:1080px; }</style>
+</head><body><div id="root">
+  <canvas id="gl" class="layer-bg" data-layout-ok></canvas>
+  <canvas id="mark" class="layer-fx" data-layout-ok></canvas>
+</div>
+<script>
+  var ctx = fx.canvas("#mark"), g = fx.three("#gl");
+  var cube = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x3a8ee8 }));
+  g.scene.add(cube);
+  film.draw(function (t) {
+    g.camera.position.set(t * 3, 0, 8);
+    var at = fx.project(cube.position, g.camera);
+    ctx.clearRect(0, 0, 1920, 1080);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(at.x - 20, at.y - 20, 40, 40);
+    g.render();
+  });
+</script></body></html>`;
+
 describe("the kit's drawing libraries", () => {
+  it("projects a point with the camera of this frame, even before the scene is rendered", async () => {
+    const film = await openFilm(filmOf(PROJECT_PAGE));
+    try {
+      const a = await film.frame(1.2);
+      await film.frame(0.2);
+      expect((await film.frame(1.2)).equals(a)).toBe(true);
+    } finally {
+      await film.close();
+    }
+  });
+
   it("draws three.js, fx and GSAP plugins, the same frame twice, without warnings", async () => {
     const film = await openFilm(filmOf(RICH_PAGE));
     try {
