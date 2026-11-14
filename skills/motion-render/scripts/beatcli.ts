@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bgmTakes } from "./audio.ts";
 import { clock, loadScript, loadTiming, type Script, type Timing } from "./work.ts";
-import { filmTable, measureTake, renderScore, takeTable } from "./score.ts";
+import { filmTable, measureTake, renderScore, takeTable, type Take } from "./score.ts";
 import { draftScores, type Draft } from "./draft.ts";
 import { measureSync, measureSyncPictures, type SyncResult } from "./sync.ts";
 import type { Film } from "./render.ts";
@@ -53,15 +53,48 @@ function rankDrafts(
     .sort((a, b) => a.checks - b.checks || a.moments - b.moments || a.joins - b.joins);
 }
 
-export async function runBeatBgm(work: string, script: Script, bpm: number): Promise<void> {
-  const files = await bgmTakes(work, script, bpm);
+// The takes the last "bgm" made (audio/bgm.json), to measure again at another tempo.
+function keptTakes(work: string): string[] {
+  const file = join(work, "audio", "bgm.json");
+  if (!existsSync(file)) throw new Error(`no takes yet (${file}): run bgm without --again first`);
+  const v = readJson(file);
+  const takes = isRecord(v) ? v.takes : undefined;
+  if (!Array.isArray(takes) || !takes.every((t) => typeof t === "string"))
+    throw new Error(`${file}: "takes" must be a list of files`);
+  return takes;
+}
+
+const MAX_SHIFT = 0.05; // locking a take to the film's tempo moves its pitch by as much
+
+// When every take came back more than 5% off the asked tempo, locking one to it would move its pitch
+// by over a semitone and change its sound. Lyria often holds a tempo of its own for a style, and the
+// film's tempo can follow it instead: the scenes move to the new beat grid, the speech stays.
+export function tempoAdvice(takes: Take[], bpm: number, work: string): string | null {
+  const off = takes.map((t) => t.measured);
+  if (!off.length || off.some((m) => Math.abs(bpm / m - 1) <= MAX_SHIFT)) return null;
+  const near = Math.round([...off].sort((a, b) => a - b)[off.length >> 1]!);
+  return `tempo: every take is more than 5% off ${bpm} BPM (${Math.min(...off)}-${Math.max(...off)} BPM), and locking one to ${bpm} would shift its pitch and sound. Set "bpm" to ${near} in script.json, run "motion-render narrate ${work}" (it keeps the speech) and "motion-render bgm ${work} --again" to measure these takes at ${near} BPM without making new ones`;
+}
+
+export async function runBeatBgm(
+  work: string,
+  script: Script,
+  bpm: number,
+  again = false
+): Promise<void> {
+  const files = again ? keptTakes(work) : await bgmTakes(work, script, bpm);
   const takes = files.map((f) => measureTake(work, f, Number(/take(\d+)/.exec(f)?.[1] ?? 0), bpm));
   writeFileSync(join(work, "audio", "bgm", "takes.json"), JSON.stringify(takes));
   const drafts = rankDrafts(work, script, draftScores(takes, loadTiming(work), bpm)).map(
     (d) =>
       `draft: { "take": ${d.take}, "bars": "${d.bars}" }  (${d.checks} check lines, ${d.moments} moments, ${d.joins} joins)`
   );
-  const text = [...takes.map((t) => takeTable(t, bpm)), drafts.join("\n")].join("\n\n");
+  const advice = tempoAdvice(takes, bpm, work);
+  const text = [
+    ...takes.map((t) => takeTable(t, bpm)),
+    drafts.join("\n"),
+    ...(advice ? [advice] : []),
+  ].join("\n\n");
   writeFileSync(join(work, "audio", "bgm", "takes.txt"), `${text}\n`);
   console.log(text);
   console.log(

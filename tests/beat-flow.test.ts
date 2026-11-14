@@ -433,6 +433,26 @@ describe("takes, scoring, mixing and measuring a beat-synced work", () => {
     expect(await mediaSeconds(out)).toBeCloseTo(timing.total, 1);
   });
 
+  it("offers the takes' own tempo when every take is far off, and measures them again at it", async () => {
+    const work = workDir({ ...BEAT_SCRIPT, bpm: 126 }, { intro: 1.3, rise: 2.2, drop: 1.0 });
+    writeTiming(work, loadScript(work));
+    writeFileSync(join(work, "score.txt"), "Score for a film. [0:00 - 0:06] build. [0:06] drop.");
+    await runBeatBgm(work, loadScript(work), 126);
+    const takes = join(work, "audio", "bgm", "takes.txt");
+    // the takes come at 118 BPM: 6.8% off
+    expect(readFileSync(takes, "utf8")).toMatch(
+      /^tempo: every take is more than 5% off 126 BPM .* Set "bpm" to 118 .* bgm .* --again/m
+    );
+    const made = vi.mocked(fetch).mock.calls.length;
+    writeFileSync(join(work, "script.json"), JSON.stringify({ ...BEAT_SCRIPT, bpm: 118 }));
+    writeTiming(work, loadScript(work));
+    await runBeatBgm(work, loadScript(work), 118, true);
+    expect(vi.mocked(fetch).mock.calls.length).toBe(made);
+    const again = readFileSync(takes, "utf8");
+    expect(again).toMatch(/played -?0\.\d% faster to 118 BPM/);
+    expect(again).not.toMatch(/^tempo:/m);
+  });
+
   it("refuses to score a film without a beat, and fails sync with its problems", async () => {
     const work = workDir({ ...BEAT_SCRIPT, bpm: undefined }, { intro: 1, rise: 1, drop: 1 });
     writeTiming(work, loadScript(work));

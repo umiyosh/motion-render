@@ -42,9 +42,10 @@ import { mp4Picture, writeSheet } from "./sheet.ts";
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
   motion-render narrate <work>            Narrate every scene of <work>/script.json (Gemini TTS)
                                           and write the scene lengths to <work>/timing.json.
-  motion-render bgm <work>                Make the BGM from script.json's "bgm" prompt (Lyria). With "bpm":
+  motion-render bgm <work> [--again]      Make the BGM from script.json's "bgm" prompt (Lyria). With "bpm":
                                           four takes from <work>/score.txt, each shown bar by bar, and a
-                                          draft of the bars to play for each, best first.
+                                          draft of the bars to play for each, best first. --again measures
+                                          the last takes again at script.json's "bpm" (no new takes).
   motion-render score <work>              Beat-synced films: play script.json's "score" (a take and its
                                           bars) onto the film's bars (audio/score.wav) and write its drum
                                           hits for the film (audio/hits.json, kit/timing.js).
@@ -159,9 +160,11 @@ async function runNarrate(work: string): Promise<void> {
   console.log(`total: ${timing.total}s -> ${join(work, "timing.json")}`);
 }
 
-async function runBgm(work: string): Promise<void> {
+async function runBgm(work: string, flag?: string): Promise<void> {
+  if (flag !== undefined && flag !== "--again") throw new Error(`bgm: unknown option ${flag}`);
   const script = loadScript(work);
-  if (script.bpm) return runBeatBgm(work, script, script.bpm);
+  if (script.bpm) return runBeatBgm(work, script, script.bpm, flag === "--again");
+  if (flag) throw new Error('bgm --again measures the takes of a beat-synced film (with "bpm")');
   const file = await bgm(work, script, loadTiming(work).total);
   console.log(`bgm: ${file}`);
 }
@@ -351,7 +354,7 @@ async function preview(work: string, out?: string): Promise<void> {
 
 const COMMANDS = new Map<string, Command>([
   ["narrate", { args: [1, 1], run: ([w]) => runNarrate(resolve(w!)) }],
-  ["bgm", { args: [1, 1], run: ([w]) => runBgm(resolve(w!)) }],
+  ["bgm", { args: [1, 2], run: ([w, f]) => runBgm(resolve(w!), f) }],
   ["score", { args: [1, 1], run: ([w]) => runScore(resolve(w!)) }],
   ["sync", { args: [2, 2], run: ([w, m]) => runSync(resolve(w!), resolve(m!)) }],
   ["sfx", { args: [1, 1], run: ([w]) => runSfx(resolve(w!)) }],
