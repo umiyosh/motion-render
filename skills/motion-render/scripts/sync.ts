@@ -160,11 +160,13 @@ const median4 = (f: (d: number) => number): number => {
 
 // Whether some part of the picture moves on the frame of hit time t (or the next): a block whose
 // change is 3 times its usual change in the frames just before, and at least 2 gray levels. Null
-// right after a big change (a flash, a shake), where a reaction cannot be told apart.
-function moves(m: Motion, fps: number, t: number): boolean | null {
+// right after a big change (a flash, a shake), where a reaction cannot be told apart. A change is big
+// against `calm`, what the picture changes on a typical frame: a picture that always moves (water,
+// smoke, drifting light) is still measured, not skipped on every frame (#55).
+function moves(m: Motion, fps: number, t: number, calm: number): boolean | null {
   const f0 = Math.ceil((t - E) * fps - 1e-6);
   if (f0 < 6 || f0 + 1 >= m.frames) return null;
-  if (median4((d) => m.whole(f0 - d)) > 3) return null;
+  if (median4((d) => m.whole(f0 - d)) > Math.max(3, 3 * calm)) return null;
   for (let b = 0; b < BLOCKS; b++) {
     const base = median4((d) => m.block(f0 - d, b));
     if (Math.max(m.block(f0, b), m.block(f0 + 1, b)) >= 3 * base + 2) return true;
@@ -172,8 +174,13 @@ function moves(m: Motion, fps: number, t: number): boolean | null {
   return false;
 }
 
-function rateOf(m: Motion, fps: number, times: number[]): { rate: number; n: number } {
-  const seen = times.map((t) => moves(m, fps, t)).filter((x): x is boolean => x !== null);
+function rateOf(
+  m: Motion,
+  fps: number,
+  times: number[],
+  calm: number
+): { rate: number; n: number } {
+  const seen = times.map((t) => moves(m, fps, t, calm)).filter((x): x is boolean => x !== null);
   return { rate: seen.length ? seen.filter(Boolean).length / seen.length : 0, n: seen.length };
 }
 
@@ -215,14 +222,29 @@ function reactions(
 ): SyncResult {
   const lines: string[] = [],
     problems: string[] = [];
+  // What the picture changes on a typical frame of the drops themselves: a drop is busier than the
+  // rest of the film, and its own churn is what a reaction has to stand out from.
+  const inDrop = m.sampled.filter((f) => spans.some(([a, b]) => f / fps >= a && f / fps < b));
+  const calm = percentile(
+    Float64Array.from(inDrop.length >= 10 ? inDrop : m.sampled, (f) => m.whole(f)),
+    0.5
+  );
   for (const { name, on: onTimes, off: offTimes } of reactionTimes(hits, bpm, spans)) {
-    const on = rateOf(m, fps, onTimes),
-      off = rateOf(m, fps, offTimes);
+    const on = rateOf(m, fps, onTimes, calm),
+      off = rateOf(m, fps, offTimes, calm);
     const pct = (x: number): string => `${(x * 100).toFixed(0)}%`;
+    const lost = onTimes.length - on.n;
     lines.push(
-      `${name} in the drops: the picture moves on ${pct(on.rate)} of ${on.n} (an 8th later, with no hit: ${pct(off.rate)})`
+      `${name} in the drops: the picture moves on ${pct(on.rate)} of ${on.n} (an 8th later, with no hit: ${pct(off.rate)})` +
+        (lost ? `; ${lost} of ${onTimes.length} not measured, right after a big change` : "")
     );
-    if (name === "kicks" && (on.rate < 0.8 || on.rate - off.rate < 0.4))
+    if (name !== "kicks") continue;
+    // Passing on a few measured kicks would say nothing about the rest (#55).
+    if (on.n * 2 < onTimes.length)
+      problems.push(
+        `kicks in the drops: only ${on.n} of ${onTimes.length} could be measured, the rest come right after a change of the whole picture: let the picture settle between kicks, so each kick reads as its own change`
+      );
+    else if (on.rate < 0.8 || on.rate - off.rate < 0.4)
       problems.push(
         `kicks in the drops: the picture moves on ${pct(on.rate)} of them, ${pct(off.rate)} with no hit (needs 80%, and 40 points more than with no hit): let the thing that drives the story answer every kick, large enough to be seen, and settle within an 8th`
       );

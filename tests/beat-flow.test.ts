@@ -121,12 +121,29 @@ describe("repeat check helpers", () => {
 });
 
 // A gray film at 60 fps: a block lights for 2 frames on each of `flashes`, the whole frame on `big`.
-function testMp4(file: string, seconds: number, flashes: number[], big: number[]): void {
+// A `busy` film also has stripes drifting over the whole frame, so every frame changes everywhere
+// (at the times `busy` says, or all the time).
+function testMp4(
+  file: string,
+  seconds: number,
+  flashes: number[],
+  big: number[],
+  busy: boolean | ((t: number) => boolean) = false
+): void {
   const W = 480,
     H = 270,
     fps = 60,
     n = seconds * fps;
   const frames = Buffer.alloc(W * H * n, 40);
+  const drifts = (f: number): boolean => (typeof busy === "function" ? busy(f / fps) : busy);
+  for (let f = 0; f < n; f++)
+    if (drifts(f))
+      for (let y = 0; y < H; y++)
+        frames.fill(
+          Math.round(40 + 20 * Math.sin(2 * Math.PI * (y / 30 + f / 8))),
+          f * W * H + y * W,
+          f * W * H + (y + 1) * W
+        );
   const lit = (t: number, k: number) => {
     const f = Math.ceil((t - 0.008) * fps - 1e-6) + k;
     return f >= 0 && f < n ? f : -1;
@@ -304,6 +321,34 @@ describe("sync", () => {
     const r = await measureSync(mp4, calm, { lead: 0.25 }, KICKS);
     expect(r.lines.join("\n")).toMatch(/final hit 0:06\.00: the whole picture changes/);
     expect(r.problems.join("\n")).not.toMatch(/final hit/);
+  });
+});
+
+describe("sync of kicks in a busy picture", () => {
+  it("still measures the kicks of a picture that moves all the time", async () => {
+    const mp4 = join(tempDir(), "busy.mp4");
+    testMp4(
+      mp4,
+      8,
+      KICKS.map((h) => h.t),
+      [4, 6],
+      true
+    );
+    const r = await measureSync(mp4, SYNC_TIMING, { lead: 0.25 }, KICKS);
+    // the drop holds 5 kicks (4 s to 6.5 s, the one on the drop itself is a whole-picture change)
+    expect(r.lines.join("\n")).toMatch(/kicks in the drops: the picture moves on 100% of [4-9] /);
+    // (the test's flashes hold for 3 frames, so the stripes can tip their peak onto the last one)
+    expect(r.problems.filter((p) => /kick/.test(p))).toEqual([]);
+  });
+
+  it("does not pass a drop whose kicks it could not measure", async () => {
+    const mp4 = join(tempDir(), "flashy.mp4");
+    // the whole picture churns in the 0.1 s before every kick of the drop, and stays still otherwise,
+    // so no reaction can be read
+    const kicks = KICKS.filter((h) => h.t >= 4).map((h) => h.t);
+    testMp4(mp4, 8, kicks, [4, 6], (t) => kicks.some((k) => t >= k - 0.1 && t < k));
+    const r = await measureSync(mp4, SYNC_TIMING, { lead: 0.25 }, KICKS);
+    expect(r.problems.join("\n")).toMatch(/kicks in the drops: only \d of \d could be measured/);
   });
 });
 
