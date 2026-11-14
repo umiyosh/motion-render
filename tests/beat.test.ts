@@ -54,7 +54,21 @@ describe("tempo and hits", () => {
     const kick = hits.find((h) => h.slot === 9 * 16 && h.k === "kick");
     expect(kick?.t).toBeCloseTo(START + 9 * 2, 3);
   });
+
+  it("tells four-on-the-floor kicks from a rolling bass as loud in the lows", () => {
+    const four = decodeMono(
+      join(writeTake(drumTrack(126, START, ["pad", "four", "four", "four"])), "take1.wav")
+    );
+    const hits = detectHits(four, 126, START);
+    for (const b of [1, 2, 3]) expect(pattern(hits, b)).toBe("K... X... K... X...");
+  });
 });
+
+function writeTake(track: Float32Array): string {
+  const dir = tempDir("mr-four-");
+  writeWav(track, join(dir, "take1.wav"));
+  return dir;
+}
 
 describe("takes", () => {
   it("measures a take bar by bar, locked to the film's tempo", () => {

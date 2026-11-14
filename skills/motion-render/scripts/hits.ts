@@ -1,7 +1,9 @@
-// Every drum hit of a track on a known grid: at each 16th-note slot, whether the kick (lows), the
-// snare (mids with bright noise), a rim or ghost note (mids alone) or a hat (highs) hit, and how
-// hard. The film animates from this list, so each slot is judged from the music itself.
+// Every drum hit of a track on a known grid: at each 16th-note slot, whether the kick (the
+// percussive part of the lows, so a bass as loud as the kick is not taken for one), the snare
+// (mids with bright noise), a rim or ghost note (mids alone) or a hat (highs) hit, and how hard.
+// The film animates from this list, so each slot is judged from the music itself.
 import { chain, biquad, db, envelope, FPS, percentile, SR } from "./signal.ts";
+import { lowPercussion, PFPS } from "./percussive.ts";
 
 type HitKind = "kick" | "snare" | "rim" | "ghost" | "hat";
 
@@ -34,8 +36,8 @@ function band(x: Float32Array): Band {
 
 interface Slot {
   t: number;
-  lv: Record<"L" | "M" | "H", number>; // level just after the strongest rise near the slot, dB
-  grow: Record<"L" | "M" | "H", number>; // how much each band grew across the slot, dB
+  lv: Record<"K" | "M" | "H", number>; // level just after the strongest rise near the slot, dB
+  grow: Record<"K" | "M" | "H", number>; // how much each band grew across the slot, dB
 }
 
 // Level 6 ms after the strongest rise within -25..+35 ms of t.
@@ -62,6 +64,18 @@ function growAt(e: Float64Array, t: number): number {
   return db(hi) - db(Number.isFinite(lo) ? lo : 0);
 }
 
+// The kick's level and growth at t from the percussive lows (5 ms frames): the loudest frame from
+// 5 ms before to 20 ms after, against the quietest from 40 to 10 ms before. The 85 ms frames smear
+// a kick by about that much, so these windows sit wider than those of the 1 ms envelopes.
+function kickAt(p: Float64Array, t: number): { lv: number; grow: number } {
+  const c = Math.round(t * PFPS);
+  let lo = Infinity,
+    hi = 0;
+  for (let i = c - 8; i <= c - 2; i++) lo = Math.min(lo, p[i] ?? Infinity);
+  for (let i = c - 1; i <= c + 4; i++) hi = Math.max(hi, p[i] ?? 0);
+  return { lv: db(hi), grow: db(hi) - db(Number.isFinite(lo) ? lo : 0) };
+}
+
 // Level of the loudest 3% of slots: what a full hit of that band reads as in this track.
 function top(slots: Slot[], f: (s: Slot) => number): number {
   const v = slots.map(f).sort((a, b) => b - a);
@@ -73,9 +87,9 @@ const clamp = (v: number): number => Math.round(Math.max(0, Math.min(1, v)) * 10
 function judge(s: Slot, slot: number, ref: Slot["lv"]): Hit[] {
   const out: Hit[] = [];
   const t = Math.round(s.t * 1000) / 1000;
-  // kick: the lows grow by 9 dB or more and are loud
-  if (s.grow.L >= 9 && s.lv.L > ref.L - 18)
-    out.push({ t, slot, k: "kick", v: clamp(1 + (s.lv.L - ref.L) / 18) });
+  // kick: the percussive lows grow by 5 dB or more and come within 6 dB of the track's full kicks
+  if (s.grow.K >= 5 && s.lv.K >= ref.K - 6)
+    out.push({ t, slot, k: "kick", v: clamp(1 + (s.lv.K - ref.K) / 12) });
   // snare: the mids jump and are loud, with bright noise on top; the same without the highs is a rim
   if (s.grow.M >= 14 && s.lv.M > ref.M - 8)
     out.push({
@@ -93,20 +107,21 @@ function judge(s: Slot, slot: number, ref: Slot["lv"]): Hit[] {
 
 // The hits of mono track `x` (analysis rate) on a 16th grid of `bpm` that starts at `t0` seconds.
 export function detectHits(x: Float32Array, bpm: number, t0 = 0): Hit[] {
-  const L = band(chain(x, "lp", 110, 2)),
+  const K = lowPercussion(x),
     M = band(biquad(chain(x, "hp", 250, 3), "lp", 2500)),
     H = band(chain(x, "hp", 7000, 3));
   const step = 60 / bpm / 4;
   const slots: Slot[] = [];
   for (let t = t0; t < x.length / SR - 0.04; t += step) {
+    const k = kickAt(K, t);
     slots.push({
       t,
-      lv: { L: levelAt(L, t), M: levelAt(M, t), H: levelAt(H, t) },
-      grow: { L: growAt(L.e, t), M: growAt(M.e, t), H: growAt(H.e, t) },
+      lv: { K: k.lv, M: levelAt(M, t), H: levelAt(H, t) },
+      grow: { K: k.grow, M: growAt(M.e, t), H: growAt(H.e, t) },
     });
   }
   const ref = {
-    L: top(slots, (s) => s.lv.L),
+    K: db(percentile(K, 0.97)), // the peaks of the track's kicks, frame by frame
     M: top(slots, (s) => s.lv.M),
     H: top(slots, (s) => s.lv.H),
   };

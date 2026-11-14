@@ -4,11 +4,13 @@ import { join } from "node:path";
 
 export const tempDir = (prefix = "mr-test-"): string => mkdtempSync(join(tmpdir(), prefix));
 
-type BarKind = "pad" | "drums" | "silent" | "loud";
+type BarKind = "pad" | "drums" | "silent" | "loud" | "four";
 
 // A drum track at 44.1 kHz, interleaved stereo: `start` s of silence, then one bar per entry of
 // `bars`. Drum bars have a kick on 1 and 3, a snare on 2 and 4 and a hat on every other 8th
 // (pattern "K.-. S.-. K.-. S.-."); "loud" bars hit harder; "pad" bars hold a quiet chord only.
+// "four" bars are four-on-the-floor: a kick on every beat, a clap on 2 and 4, and a sub bass that
+// fills the lows between the kicks as loudly as they do (pattern "K... X... K... X...").
 export function drumTrack(bpm: number, start: number, bars: BarKind[]): Float32Array {
   const RATE = 44100,
     bar = 240 / bpm,
@@ -61,6 +63,22 @@ export function drumTrack(bpm: number, start: number, bars: BarKind[]): Float32A
         (dt) =>
           0.04 * (Math.sin(2 * Math.PI * 220 * (t0 + dt)) + Math.sin(2 * Math.PI * 330 * (t0 + dt)))
       );
+    if (kind === "four") {
+      for (const s of [0, 4, 8, 12]) kick(t0 + s * step, 0.8);
+      for (const s of [4, 12]) snare(t0 + s * step, 0.5);
+      // the bass never stops: it ducks under each kick and swells back within the beat, as a
+      // side-chained bass does, so the lows grow most just after the kick, not on it
+      for (const s of [0, 4, 8, 12])
+        add(
+          t0 + s * step,
+          4 * step,
+          (dt) =>
+            0.5 *
+            (1 - 0.9 * (1 - Math.exp(-dt / 0.002)) * Math.exp(-dt / 0.06)) *
+            Math.sin(2 * Math.PI * 55 * (t0 + s * step + dt))
+        );
+      return;
+    }
     if (kind !== "drums" && kind !== "loud") return;
     const g = kind === "loud" ? 1 : 0.6;
     for (const s of [0, 8]) kick(t0 + s * step, 0.9 * g);
