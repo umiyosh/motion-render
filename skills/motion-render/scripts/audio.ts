@@ -28,11 +28,13 @@ export interface SfxTrack {
   gain: number;
 }
 
-// Where each scene's narration and each sound effect go on the film timeline.
+// Where each scene's narration and each sound effect go on the film timeline. `score` is the
+// rendered score of a beat-synced film and the gain that sets its level against the narration.
 export interface MixTiming {
   scenes: { id: string; start: number }[];
   total: number;
   sfx?: SfxTrack[];
+  score?: { file: string; gain: number };
 }
 
 // ffmpeg-static downloads its binary in a postinstall script, which Claude Code's plugin dependency
@@ -294,6 +296,41 @@ export async function bgm(work: string, script: Script, seconds: number): Promis
   return file;
 }
 
+// Takes generated at once for a beat-synced film. Lyria answers the same direction with a different
+// piece each time and misses some cues; with four, one usually has every section where it was asked.
+const TAKES = 4;
+
+// Writes audio/bgm/take<n>.<ext> from <work>/score.txt, the music direction Claude writes after the
+// narration has fixed the times. Returns the files, relative to <work>. A take that fails is skipped.
+export async function bgmTakes(work: string, script: Script, bpm: number): Promise<string[]> {
+  const direction = join(work, "score.txt");
+  if (!existsSync(direction))
+    throw new Error(
+      `write ${direction} first: the music direction with the film's times (SKILL.md)`
+    );
+  const prompt = `${readFileSync(direction, "utf8").trim()}\n\nInstrumental only, no vocals. Keep exactly ${bpm} BPM in 4/4 from the first beat to the last.`;
+  mkdirSync(join(work, "audio", "bgm"), { recursive: true });
+  const files: string[] = [];
+  const takes = Array.from({ length: TAKES }, (_, i) => i + 1);
+  await inParallel(takes, TAKES, async (n) => {
+    try {
+      const audio = await generateAudio(script.bgmModel, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ["AUDIO"] },
+      });
+      const file = join("audio", "bgm", `take${n}.${/wav/.test(audio.mimeType) ? "wav" : "mp3"}`);
+      writeFileSync(join(work, file), audio.data);
+      files.push(file);
+    } catch (e) {
+      console.error(`motion-render: take ${n} failed: ${errorMessage(e)}`);
+    }
+  });
+  if (!files.length) throw new Error("Lyria returned no take: run bgm again");
+  files.sort();
+  writeFileSync(join(work, "audio", "bgm.json"), JSON.stringify({ takes: files, prompt }, null, 2));
+  return files;
+}
+
 export function bgmFile(work: string): string {
   const meta = join(work, "audio", "bgm.json");
   if (!existsSync(meta)) throw new Error(`no BGM yet: run "motion-render bgm ${work}"`);
@@ -363,6 +400,31 @@ export function bgmLoop(
   return { inputs, chains, label: out };
 }
 
+// The BGM input and how to shape it. A rendered score already has the film's length and its own
+// ending, so it plays as it is, leveled against the narration, with only a short fade at the very end.
+// Any other BGM loops to the film's length, fades in, and fades out over the last 3 s.
+async function bgmInput(
+  work: string,
+  script: Script,
+  timing: MixTiming,
+  first: number
+): Promise<BgmLoop & { shape: string }> {
+  const total = timing.total;
+  if (timing.score) {
+    const fade = Math.max(0, total - 0.5);
+    return {
+      inputs: ["-i", timing.score.file],
+      chains: [],
+      label: `${first}:a`,
+      shape: `volume=${timing.score.gain.toFixed(4)},afade=t=out:st=${fade}:d=0.5`,
+    };
+  }
+  const file = bgmFile(work);
+  const loop = bgmLoop(file, first, await mediaSeconds(file), total, "bgmx");
+  const shape = `volume=${script.bgmVolume},afade=t=in:d=0.8,afade=t=out:st=${Math.max(0, total - 3)}:d=3`;
+  return { ...loop, shape };
+}
+
 export async function mix(
   work: string,
   script: Script,
@@ -379,9 +441,8 @@ export async function mix(
     labels.push(`[n${i}]`);
   });
   const b = timing.scenes.length,
-    total = timing.total,
-    bgmIn = bgmFile(work);
-  const loop = bgmLoop(bgmIn, b, await mediaSeconds(bgmIn), total, "bgmx");
+    total = timing.total;
+  const loop = await bgmInput(work, script, timing, b);
   inputs.push(...loop.inputs);
   const fxFirst = b + loop.inputs.filter((a) => a === "-i").length;
   const sfx = timing.sfx ?? [];
@@ -393,7 +454,7 @@ export async function mix(
     ...chains,
     `${labels.join("")}amix=inputs=${labels.length}:normalize=0,aresample=44100,pan=stereo|c0=c0|c1=c0,apad=whole_dur=${total}[nar]`, // full level on both sides (an automatic upmix drops mono speech by 3 dB)
     ...loop.chains,
-    `[${loop.label}]atrim=0:${total},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,volume=${script.bgmVolume},afade=t=in:d=0.8,afade=t=out:st=${Math.max(0, total - 3)}:d=3[bgm]`,
+    `[${loop.label}]atrim=0:${total},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,${loop.shape}[bgm]`,
     ...fx.map((f) => f.chain),
     `[nar][bgm]${fx.map((f) => f.label).join("")}amix=inputs=${2 + fx.length}:normalize=0,alimiter=limit=0.95[out]`,
   ].join(";");
@@ -413,12 +474,33 @@ export async function mix(
   ]);
 }
 
+// The time of picture j of the `blur` pictures averaged into frame k: spread over half a frame (a
+// 180° shutter) around the frame's own time, so a hit stays on its frame.
+export function pictureTime(k: number, j: number, fps: number, blur: number): number {
+  return Math.max(0, k / fps + ((j + 0.5) / blur - 0.5) * (0.5 / fps));
+}
+
 // ffmpeg arguments that read PNG frames from stdin and mux them with the mixed audio into an MP4.
-export function encodeArgs(fps: number, audio: string, out: string): string[] {
+// With blur > 1, stdin carries `blur` pictures per frame, which are averaged into one: the motion
+// blur of a camera shutter.
+export function encodeArgs(fps: number, audio: string, out: string, blur = 1): string[] {
+  const n = blur;
+  const average =
+    n > 1
+      ? [
+          "-vf",
+          `tmix=frames=${n},select='eq(mod(n\\,${n})\\,${n - 1})',setpts=N/(${fps}*TB)`,
+          "-fps_mode",
+          "cfr",
+          "-r",
+          String(fps),
+        ]
+      : [];
   return [
     ["-y", "-loglevel", "error"],
-    ["-f", "image2pipe", "-framerate", String(fps), "-i", "-", "-i", audio],
+    ["-f", "image2pipe", "-framerate", String(fps * n), "-i", "-", "-i", audio],
     ["-map", "0:v", "-map", "1:a"],
+    average,
     ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"],
     ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out],
   ].flat();

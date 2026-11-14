@@ -43,7 +43,7 @@ Billed by the second of output. Measured in October 2026: about 5 credits, rough
 
 According to the ElevenLabs help center ([Can I publish the content I generate on the platform?](https://elevenlabs.io/docs/help-center/legal/can-i-publish-the-content-i-generate-on-the-platform)), only content made on a paid subscription carries a commercial license. Anything else is for non-commercial use only and must be credited with `elevenlabs.io` or `11.ai` in its title when published. The page does not mention pay-as-you-go.
 
-motion-render puts `🎧:11.ai` on the title scene of a video with sound effects. For a commercial video, subscribe before making its effects: audio made outside a subscription does not become licensed when you subscribe later.
+motion-render puts `SFX: 11.ai` on the title scene of a video with sound effects. For a commercial video, subscribe before making its effects: audio made outside a subscription does not become licensed when you subscribe later.
 
 ## If the key leaks
 

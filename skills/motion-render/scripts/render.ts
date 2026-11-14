@@ -66,6 +66,10 @@ const LAUNCH: LaunchOptions = {
     "--proxy-server=http://127.0.0.1:9",
     "--proxy-bypass-list=<-loopback>",
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+    // three.js films need WebGL, which machines without a GPU (CI, headless servers) only have in
+    // software. Chromium's silent fallback to it is deprecated: opt in, so WebGL keeps working there.
+    // The page still has no network and runs inside Chromium's sandbox.
+    "--enable-unsafe-swiftshader",
   ],
 };
 
@@ -90,7 +94,8 @@ interface FilmMeta {
 
 export interface Film {
   meta: FilmMeta;
-  frame(t: number): Promise<Buffer>;
+  // `still`: the time of the MP4 frame the picture at t goes into (motion blur), t when omitted.
+  frame(t: number, still?: number): Promise<Buffer>;
   // html films only: what paints on screen at t, for the layout check.
   inspect?(t: number): Promise<LayoutBox[]>;
   warnings(): Promise<string[]>;
@@ -134,7 +139,7 @@ declare global {
     // An html film's hook: the page lays itself out at time t and the runner screenshots it.
     __film: {
       load(): unknown;
-      seek(t: number): unknown;
+      seek(t: number, frame?: number): unknown;
       // Optional: false while the page is still settling. Polled from Node, since a film page may
       // control its own timers.
       ready?(): unknown;
@@ -293,6 +298,8 @@ async function waitReady(page: Page, call: Call): Promise<void> {
 async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm> {
   const log: string[] = [];
   page.on("console", (m) => {
+    // Software WebGL notes every read of the canvas as a "GPU stall": the capture, not the film.
+    if (/GL Driver Message .*Performance/.test(m.text())) return;
     if (m.type() === "warning" || m.type() === "error") log.push(`${m.type()}: ${m.text()}`);
   });
   page.on("pageerror", (e) => log.push(`error: ${e.message}`));
@@ -309,18 +316,30 @@ async function htmlFilm(page: Page, file: string, call: Call): Promise<PageFilm>
     throw new Error("film failed to load: " + errorMessage(e));
   }
   let injected = false;
-  const seek = async (t: number) => {
+  // Chromium's own capture with its fast PNG settings: the same pixels (PNG is lossless) in about
+  // half the time of Playwright's screenshot, whose PNG compression took most of each frame.
+  const cdp = await page.context().newCDPSession(page);
+  const capture = async (): Promise<Buffer> => {
+    const r: unknown = await cdp.send("Page.captureScreenshot", {
+      format: "png",
+      optimizeForSpeed: true,
+    });
+    const data = field(r, "data");
+    if (typeof data !== "string") throw new Error("Chromium returned no picture");
+    return Buffer.from(data, "base64");
+  };
+  const seek = async (t: number, still = t) => {
     await call(
-      page.evaluate((tt) => window.__film.seek(tt), t),
+      page.evaluate(([tt, ss]) => window.__film.seek(tt, ss), [t, still] as const),
       `__film.seek(${sec(t)})`
     );
     await waitReady(page, call);
   };
   return {
     meta: parseMeta(meta),
-    async frame(t) {
-      await seek(t);
-      return call(page.screenshot({ type: "png" }), `screenshot at ${sec(t)}s`);
+    async frame(t, still) {
+      await seek(t, still);
+      return call(capture(), `screenshot at ${sec(t)}s`);
     },
     async inspect(t) {
       await seek(t);
@@ -387,7 +406,7 @@ export async function openFilm(dir: string, opts: FilmOptions = {}): Promise<Fil
       meta: first.meta,
       pages,
       only: entry?.ids ?? null,
-      frame: (t) => run((f) => f.frame(t)),
+      frame: (t, still) => run((f) => f.frame(t, still)),
       inspect:
         first.inspect && ((t) => run((f) => (f.inspect ? f.inspect(t) : Promise.resolve([])))),
       // Every page logs the same film, so the same warning comes once.
