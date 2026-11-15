@@ -325,7 +325,124 @@
         at
       );
     },
+    // A scene change through a shape: the next scene shows inside `shape`, an SVG shape of the scene
+    // before it (a circle, a rounded rect, the outline of a thing), and the shape grows until it fills
+    // the frame on the first frame of scene `next`, so the change lands on its beat. It starts o.dur s
+    // before, from the shape's own size and place; until scene `next` starts, what shows inside is that
+    // scene before its own entrances (its ground). The shape grows by equal ratios in equal times (as
+    // fx.zoom: the eye reads a change of size as a ratio), about its centre or o.at ({ x, y } in px of
+    // the frame). o: { dur = 0.6, ease = "power2.in" }. Call it inside film.build.
+    wipe: function (shape, next, o) {
+      o = o || {};
+      var s = el(shape);
+      if (!(s instanceof SVGGraphicsElement))
+        throw new Error("film.wipe: the shape must be an SVG shape");
+      if (!scenes[next]) throw new Error('film.wipe: scene "' + next + '" is not in timing.json');
+      var section = document.getElementById(next);
+      if (!section || !section.classList.contains("scene"))
+        throw new Error('film.wipe: no section.scene with id "' + next + '"');
+      var dur = o.dur || 0.6,
+        t1 = scenes[next].start;
+      if (dur > t1)
+        throw new Error("film.wipe: " + dur + " s is longer than the film before " + next);
+      var clip = document.createElementNS(SVG, "clipPath"),
+        copy = s.cloneNode(true);
+      clip.id = "mr-wipe-" + wipes.length;
+      clip.setAttribute("clipPathUnits", "userSpaceOnUse");
+      copy.removeAttribute("id");
+      clip.appendChild(copy);
+      wipeDefs().appendChild(clip);
+      wipes.push({
+        shape: s,
+        section: section,
+        clip: clip,
+        copy: copy,
+        t0: t1 - dur,
+        t1: t1,
+        ease: gsap.parseEase(o.ease || "power2.in"),
+        at: o.at,
+      });
+    },
   };
+
+  // The <defs> that holds the clip paths of film.wipe.
+  var SVG = "http://www.w3.org/2000/svg",
+    wipes = [],
+    defs = null;
+  function wipeDefs() {
+    if (defs) return defs;
+    var svg = document.createElementNS(SVG, "svg");
+    svg.setAttribute("width", "0");
+    svg.setAttribute("height", "0");
+    svg.style.position = "absolute";
+    defs = document.createElementNS(SVG, "defs");
+    svg.appendChild(defs);
+    document.body.appendChild(svg);
+    return defs;
+  }
+  function wiping(w, t) {
+    return t >= w.t0 && t < w.t1;
+  }
+  // Each wipe at time t: the next scene clipped to the shape, grown from where the shape is now. Both
+  // scenes are marked while it runs, so the layout check does not take the next scene's things,
+  // clipped away, for things on top of the scene before.
+  function drawWipes(t) {
+    wipes.forEach(function (w) {
+      var on = wiping(w, t),
+        before = document.getElementById(scenePlaying(w.t0));
+      [w.section, before].forEach(function (e) {
+        if (e) e.toggleAttribute("data-wiping", on);
+      });
+      if (!on) {
+        w.section.style.clipPath = "";
+        w.section.style.zIndex = "";
+        return;
+      }
+      var box = w.shape.getBoundingClientRect(),
+        frame = w.section.getBoundingClientRect(),
+        m = w.shape.getScreenCTM(),
+        c = w.at || { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      var far = Math.max(
+        Math.hypot(c.x - frame.left, c.y - frame.top),
+        Math.hypot(frame.right - c.x, c.y - frame.top),
+        Math.hypot(c.x - frame.left, frame.bottom - c.y),
+        Math.hypot(frame.right - c.x, frame.bottom - c.y)
+      );
+      var r = Math.max(1, Math.min(box.width, box.height) / 2),
+        full = (1.15 * far) / r,
+        s = Math.pow(full, w.ease((t - w.t0) / (w.t1 - w.t0)));
+      w.copy.setAttribute(
+        "transform",
+        "translate(" +
+          (c.x - frame.left) +
+          "," +
+          (c.y - frame.top) +
+          ") scale(" +
+          s +
+          ") " +
+          "translate(" +
+          -c.x +
+          "," +
+          -c.y +
+          ") matrix(" +
+          [m.a, m.b, m.c, m.d, m.e, m.f].join(",") +
+          ")"
+      );
+      w.section.style.clipPath = "url(#" + w.clip.id + ")";
+      // Sections share the layers' z-index (base.css), so a card of the scene before would be drawn
+      // over the next scene's ground. The clip makes the next scene one group: it goes over all of
+      // the scene before but its captions (layer-caption, 50).
+      w.section.style.zIndex = "49";
+    });
+  }
+  // The id of the scene showing at t.
+  function scenePlaying(t) {
+    var id = null;
+    T.scenes.forEach(function (s) {
+      if (t >= s.start && t < s.start + s.dur) id = s.id;
+    });
+    return id;
+  }
 
   function sections() {
     return Array.prototype.slice.call(document.querySelectorAll("section.scene"));
@@ -340,11 +457,15 @@
     });
     return twice;
   }
-  // A scene's section is shown over [start, start + dur); everything outside sections stays.
+  // A scene's section is shown over [start, start + dur), and while a wipe into it runs; everything
+  // outside sections stays.
   function show(t) {
     sections().forEach(function (el) {
-      var s = scenes[el.id];
-      el.style.visibility = t >= s.start && t < s.start + s.dur ? "" : "hidden";
+      var s = scenes[el.id],
+        wiped = wipes.some(function (w) {
+          return w.section === el && wiping(w, t);
+        });
+      el.style.visibility = wiped || (t >= s.start && t < s.start + s.dur) ? "" : "hidden";
     });
   }
   // Fonts load per unicode-range subset on first use, so a scene's first frame could fall back.
@@ -448,6 +569,8 @@
       draws.forEach(function (fn) {
         fn(t, f);
       });
+      // After the timeline and the draws, so the shape is where this frame puts it.
+      drawWipes(t);
     },
   };
 })();
