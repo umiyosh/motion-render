@@ -408,8 +408,12 @@
         Math.hypot(c.x - frame.left, frame.bottom - c.y),
         Math.hypot(frame.right - c.x, frame.bottom - c.y)
       );
+      // The shape grows to 0.7 of the way to the farthest corner, and the rest of the frame turns on
+      // the next scene's first frame: the biggest change of the wipe lands on its beat. In a film that
+      // entered its drop by a wipe alone, sync found the change 40-57 ms early (it allows 27 ms) with
+      // the shape grown past the corners (1.15), still 40 ms early at 0.85, and +10 ms at 0.7.
       var r = Math.max(1, Math.min(box.width, box.height) / 2),
-        full = (1.15 * far) / r,
+        full = (0.7 * far) / r,
         s = Math.pow(full, w.ease((t - w.t0) / (w.t1 - w.t0)));
       w.copy.setAttribute(
         "transform",

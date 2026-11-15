@@ -73,6 +73,11 @@ describe("film.wipe", () => {
       const mid = await f.frame(1.7);
       expect(red(pixel(mid, 400, 540))).toBe(true);
       expect(red(pixel(mid, 1900, 1060))).toBe(false);
+      // a frame before the next scene, the far corner is still the scene before: the rest of the
+      // frame turns on the next scene's first frame, so the change lands on its beat
+      const last = await f.frame(2 - 1 / 60);
+      expect(red(pixel(last, 1919, 0))).toBe(false);
+      expect(red(pixel(last, 400, 540))).toBe(true);
       // on the next scene's first frame it fills the frame
       const at = await f.frame(2);
       for (const [x, y] of [
