@@ -61,6 +61,81 @@ section.scene {
   white-space: nowrap;
   -webkit-text-fill-color: currentColor;
 }
+/* film.say "write" with a cursor: a caret right after the last character typed. */
+.type-char[data-caret] {
+  position: relative;
+}
+.type-char[data-caret]::after {
+  content: "";
+  position: absolute;
+  right: -0.12em;
+  top: 0.1em;
+  width: 0.07em;
+  height: 0.95em;
+  background: currentColor;
+}
+
+/* kit/type.js decorations, drawn inside the text's element. Colours: --kt-box, --kt-mark,
+   --kt-line, else the accent. */
+.kt-box {
+  position: absolute;
+  inset: -0.06em -0.12em;
+  background: var(--kt-box, var(--accent, #3ed6c4));
+  transform-origin: 0% 50%;
+}
+.kt-highlight {
+  position: absolute;
+  left: -0.1em;
+  right: -0.1em;
+  bottom: 0.08em;
+  height: 0.48em;
+  z-index: -1;
+  background: var(--kt-mark, rgba(62, 214, 196, 0.45));
+  border-radius: 0.06em;
+  transform-origin: 0% 50%;
+}
+.kt-underline,
+.kt-strike {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0.08em;
+  border-radius: 0.04em;
+  background: var(--kt-line, var(--accent, #3ed6c4));
+  transform-origin: 0% 50%;
+}
+.kt-underline {
+  bottom: -0.06em;
+}
+.kt-strike {
+  top: 52%;
+}
+.kt-circle {
+  position: absolute;
+  inset: -0.3em -0.35em;
+  z-index: -1;
+}
+.kt-circle svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.kt-circle path {
+  fill: none;
+  stroke: var(--kt-line, var(--accent, #3ed6c4));
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  vector-effect: non-scaling-stroke;
+}
+/* film.swap: the old and the new text in one cell, so the line is as wide as the wider. */
+.kt-slot {
+  display: inline-grid;
+  vertical-align: top;
+}
+.kt-slot > span {
+  grid-area: 1 / 1;
+}
 
 /* Stacking by role, lowest first. Give every positioned element one of these instead of a
    z-index of its own, so what is drawn on top never depends on the order in the HTML. */

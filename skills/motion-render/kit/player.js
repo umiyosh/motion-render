@@ -131,28 +131,8 @@
     return Array.prototype.slice.call(e.querySelectorAll(".type-char"));
   }
 
-  // A whole number from (i, k) that looks random and is always the same (an integer hash), so the
-  // glyphs a scramble runs through depend on the time alone.
-  function mix(i, k) {
-    var h = Math.imul(i + 1, 374761393) ^ Math.imul(k + 7, 668265263);
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    return (h ^ (h >>> 16)) >>> 0;
-  }
-  var KANA =
-    "アカサタナハマヤラワイキシチニヒミリウクスツヌフムユルエケセテネヘメレオコソトノホモヨロ";
-  var LATIN = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-  // A stand-in for glyph `g` at step k: as many characters, of the same kind (kana for Japanese,
-  // letters and digits for Latin), so the line keeps about its width while it runs. A space stays.
-  function standIn(g, i, k) {
-    if (!g.trim()) return g;
-    var pool = /^[\x21-\x7e’]+$/.test(g) ? LATIN : KANA;
-    return Array.from(g)
-      .map(function (_, j) {
-        return pool[mix(i * 31 + j, k) % pool.length];
-      })
-      .join("");
-  }
+  // Characters that are not voiced: spaces and punctuation.
+  var QUIET = /[\s、。，．,.!?！？「」『』（）()・…:：;；"'“”‘’]/;
 
   window.film = {
     scenes: scenes,
@@ -167,15 +147,31 @@
     end: function (id, dt) {
       return window.film.at(id, scenes[id] ? scenes[id].dur - (dt || 0) : 0);
     },
-    // Seconds into scene `id` at which its narration starts saying `w` (its n-th time, from 1). The
-    // times are measured on the scene's audio (scripts/words.ts); before there is any audio, they come
-    // from where `w` sits in the text, spread over the narration's length. A word the narration does not
-    // say is an error, so check stops on it.
-    word: function (id, w, n) {
-      n = n || 1;
+    // Seconds into scene `id` at which its narration starts saying each character of its text (by
+    // code point). The times are measured on the scene's audio (scripts/words.ts); before there is
+    // any audio, the voiced characters are spread over the narration's length.
+    times: function (id) {
       var W = window.__words && window.__words[id];
       if (!scenes[id]) throw new Error('scene "' + id + '" is not in timing.json');
       if (!W) throw new Error('film.word: no narration for "' + id + '" in kit/timing.js');
+      if (W.at) return W.at.slice();
+      var chars = Array.from(W.text),
+        voiced = chars.filter(function (c) {
+          return !QUIET.test(c);
+        }).length,
+        k = 0;
+      return chars.map(function (c) {
+        var t = W.lead + (W.speech * k) / Math.max(1, voiced);
+        if (!QUIET.test(c)) k++;
+        return t;
+      });
+    },
+    // Seconds into scene `id` at which its narration starts saying `w` (its n-th time, from 1), from
+    // film.times. A word the narration does not say is an error, so check stops on it.
+    word: function (id, w, n) {
+      n = n || 1;
+      var times = window.film.times(id),
+        W = window.__words[id];
       if (!w) throw new Error("film.word needs a word");
       var i = -1;
       for (var k = 0; k < n; k++) {
@@ -190,13 +186,12 @@
               (n > 1 ? " " + n + " times" : "")
           );
       }
-      var cps = Array.from(W.text.slice(0, i)).length;
-      if (W.at) return W.at[cps];
-      var spoken = function (s) {
-        return Array.from(s.replace(/[\s、。，．,.!?！？「」『』（）()・…:：;；"'“”‘’]/g, ""))
-          .length;
-      };
-      return W.lead + (W.speech * spoken(W.text.slice(0, i))) / Math.max(1, spoken(W.text));
+      return times[Array.from(W.text.slice(0, i)).length];
+    },
+    // The text of `what` split into one span per glyph (.type-char, inside a .type-mask), once; the
+    // spans are returned. kit/type.js and film.typeIn animate these.
+    chars: function (what) {
+      return charSpans(what, "film.chars");
     },
     // Runs fn(timeline) once the fonts are in, so text has its real size when the page measures it.
     build: function (fn) {
@@ -326,57 +321,6 @@
           duration: o.dur || 0.5,
           ease: "expo.out",
           stagger: o.stagger === undefined ? 0.04 : o.stagger,
-        },
-        at
-      );
-    },
-    // Brings in the text of `what` as the narration of scene `id` starts saying `w`, shown 8 ms
-    // early as a hit is (kit/beat.js). The text is hidden until then. o.how: "rise" (each character
-    // rises, as film.typeIn), "scramble" (every character runs through others of its kind and they
-    // settle left to right), "write" (one character after another, in place). o.n: which time the
-    // narration says `w` (1); o.lead: seconds early (0.008); o.dur and o.stagger: as film.typeIn.
-    say: function (tl, what, id, w, o) {
-      o = o || {};
-      var lead = o.lead === undefined ? 0.008 : o.lead;
-      var at = Math.max(0, window.film.at(id, window.film.word(id, w, o.n)) - lead);
-      var how = o.how || "rise";
-      if (how === "rise") return window.film.typeIn(tl, what, at, o);
-      var chars = charSpans(what, "say");
-      var stagger = o.stagger === undefined ? 0.05 : o.stagger;
-      if (how === "write")
-        return tl.fromTo(
-          chars,
-          { autoAlpha: 0 },
-          { autoAlpha: 1, duration: 0.001, ease: "none", stagger: stagger },
-          at
-        );
-      if (how !== "scramble")
-        throw new Error('film.say: o.how must be "rise", "scramble" or "write", not ' + how);
-      var finals = chars.map(function (c) {
-        return c.textContent;
-      });
-      var dur = o.dur || 0.45,
-        total = dur + stagger * (chars.length - 1),
-        run = { t: 0 };
-      tl.fromTo(chars, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.001, ease: "none" }, at);
-      // 24 changes a second, from the time alone: seeking back and forth draws the same glyphs.
-      return tl.fromTo(
-        run,
-        { t: 0 },
-        {
-          t: total,
-          duration: total,
-          ease: "none",
-          onUpdate: function () {
-            var k = Math.floor(run.t * 24);
-            // The span keeps its final glyph (and so its width): a stand-in is drawn over it from a
-            // data attribute (kit/base.css). Before its start (seeking back) there is none, as on
-            // a fresh page.
-            chars.forEach(function (c, i) {
-              if (run.t <= 0 || run.t >= dur + stagger * i) c.removeAttribute("data-stand-in");
-              else c.setAttribute("data-stand-in", standIn(finals[i], i, k));
-            });
-          },
         },
         at
       );
