@@ -4,8 +4,9 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { basename, dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { loadTiming } from "./work.ts";
+import { loadScript, loadTiming, type Script } from "./work.ts";
 import { readJson } from "./json.ts";
+import { pageWords } from "./words.ts";
 
 const require = createRequire(import.meta.url);
 const KIT = fileURLToPath(new URL("../kit/", import.meta.url));
@@ -52,8 +53,21 @@ export function writeKitTiming(work: string): void {
   const hits = existsSync(hitsFile) ? JSON.stringify(readJson(hitsFile)) : "null";
   writeFileSync(
     join(work, "film", "kit", "timing.js"),
-    `window.__timing = ${JSON.stringify(data)};\nwindow.__hits = ${hits};\n`
+    `window.__timing = ${JSON.stringify(data)};\nwindow.__hits = ${hits};\nwindow.__words = ${wordsFor(work)};\n`
   );
+}
+
+// The narration of each scene and when its characters are said, for film.word. kit may run before
+// script.json is complete; the page then has no narration, and film.word names the scene it lacks.
+// build runs this again with the finished script.
+function wordsFor(work: string): string {
+  let script: Script;
+  try {
+    script = loadScript(work);
+  } catch {
+    return "null"; // an incomplete or missing script.json: see above
+  }
+  return JSON.stringify(pageWords(work, script, loadTiming(work)));
 }
 
 // GSAP's plugins a film may load from kit/gsap/ (all free since GSAP 3.13). Each defines a global

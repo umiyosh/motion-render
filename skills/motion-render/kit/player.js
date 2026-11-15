@@ -123,6 +123,37 @@
     end: function (id, dt) {
       return window.film.at(id, scenes[id] ? scenes[id].dur - (dt || 0) : 0);
     },
+    // Seconds into scene `id` at which its narration starts saying `w` (its n-th time, from 1). The
+    // times are measured on the scene's audio (scripts/words.ts); before there is any audio, they come
+    // from where `w` sits in the text, spread over the narration's length. A word the narration does not
+    // say is an error, so check stops on it.
+    word: function (id, w, n) {
+      n = n || 1;
+      var W = window.__words && window.__words[id];
+      if (!scenes[id]) throw new Error('scene "' + id + '" is not in timing.json');
+      if (!W) throw new Error('film.word: no narration for "' + id + '" in kit/timing.js');
+      if (!w) throw new Error("film.word needs a word");
+      var i = -1;
+      for (var k = 0; k < n; k++) {
+        i = W.text.indexOf(w, i + 1);
+        if (i < 0)
+          throw new Error(
+            'film.word: the narration of "' +
+              id +
+              '" does not say "' +
+              w +
+              '"' +
+              (n > 1 ? " " + n + " times" : "")
+          );
+      }
+      var cps = Array.from(W.text.slice(0, i)).length;
+      if (W.at) return W.at[cps];
+      var spoken = function (s) {
+        return Array.from(s.replace(/[\s、。，．,.!?！？「」『』（）()・…:：;；"'“”‘’]/g, ""))
+          .length;
+      };
+      return W.lead + (W.speech * spoken(W.text.slice(0, i))) / Math.max(1, spoken(W.text));
+    },
     // Runs fn(timeline) once the fonts are in, so text has its real size when the page measures it.
     build: function (fn) {
       builders.push(fn);
