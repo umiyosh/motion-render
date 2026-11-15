@@ -111,6 +111,13 @@
     return i + (ez || ease.out2)(prog(t, list[i].t - E, dur || 0.08));
   }
 
+  // A magnification that grows by `ratio` times on each hit of `list`, each step eased over dur s:
+  // a camera that pushes in a notch per kick of a build (k of fx.camera's draw, or a scale of its
+  // own). Equal ratios read as equal steps to the eye, where equal additions shrink as it grows.
+  function zoomSteps(list, t, s0, ratio, dur, ez) {
+    return s0 * Math.pow(ratio, steps(list, t, dur, ez));
+  }
+
   // The time to start a scene's own move (a card lands, a line is drawn) near t: the nearest kick or
   // snare within half a beat, else the nearest beat, shown E early. The move then lands on the music
   // without anything having to jump for it.
@@ -325,6 +332,7 @@
     pulse: pulse,
     since: since,
     steps: steps,
+    zoomSteps: zoomSteps,
     snap: snap,
     track: track,
     shake: shake,

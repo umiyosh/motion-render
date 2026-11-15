@@ -209,6 +209,7 @@
         cut: r.left < -2 || r.top < -2 || r.right > 1922 || r.bottom > 1082,
         anc: ancestors(el, keyOf),
         ok: !!el.closest("[data-layout-ok]"),
+        cam: !!el.closest("[data-camera]"),
         solid: kind === "solid",
         under: null,
         text: textOf(el, cs, shown),

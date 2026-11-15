@@ -18,6 +18,7 @@ export interface LayoutBox {
   cut: boolean; // part of it lies outside the frame
   anc: number[]; // keys of the painted boxes it sits inside in the DOM, nearest first
   ok: boolean; // data-layout-ok on it or an ancestor: the overlap is intended
+  cam?: boolean; // inside the layer of an fx.camera, which may push it off the frame
   under: number | null; // key of a solid box drawn over most of it, if any
   text: BoxText | null; // its own text, if it has any
 }
@@ -102,9 +103,9 @@ function textFindings(b: LayoutBox): Finding[] {
 // What is wrong with one still box on its own: cut by the frame, out of its box, or hidden.
 function boxFindings(b: LayoutBox, byKey: Map<number, LayoutBox>, quiet: Set<number>): Finding[] {
   const out: Finding[] = [];
-  // A marked thing with no text of its own (a tilted desk, a canvas bigger than the frame) may run
-  // off the frame on purpose; text never may.
-  if (b.cut && !(b.ok && !b.text))
+  // A marked thing with no text of its own (a tilted desk, a canvas bigger than the frame, a shape a
+  // camera has pushed in past) may run off the frame on purpose; text never may.
+  if (b.cut && !((b.ok || b.cam) && !b.text))
     out.push({
       id: `frame:${b.key}`,
       kind: "frame",
@@ -276,7 +277,7 @@ function parseText(v: unknown): BoxText | null | undefined {
 
 function parseBox(v: unknown): LayoutBox {
   if (isRecord(v)) {
-    const { key, label, x, y, w, h, cut, anc, ok, under } = v;
+    const { key, label, x, y, w, h, cut, anc, ok, cam, under } = v;
     const text = parseText(v.text);
     if (
       num(key) &&
@@ -287,12 +288,13 @@ function parseBox(v: unknown): LayoutBox {
       num(h) &&
       typeof cut === "boolean" &&
       typeof ok === "boolean" &&
+      (cam === undefined || typeof cam === "boolean") &&
       Array.isArray(anc) &&
       anc.every(num) &&
       (under === null || num(under)) &&
       text !== undefined
     )
-      return { key, label, x, y, w, h, cut, anc, ok, under, text };
+      return { key, label, x, y, w, h, cut, anc, ok, ...(cam ? { cam } : {}), under, text };
   }
   throw new Error("the layout snapshot of the film page is malformed");
 }
