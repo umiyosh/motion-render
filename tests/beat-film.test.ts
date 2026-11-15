@@ -148,6 +148,28 @@ describe("beat-synced html film", () => {
     }
   });
 
+  it("applies what the timeline sets at 0 s on the first frame of a fresh page", async () => {
+    // GSAP renders nothing when the playhead is moved to where it already is, and a new timeline
+    // starts at 0 s: a word hidden by tl.set(…, 0) showed on frame 0 of the MP4 only.
+    const f = await openFilm(
+      film(`
+        beat.alpha("#w2", 0);
+        beat.alpha("#flash", 0);
+        film.build(function (tl) {
+          tl.set("#w1", { autoAlpha: 0 }, 0);
+          tl.to("#w1", { autoAlpha: 1, duration: 0.2 }, 3);
+        });`)
+    );
+    try {
+      const has = async (t: number) =>
+        ((await f.inspect?.(t)) ?? []).some((b) => b.label === 'span "点火"');
+      expect(await has(0)).toBe(false);
+      expect(await has(4)).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
+
   it("finds frames that change after seeking back", async () => {
     const dir = film(FOUGHT);
     const f = await openFilm(dir, { pages: 2 });

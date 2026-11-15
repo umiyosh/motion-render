@@ -385,8 +385,11 @@
       window.film.frameTime = f;
       show(t);
       boil(t);
-      // suppressEvents=false so onUpdate callbacks (count-ups) run on every seek.
-      timeline.seek(t, false);
+      // suppressEvents=false so onUpdate callbacks (count-ups) run on every seek. GSAP renders
+      // nothing when the playhead is already at t, and a new timeline sits at 0 s: without the forced
+      // render, what the film sets at 0 s is missing from the first frame of a fresh page.
+      if (timeline.totalTime() === t) timeline.render(t, false, true);
+      else timeline.seek(t, false);
       draws.forEach(function (fn) {
         fn(t, f);
       });
