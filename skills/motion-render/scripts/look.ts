@@ -34,20 +34,22 @@ interface Look {
   leak: string; // colour of the light that leaks in at a section's head, RRGGBB
 }
 
-// Every look is light: a little contrast and a little warmth or coolness. The dark flat style, the
-// blueprint and the whiteboard lean cool; paper, crayon and collage warm.
+// Every look is plain to see beside the film without it: at a third of these values (contrast 1.04,
+// shifts of 3), a leak of 0.22 and a glow of +0.06, the owner could hardly tell the two apart
+// (2026-11-15). The dark flat style, the blueprint and the whiteboard lean cool; paper, crayon and
+// collage warm.
 const PRESETS: Record<LookName, Look> = {
-  flat: { contrast: 1.04, u: 3, v: -1, leak: "4fd1c5" },
-  paper: { contrast: 1.02, u: -3, v: 2, leak: "ffb347" },
-  crayon: { contrast: 1.03, u: -4, v: 3, leak: "ff8a5c" },
-  blueprint: { contrast: 1.03, u: 4, v: -2, leak: "9fd8ff" },
-  collage: { contrast: 1.05, u: -3, v: 2, leak: "ffc070" },
-  whiteboard: { contrast: 1.03, u: 1, v: 0, leak: "8ecbff" },
+  flat: { contrast: 1.12, u: 9, v: -3, leak: "4fd1c5" },
+  paper: { contrast: 1.06, u: -9, v: 6, leak: "ffb347" },
+  crayon: { contrast: 1.09, u: -12, v: 9, leak: "ff8a5c" },
+  blueprint: { contrast: 1.09, u: 12, v: -6, leak: "9fd8ff" },
+  collage: { contrast: 1.15, u: -9, v: 6, leak: "ffc070" },
+  whiteboard: { contrast: 1.09, u: 3, v: 0, leak: "8ecbff" },
 };
 
 const FRAME = { w: 1920, h: 1080 };
-const LEAK = { peak: 0.22, reach: 0.7, rise: 0.4, fall: 1.2 };
-const GLOW = { brightness: 0.06, saturation: 0.2, fall: 0.6 };
+const LEAK = { peak: 0.45, reach: 0.9, rise: 0.4, fall: 1.2 };
+const GLOW = { brightness: 0.15, saturation: 0.5, fall: 0.6 };
 
 // The heads of the sections that get a leak (every section but a drop) and of the drops, in s.
 export function lookTimes(timing: Timing): { leaks: number[]; drops: number[] } {
