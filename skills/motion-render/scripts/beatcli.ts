@@ -178,12 +178,14 @@ function printSync(m: SyncResult, work: string, script: Script, timing: Timing):
   return r.problems;
 }
 
-// Prints the measurements of the MP4, its sound included, and returns the problems found.
+// Prints the measurements of the MP4, its sound included, and returns the problems found. `picture`
+// is the film before its finish, when the build put one on (look.ts).
 export async function syncReport(
   work: string,
   script: Script,
   timing: Timing,
-  mp4: string
+  mp4: string,
+  picture?: string
 ): Promise<string[]> {
   const score = join(work, "audio", "score.wav");
   const audio = {
@@ -196,7 +198,10 @@ export async function syncReport(
     speed: script.speed,
   };
   return printSync(
-    await measureSync(mp4, timing, script, loadHits(work), audio),
+    await measureSync(mp4, timing, script, loadHits(work), {
+      audio,
+      ...(picture ? { picture } : {}),
+    }),
     work,
     script,
     timing

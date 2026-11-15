@@ -16,6 +16,8 @@ const FRAME_MS = 60_000; // ffmpeg taking one picture, or finishing after the la
 
 const W = 240,
   H = 135;
+// The size of the grey copy a build writes for this report when it puts a finish on the film.
+export const MOTION_SIZE = { w: W, h: H };
 // The picture is cut into 8 x 6 blocks: a flame or a meter that reacts to a kick is a small part of
 // the frame, and its change is lost in the mean of the whole frame.
 const COLS = 8,
@@ -280,16 +282,17 @@ function measure(
 }
 
 // The whole report for one MP4 of a beat-synced film. With `audio`, the MP4's own sound is measured
-// too, against where the mix placed the score and the narration.
+// too, against where the mix placed the score and the narration. With `picture`, the motion is read
+// from that video instead: the film before its finish (look.ts), whose added light is no reaction.
 export async function measureSync(
   mp4: string,
   timing: Timing,
   script: Pick<Script, "lead">,
   hits: Hit[],
-  audio?: AudioRefs
+  { audio, picture }: { audio?: AudioRefs; picture?: string } = {}
 ): Promise<SyncResult> {
   bpmOf(timing);
-  const motion = await motionOf(mp4);
+  const motion = await motionOf(picture ?? mp4);
   // The film renders at a whole frame rate. Its MP4 can decode a frame short, and frames/total would
   // then time every later frame late (11 ms at 57 s of a 60 fps film).
   const fps = Math.round(motion.frames / timing.total);

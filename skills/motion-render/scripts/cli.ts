@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // motion-render: テーマから作った動画（Claude Motion か html）に、ナレーションと BGM を付けて MP4 にする CLI。
-import { writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve, basename, dirname } from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -20,10 +21,22 @@ import {
   encodeArgs,
   pictureTime,
   exited,
+  ffmpegSync,
   FFMPEG_MS,
+  type Finish,
 } from "./audio.ts";
+import { lookGraph, lookImage } from "./look.ts";
+import { MOTION_SIZE } from "./sync.ts";
 import { limit } from "./limit.ts";
-import { loadScript, writeTiming, loadTiming, placeOnFilm, placeSfx, type Script } from "./work.ts";
+import {
+  loadScript,
+  writeTiming,
+  loadTiming,
+  placeOnFilm,
+  placeSfx,
+  type Script,
+  type Timing,
+} from "./work.ts";
 import {
   runBeatBgm,
   runScore,
@@ -113,14 +126,44 @@ async function reportLayout(film: Film, dir: string, scenes: string[] = []): Pro
   return issues.length;
 }
 
+// A still as the MP4 will show it: with the work's look on, when script.json next to the film asks
+// for one (a still of a film without a work, or without a look, is the page as drawn).
+function stillFinish(filmDir: string): ((png: Buffer, t: number) => Buffer) | null {
+  const work = dirname(resolve(filmDir));
+  if (!existsSync(join(work, "script.json")) || !existsSync(join(work, "timing.json"))) return null;
+  const look = loadScript(work).look;
+  if (!look) return null;
+  const timing = loadTiming(work),
+    leak = lookImage(look),
+    dir = mkdtempSync(join(tmpdir(), "mr-still-"));
+  return (png, t) => {
+    const raw = join(dir, "raw.png");
+    writeFileSync(raw, png);
+    const graph = lookGraph({ name: look, timing, fps: 30, leak, offset: t }, "0:v", "v");
+    return ffmpegSync(
+      ["-v", "error", "-i", raw, "-filter_complex", graph, "-map", "[v]", "-frames:v", "1"].concat([
+        "-f",
+        "image2pipe",
+        "-c:v",
+        "png",
+        "-",
+      ]),
+      `put the look on the still at ${t}s`
+    );
+  };
+}
+
 async function stills(filmDir: string, outDir: string, list: string): Promise<void> {
   const times = list.split(",").map(Number);
   if (times.some((t) => !Number.isFinite(t))) throw new Error(`times must be numbers: ${list}`);
   mkdirSync(outDir, { recursive: true });
+  const finish = stillFinish(filmDir);
   const film = await openFilm(filmDir, { pages: capturePages() });
   try {
-    for (const t of times)
-      writeFileSync(join(outDir, `t_${t.toFixed(2)}.png`), await film.frame(t));
+    for (const t of times) {
+      const png = await film.frame(t);
+      writeFileSync(join(outDir, `t_${t.toFixed(2)}.png`), finish ? finish(png, t) : png);
+    }
     await reportLayout(film, filmDir);
     for (const w of await film.warnings()) console.error("runner", w);
   } finally {
@@ -189,16 +232,17 @@ async function runSfx(work: string): Promise<void> {
 const FRAME_MS = 60_000;
 
 // Pipes rendered frames straight into ffmpeg (no temp files) and muxes the mixed audio. The whole
-// encode runs as long as capture does, so the limits are per frame and for the final mux.
+// encode runs as long as capture does, so the limits are per frame and for the final mux. `blur` is
+// the pictures averaged into a frame, `finish` the look put on after (look.ts).
 async function encode(
   film: Film,
   fps: number,
   audio: string,
   out: string,
-  blur: number
+  { blur, finish }: { blur: number; finish?: Finish | undefined }
 ): Promise<number> {
   const count = Math.round(film.meta.duration * fps);
-  const args = encodeArgs(fps, audio, out, blur);
+  const args = encodeArgs(fps, audio, out, blur, finish);
   const ff = spawn(findFfmpeg(), args, { stdio: ["pipe", "inherit", "inherit"] });
   const kill = () => ff.kill("SIGKILL");
   const exit = exited(ff);
@@ -263,6 +307,7 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
   if (isHtmlFilm(filmDir)) writeKitTiming(work);
   await checkBeforeCapture(filmDir);
 
+  const finish = buildFinish(script, timing, fps);
   const film = await openFilm(filmDir, { pages: capturePages() });
   console.error(`capture: ${film.pages} pages`);
   try {
@@ -279,14 +324,29 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
       audio
     );
     mkdirSync(dirname(out), { recursive: true });
-    const count = await encode(film, fps, audio, out, script.motionBlur);
+    const count = await encode(film, fps, audio, out, { blur: script.motionBlur, finish });
     for (const w of await film.warnings()) console.error("runner", w);
     const extra = sfx.length ? ` + ${sfx.length} sound effects` : "";
-    console.log(`done: ${out} (${film.meta.duration}s, ${count} frames, narration + BGM${extra})`);
+    const look = script.look ? `, look "${script.look}"` : "";
+    console.log(
+      `done: ${out} (${film.meta.duration}s, ${count} frames, narration + BGM${extra}${look})`
+    );
   } finally {
     await film.close();
   }
-  if (timing.bpm) await syncReport(work, script, timing, out);
+  if (timing.bpm) await syncReport(work, script, timing, out, finish?.plain?.file);
+}
+
+// The finishing layer of a build, when script.json asks for a look. A beat-synced film also gets the
+// grey copy of its picture before the finish, for sync to measure.
+function buildFinish(script: Script, timing: Timing, fps: number): Finish | undefined {
+  const look = script.look;
+  if (!look) return undefined;
+  const leak = lookImage(look);
+  const graph = (i: string, o: string) => lookGraph({ name: look, timing, fps, leak }, i, o);
+  if (!timing.bpm) return { graph };
+  const file = join(mkdtempSync(join(tmpdir(), "mr-plain-")), "plain.mkv");
+  return { graph, plain: { file, ...MOTION_SIZE } };
 }
 
 interface Options {

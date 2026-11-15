@@ -3,6 +3,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { wavSeconds } from "./audio.ts";
 import { isRecord, readJson, type Json } from "./json.ts";
+import { isLook, LOOKS, type LookName } from "./look.ts";
 
 // A sound effect, `at` seconds after its scene starts.
 export interface Sfx {
@@ -48,6 +49,7 @@ export interface Script {
   score?: ScoreCut;
   scoreLevel: number; // dB of the score's loud bars against the narration's mean level
   motionBlur: number; // pictures averaged into each frame of the MP4 (1 = no blur)
+  look?: LookName; // the finishing layer put on at export (look.ts)
 }
 
 export interface TimingScene {
@@ -172,6 +174,12 @@ function whole(s: Json, key: string, min: number, max: number): number {
   return v;
 }
 
+function parseLook(v: unknown): LookName | undefined {
+  if (v === undefined) return undefined;
+  if (!isLook(v)) fail(`"look" must be one of ${LOOKS.join(", ")}`);
+  return v;
+}
+
 function name(s: Json, key: string): string {
   const v = s[key];
   if (typeof v !== "string" || !NAME.test(v)) fail(`"${key}" must match ${NAME}`);
@@ -206,6 +214,7 @@ export function loadScript(work: string): Script {
     motionBlur: whole(s, "motionBlur", 1, 8),
     ...(s.bpm === undefined ? {} : { bpm: num(s, "bpm", 60, 200) }),
     ...(s.score === undefined ? {} : { score: parseScore(s.score) }),
+    ...(s.look === undefined ? {} : { look: parseLook(s.look) }),
   };
 }
 

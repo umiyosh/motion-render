@@ -497,28 +497,53 @@ export function pictureTime(k: number, j: number, fps: number, blur: number): nu
   return Math.max(0, k / fps + ((j + 0.5) / blur - 0.5) * (0.5 / fps));
 }
 
+// A finishing layer for encodeArgs: `graph(input, output)` is the filtergraph from the blurred
+// picture to the finished one (look.ts). With `plain`, the picture before the finish is also written
+// there, small and grey, for sync to measure the film's own motion: light the finish adds is not the
+// film reacting to the music.
+export interface Finish {
+  graph: (input: string, output: string) => string;
+  plain?: { file: string; w: number; h: number };
+}
+
 // ffmpeg arguments that read PNG frames from stdin and mux them with the mixed audio into an MP4.
 // With blur > 1, stdin carries `blur` pictures per frame, which are averaged into one: the motion
-// blur of a camera shutter.
-export function encodeArgs(fps: number, audio: string, out: string, blur = 1): string[] {
+// blur of a camera shutter. Without a finish, the arguments are what they were before looks.
+export function encodeArgs(
+  fps: number,
+  audio: string,
+  out: string,
+  blur = 1,
+  finish?: Finish
+): string[] {
   const n = blur;
-  const average =
-    n > 1
-      ? [
-          "-vf",
-          `tmix=frames=${n},select='eq(mod(n\\,${n})\\,${n - 1})',setpts=N/(${fps}*TB)`,
-          "-fps_mode",
-          "cfr",
-          "-r",
-          String(fps),
-        ]
-      : [];
+  const tmix = `tmix=frames=${n},select='eq(mod(n\\,${n})\\,${n - 1})',setpts=N/(${fps}*TB)`;
+  const rate = n > 1 ? ["-fps_mode", "cfr", "-r", String(fps)] : [];
+  const x264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"];
+  const aac = ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out];
+  const input = ["-f", "image2pipe", "-framerate", String(fps * n), "-i", "-", "-i", audio];
+  if (!finish)
+    return [
+      ["-y", "-loglevel", "error"],
+      input,
+      ["-map", "0:v", "-map", "1:a"],
+      n > 1 ? ["-vf", tmix, ...rate] : [],
+      x264,
+      aac,
+    ].flat();
+  const p = finish.plain;
+  // YUV from the start: the finish works on it, and the grey copy is its Y plane, scaled down.
+  const head = `[0:v]${n > 1 ? `${tmix},` : ""}format=yuv420p`;
+  const graph = p
+    ? `${head},split[mr_l][mr_p];${finish.graph("mr_l", "mr_v")};[mr_p]extractplanes=y,scale=${p.w}:${p.h}:flags=area[mr_g]`
+    : `${head}[mr_l];${finish.graph("mr_l", "mr_v")}`;
   return [
     ["-y", "-loglevel", "error"],
-    ["-f", "image2pipe", "-framerate", String(fps * n), "-i", "-", "-i", audio],
-    ["-map", "0:v", "-map", "1:a"],
-    average,
-    ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"],
-    ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out],
+    input,
+    ["-filter_complex", graph],
+    ["-map", "[mr_v]", "-map", "1:a", ...rate],
+    x264,
+    aac,
+    p ? ["-map", "[mr_g]", ...rate, "-c:v", "ffv1", "-an", p.file] : [],
   ].flat();
 }
