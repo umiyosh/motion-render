@@ -173,14 +173,24 @@ function printSync(r: SyncResult): string[] {
   return r.problems;
 }
 
-// Prints the measurements of the MP4 and returns the problems found.
+// Prints the measurements of the MP4, its sound included, and returns the problems found.
 export async function syncReport(
   work: string,
   script: Script,
   timing: Timing,
   mp4: string
 ): Promise<string[]> {
-  return printSync(await measureSync(mp4, timing, script, loadHits(work)));
+  const score = join(work, "audio", "score.wav");
+  const audio = {
+    ...(existsSync(score) ? { score } : {}),
+    narration: timing.scenes.map((s) => ({
+      id: s.id,
+      file: join(work, "audio", `${s.id}.wav`),
+      at: s.start + script.lead,
+    })),
+    speed: script.speed,
+  };
+  return printSync(await measureSync(mp4, timing, script, loadHits(work), audio));
 }
 
 // The same measurements from the film's pages, at the 60 fps a beat-synced film is built at, before

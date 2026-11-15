@@ -92,7 +92,38 @@ export function drumTrack(bpm: number, start: number, bars: BarKind[]): Float32A
 
 // A mono 16-bit PCM WAV of the given length (silence).
 export function wav(seconds: number, rate = 24000): Buffer {
-  const data = Buffer.alloc(Math.round(seconds * rate) * 2);
+  return pcmWav(new Float32Array(Math.round(seconds * rate)), rate);
+}
+
+// Something like speech at 24 kHz: syllables 4 a second, voiced on a pitch that wanders between
+// 110 and 190 Hz, with a breath of noise at each syllable's start. Nothing in it repeats, so it can
+// be found again in a mix by its waveform.
+export function voice(seconds: number, seed = 1): Float32Array {
+  const RATE = 24000;
+  let s = seed;
+  const noise = (): number => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 2 ** 31 - 1;
+  };
+  const x = new Float32Array(Math.round(seconds * RATE));
+  let phase = 0,
+    drift = 0;
+  for (let i = 0; i < x.length; i++) {
+    const t = i / RATE,
+      syl = (t * 4) % 1;
+    drift = 0.9995 * drift + 0.02 * noise();
+    phase += (2 * Math.PI * (150 + 40 * Math.tanh(drift))) / RATE;
+    const env = Math.sin(Math.PI * syl) ** 2;
+    const voiced = Math.sin(phase) + 0.5 * Math.sin(2 * phase) + 0.25 * Math.sin(3 * phase);
+    x[i] = 0.3 * env * voiced + (syl < 0.12 ? 0.15 * noise() : 0);
+  }
+  return x;
+}
+
+// A mono 16-bit PCM WAV of the samples.
+export function pcmWav(x: Float32Array, rate = 24000): Buffer {
+  const data = Buffer.alloc(x.length * 2);
+  x.forEach((v, i) => data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, v)) * 32767), i * 2));
   const h = Buffer.alloc(44);
   h.write("RIFF", 0);
   h.writeUInt32LE(36 + data.length, 4);
