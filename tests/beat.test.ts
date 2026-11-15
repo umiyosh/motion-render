@@ -85,6 +85,21 @@ describe("takes", () => {
     expect(table).toMatch(/\n {4}8 .*quiet/);
   });
 
+  it("moves the bar starts by whole beats, and measures the bars again from there", () => {
+    const work = takeDir(116);
+    const take = measureTake(work, "audio/bgm/take1.wav", 1, BPM);
+    const moved = measureTake(work, "audio/bgm/take1.wav", 1, BPM, 1);
+    expect(take.moved).toBeUndefined();
+    expect(moved.moved).toBe(1);
+    // one beat on, or the bar before that when it fits: the first bar is the earliest whole one
+    const shift = (moved.bars[0]!.t - take.bars[0]!.t + 2 * take.beat * 4) % (take.beat * 4);
+    expect(shift).toBeCloseTo(take.beat, 2);
+    // kick on 1 and 3, snare on 2 and 4: a beat on, the snare comes first
+    const drums = (t: typeof take) => t.bars.find((b) => b.kick + b.snare >= 4)!.row;
+    expect(drums(take)).toMatch(/^K/);
+    expect(drums(moved)).toMatch(/^S/);
+  });
+
   it("reads bar lists and refuses ones it cannot play", () => {
     expect(parseBars("0-2, -1, 5", 8)).toEqual([0, 1, 2, -1, 5]);
     expect(() => parseBars("3-1", 8)).toThrow(/backwards/);

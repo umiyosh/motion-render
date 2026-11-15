@@ -35,6 +35,7 @@ export interface Take {
   filter: string; // ffmpeg filter that locks it to the film's tempo
   beat: number; // s per beat after the lock
   votes: { kick: number[]; change: number[] };
+  moved?: number; // beats its bar starts were moved by, to where Beat This! hears the downbeats (downbeat.ts)
   bars: TakeBar[];
 }
 
@@ -52,16 +53,25 @@ function barLevels(x: Float32Array, t0: number, bar: number, n: number): number[
 const count = (hits: Hit[], b: number, kinds: Hit["k"][]): number =>
   hits.filter((h) => Math.floor(h.slot / 16) === b && kinds.includes(h.k)).length;
 
-// One generated take (`file` relative to `work`), measured at the film's tempo.
-export function measureTake(work: string, file: string, take: number, bpm: number): Take {
+// One generated take (`file` relative to `work`), measured at the film's tempo. `moved` beats move
+// its bar starts on (the downbeat Beat This! hears); the first bar is then the earliest whole one.
+export function measureTake(
+  work: string,
+  file: string,
+  take: number,
+  bpm: number,
+  moved = 0
+): Take {
   const raw = measureTempo(decodeMono(join(work, file)), bpm);
   const filter = lockFilter(raw.bpm, bpm);
   const x = decodeMono(join(work, file), filter);
   const tempo = measureTempo(x, bpm);
   const bar = 240 / bpm;
-  const n = Math.max(0, Math.floor((tempo.seconds - tempo.first) / bar + 0.5));
-  const hits = detectHits(x, bpm, tempo.first);
-  const lv = barLevels(x, tempo.first, bar, n);
+  let first = tempo.first + moved * tempo.T;
+  while (first - bar >= -1e-6) first -= bar;
+  const n = Math.max(0, Math.floor((tempo.seconds - first) / bar + 0.5));
+  const hits = detectHits(x, bpm, first);
+  const lv = barLevels(x, first, bar, n);
   const loud = percentile(lv, 0.85);
   return {
     take,
@@ -70,8 +80,9 @@ export function measureTake(work: string, file: string, take: number, bpm: numbe
     filter,
     beat: tempo.T,
     votes: tempo.votes,
+    ...(moved ? { moved } : {}),
     bars: lv.map((v, b) => ({
-      t: r3(tempo.first + b * bar),
+      t: r3(first + b * bar),
       lvl: Math.round(v - loud),
       kick: count(hits, b, ["kick"]),
       snare: count(hits, b, ["snare", "rim"]),

@@ -411,7 +411,7 @@ describe("takes, scoring, mixing and measuring a beat-synced work", () => {
     const scored = { ...BEAT_SCRIPT, score: { take: 2, bars: "0-1,2,4,5-6" } };
     writeFileSync(join(work, "script.json"), JSON.stringify(scored));
     expect(() => scoreInput(work, loadScript(work), -20)).toThrow(/no score yet/);
-    runScore(work);
+    await runScore(work);
     expect(existsSync(join(work, "audio", "hits.json"))).toBe(true);
     const input = scoreInput(work, loadScript(work), -20);
     expect(input.gain).toBeGreaterThan(0);
@@ -461,7 +461,7 @@ describe("takes, scoring, mixing and measuring a beat-synced work", () => {
   it("refuses to score a film without a beat, and fails sync with its problems", async () => {
     const work = workDir({ ...BEAT_SCRIPT, bpm: undefined }, { intro: 1, rise: 1, drop: 1 });
     writeTiming(work, loadScript(work));
-    expect(() => runScore(work)).toThrow(/beat-synced films/);
+    await expect(runScore(work)).rejects.toThrow(/beat-synced films/);
     const beat = workDir(BEAT_SCRIPT, { intro: 1.3, rise: 2.2, drop: 1.0 });
     writeTiming(beat, loadScript(beat));
     const mp4 = join(beat, "film.mp4");

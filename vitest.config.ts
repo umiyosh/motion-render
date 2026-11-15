@@ -7,6 +7,9 @@ export default defineConfig({
     // The render tests start Chromium; give them room on a cold CI runner.
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    // bgm and score check takes with Beat This! when onnxruntime-node is installed, and would fetch
+    // its model (190 MB) on a fresh runner: off for the tests, but the one that runs the model itself.
+    env: { MOTION_RENDER_DOWNBEAT: "off" },
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
