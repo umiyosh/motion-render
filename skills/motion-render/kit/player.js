@@ -369,10 +369,12 @@
           ease: "none",
           onUpdate: function () {
             var k = Math.floor(run.t * 24);
-            // before its start (seeking back) the text is the final one, as on a fresh page
+            // The span keeps its final glyph (and so its width): a stand-in is drawn over it from a
+            // data attribute (kit/base.css). Before its start (seeking back) there is none, as on
+            // a fresh page.
             chars.forEach(function (c, i) {
-              var done = run.t <= 0 || run.t >= dur + stagger * i;
-              c.textContent = done ? finals[i] : standIn(finals[i], i, k);
+              if (run.t <= 0 || run.t >= dur + stagger * i) c.removeAttribute("data-stand-in");
+              else c.setAttribute("data-stand-in", standIn(finals[i], i, k));
             });
           },
         },

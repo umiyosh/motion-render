@@ -46,6 +46,21 @@ section.scene {
 .type-char {
   display: inline-block;
 }
+/* film.say "scramble": the final glyph stays in place, unpainted, so the line keeps its width (the
+   page sets proportional glyphs, "palt"); the stand-in is drawn over it, centered. */
+.type-char[data-stand-in] {
+  position: relative;
+  -webkit-text-fill-color: transparent;
+}
+.type-char[data-stand-in]::after {
+  content: attr(data-stand-in);
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  -webkit-text-fill-color: currentColor;
+}
 
 /* Stacking by role, lowest first. Give every positioned element one of these instead of a
    z-index of its own, so what is drawn on top never depends on the order in the HTML. */

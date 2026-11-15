@@ -72,6 +72,23 @@ describe("film.say", () => {
     });
   }
 
+  it("keeps every character where it settles while the scramble runs", async () => {
+    const { dir, at } = film("scramble");
+    const f = await openFilm(dir);
+    try {
+      const xs = async (t: number) =>
+        ((await f.inspect?.(t)) ?? [])
+          .filter((b) => b.label.startsWith("span.type-char"))
+          .map((b) => Math.round(b.x));
+      const running = await xs(at + 0.1),
+        settled = await xs(at + 0.8);
+      expect(running).toHaveLength(2);
+      expect(running).toEqual(settled);
+    } finally {
+      await f.close();
+    }
+  });
+
   it("draws the same frames after seeking back, and passes the check command", () => {
     for (const how of ["rise", "scramble", "write"]) {
       const { dir } = film(how);
