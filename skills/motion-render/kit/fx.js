@@ -88,6 +88,115 @@
     return v;
   }
 
+  function prog(t, t0, d) {
+    if (t <= t0) return 0;
+    return d > 0 ? Math.min(1, (t - t0) / d) : 1;
+  }
+  // The default ease of a camera move: it starts and stops gently (cubic in-out).
+  function inOut(p) {
+    return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+  }
+
+  // A magnification going from s0 to s1 over dur s from t0, by equal ratios in equal times. The eye
+  // reads a change of size as a ratio, so a scale run at a steady rate seems to slow down as it
+  // grows (1 to 4: 2 times in the first quarter, 1.33 times in the last). ez: an ease (p => p).
+  function zoom(t, t0, s0, s1, dur, ez) {
+    return s0 * Math.pow(s1 / s0, (ez || inOut)(prog(t, t0, dur)));
+  }
+
+  // What a camera shows: the point (x, y) of the layer it moves, in px of the layer at rest, at the
+  // center of the frame, magnified s times.
+  var REST = { x: W / 2, y: H / 2, s: 1 };
+  var RHO = Math.SQRT2;
+
+  // A move from view a to view b, p of the way (0..1). The plain move is a zoom about the one point
+  // of the layer that stays put on the frame, so everything grows away from (or toward) it and
+  // nothing swings. With fly, the move follows the path of van Wijk and Nuij ("Smooth and efficient
+  // zooming and panning", IEEE InfoVis 2003): it pulls out while it travels and pushes in at the end,
+  // so a move to something far away never slides the ground past faster than the eye can follow.
+  function between(a, b, p, fly) {
+    var dx = b.x - a.x,
+      dy = b.y - a.y,
+      d = Math.sqrt(dx * dx + dy * dy);
+    // The far end lands on b exactly: the formulas leave it a hair off.
+    if (p >= 1) return { x: b.x, y: b.y, s: b.s };
+    if (fly && d > 1e-6) return flyAt(a, b, dx, dy, d, p);
+    var s = a.s * Math.pow(b.s / a.s, p);
+    if (Math.abs(a.s - b.s) < 1e-9) return { x: a.x + dx * p, y: a.y + dy * p, s: s };
+    // The fixed point F shows at the same place in both views: (F - a) * a.s = (F - b) * b.s.
+    var px = (a.x * a.s - b.x * b.s) / (a.s - b.s),
+      py = (a.y * a.s - b.y * b.s) / (a.s - b.s);
+    return { x: px - ((px - a.x) * a.s) / s, y: py - ((py - a.y) * a.s) / s, s: s };
+  }
+  // The optimal path, with the visible width w = W / s and u the distance travelled toward b.
+  function flyAt(a, b, dx, dy, d, p) {
+    var w0 = W / a.s,
+      w1 = W / b.s,
+      r2 = RHO * RHO,
+      b0 = (w1 * w1 - w0 * w0 + r2 * r2 * d * d) / (2 * w0 * r2 * d),
+      b1 = (w1 * w1 - w0 * w0 - r2 * r2 * d * d) / (2 * w1 * r2 * d),
+      r0 = Math.log(Math.sqrt(b0 * b0 + 1) - b0),
+      r1 = Math.log(Math.sqrt(b1 * b1 + 1) - b1),
+      s = (p * (r1 - r0)) / RHO,
+      u = (w0 / r2) * (Math.cosh(r0) * Math.tanh(RHO * s + r0) - Math.sinh(r0)),
+      w = (w0 * Math.cosh(r0)) / Math.cosh(RHO * s + r0);
+    return { x: a.x + (dx * u) / d, y: a.y + (dy * u) / d, s: W / w };
+  }
+
+  // A camera over one layer of the film: shots [{ t, x, y, s, dur, ease, fly }], each a move that
+  // starts at t and, over dur s, comes to show (x, y) magnified s times (x, y left out: where it is
+  // looking). Before the first shot it is at rest; a shot that starts before the one before it has
+  // landed takes over from where that one is. Returns draw(t, k) for film.draw: it places the layer
+  // and returns the view it shows { x, y, s }; k multiplies the magnification on that frame (a notch
+  // per kick with beat.zoomSteps, a punch on a hit). Words to read go outside the layer.
+  function camera(sel, shots) {
+    var el = typeof sel === "string" ? document.querySelector(sel) : sel;
+    if (!el) throw new Error("fx.camera: no element at " + sel);
+    // Shapes in the layer may run off the frame when it pushes in; the layout check still stops text.
+    el.setAttribute("data-camera", "");
+    el.style.transformOrigin = "0 0";
+    var list = shots.slice().sort(function (a, b) {
+      return a.t - b.t;
+    });
+    function view(t) {
+      var v = REST;
+      for (var i = 0; i < list.length && list[i].t <= t; i++) {
+        var m = list[i],
+          next = list[i + 1],
+          until = next && next.t <= t ? next.t : t,
+          to = {
+            x: m.x === undefined ? v.x : m.x,
+            y: m.y === undefined ? v.y : m.y,
+            s: m.s || v.s,
+          };
+        v = between(v, to, (m.ease || inOut)(prog(until, m.t, m.dur)), m.fly);
+      }
+      return v;
+    }
+    // The frame never looks past the layer's edges, where the set ends: a view that would is slid
+    // back inside, and a layer smaller than the view is kept at its center.
+    var lw = el.offsetWidth || W,
+      lh = el.offsetHeight || H;
+    function inside(c, half, size) {
+      return half * 2 >= size ? size / 2 : Math.min(Math.max(c, half), size - half);
+    }
+    return function (t, k) {
+      var v = view(t),
+        s = v.s * (k === undefined ? 1 : k),
+        x = inside(v.x, W / 2 / s, lw),
+        y = inside(v.y, H / 2 / s, lh);
+      el.style.transform =
+        "translate(" + (W / 2 - x * s) + "px," + (H / 2 - y * s) + "px) scale(" + s + ")";
+      return { x: x, y: y, s: s };
+    };
+  }
+
+  // Where the point (x, y) of a camera's layer shows on the frame, in px, for the view a camera's
+  // draw returned: to keep a word outside the layer next to the thing it names.
+  function onFrame(view, x, y) {
+    return { x: (x - view.x) * view.s + W / 2, y: (y - view.y) * view.s + H / 2 };
+  }
+
   // A hand-drawn line that boils: the points of `pts` ([[x, y], ...]) moved by up to `amp` px,
   // with a new wobble `rate` times a second (a held drawing still feels drawn by hand).
   function boil(pts, t, amp, rate) {
@@ -187,6 +296,9 @@
     fbm: fbm,
     spring: spring,
     follow: follow,
+    zoom: zoom,
+    camera: camera,
+    onFrame: onFrame,
     boil: boil,
     project: project,
     canvas: canvas,
