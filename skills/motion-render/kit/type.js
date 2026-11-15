@@ -114,8 +114,10 @@
         t: dur,
         duration: dur,
         ease: "none",
+        // GSAP rounds the value it renders (an end of 0.45 + 3 × 0.05 = 0.6000000000000001 comes
+        // out as 0.6), so the end is passed as dur itself: checks such as t >= dur hold on it
         onUpdate: function () {
-          fn(run.t);
+          fn(run.t >= dur - 1e-6 ? dur : run.t);
         },
       },
       at
