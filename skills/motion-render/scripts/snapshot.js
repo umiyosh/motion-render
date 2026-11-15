@@ -208,7 +208,8 @@
         h: v.bottom - v.top,
         cut: r.left < -2 || r.top < -2 || r.right > 1922 || r.bottom > 1082,
         anc: ancestors(el, keyOf),
-        ok: !!el.closest("[data-layout-ok]"),
+        // data-wiping: a scene film.wipe is changing; the next one shows only inside its shape
+        ok: !!el.closest("[data-layout-ok],[data-wiping]"),
         cam: !!el.closest("[data-camera]"),
         solid: kind === "solid",
         under: null,
