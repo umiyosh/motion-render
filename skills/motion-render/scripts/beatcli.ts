@@ -12,6 +12,7 @@ import type { Film } from "./render.ts";
 import { writeKitTiming } from "./kit.ts";
 import { isRecord, readJson } from "./json.ts";
 import type { Hit } from "./hits.ts";
+import { voiceInStops } from "./words.ts";
 
 // Where each scene starts on the bar grid, for writing score.txt.
 export function timingTable(t: Timing): string {
@@ -166,7 +167,11 @@ function loadHits(work: string): Hit[] {
   return hits;
 }
 
-function printSync(r: SyncResult): string[] {
+// Prints the measurements, with the check of the narration against the stops (it needs no picture),
+// and returns the problems found.
+function printSync(m: SyncResult, work: string, script: Script, timing: Timing): string[] {
+  const s = voiceInStops(work, script, timing);
+  const r = { lines: [...m.lines, ...s.lines], problems: [...m.problems, ...s.problems] };
   for (const l of r.lines) console.log(`sync: ${l}`);
   for (const p of r.problems) console.log(`sync problem: ${p}`);
   console.log(r.problems.length ? `sync: ${r.problems.length} problems` : "sync: ok");
@@ -180,7 +185,7 @@ export async function syncReport(
   timing: Timing,
   mp4: string
 ): Promise<string[]> {
-  return printSync(await measureSync(mp4, timing, script, loadHits(work)));
+  return printSync(await measureSync(mp4, timing, script, loadHits(work)), work, script, timing);
 }
 
 // The same measurements from the film's pages, at the 60 fps a beat-synced film is built at, before
@@ -194,7 +199,10 @@ export async function syncPreview(
   const fps = 60;
   const draw = (f: number) => film.frame(f / fps);
   return printSync(
-    await measureSyncPictures({ draw, fps, ahead: film.pages }, timing, script, loadHits(work))
+    await measureSyncPictures({ draw, fps, ahead: film.pages }, timing, script, loadHits(work)),
+    work,
+    script,
+    timing
   );
 }
 
