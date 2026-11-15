@@ -110,6 +110,50 @@
     });
   }
 
+  // The text of `what` as one span per glyph inside a mask (made once), for film.typeIn and
+  // film.say. `who` names the caller in the error for an element that holds more than text.
+  function charSpans(what, who) {
+    var e = el(what);
+    if (!e.querySelector(".type-mask")) {
+      if (e.children.length)
+        throw new Error(who + " needs an element that holds only text: " + what);
+      var mask = document.createElement("span");
+      mask.className = "type-mask";
+      glyphs(e.textContent.trim()).forEach(function (g) {
+        var c = document.createElement("span");
+        c.className = "type-char";
+        c.textContent = g;
+        mask.appendChild(c);
+      });
+      e.textContent = "";
+      e.appendChild(mask);
+    }
+    return Array.prototype.slice.call(e.querySelectorAll(".type-char"));
+  }
+
+  // A whole number from (i, k) that looks random and is always the same (an integer hash), so the
+  // glyphs a scramble runs through depend on the time alone.
+  function mix(i, k) {
+    var h = Math.imul(i + 1, 374761393) ^ Math.imul(k + 7, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return (h ^ (h >>> 16)) >>> 0;
+  }
+  var KANA =
+    "アカサタナハマヤラワイキシチニヒミリウクスツヌフムユルエケセテネヘメレオコソトノホモヨロ";
+  var LATIN = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+  // A stand-in for glyph `g` at step k: as many characters, of the same kind (kana for Japanese,
+  // letters and digits for Latin), so the line keeps about its width while it runs. A space stays.
+  function standIn(g, i, k) {
+    if (!g.trim()) return g;
+    var pool = /^[\x21-\x7e’]+$/.test(g) ? LATIN : KANA;
+    return Array.from(g)
+      .map(function (_, j) {
+        return pool[mix(i * 31 + j, k) % pool.length];
+      })
+      .join("");
+  }
+
   window.film = {
     scenes: scenes,
     total: T.total,
@@ -271,25 +315,10 @@
     // o: { dur = 0.5, stagger = 0.04 }.
     typeIn: function (tl, what, at, o) {
       o = o || {};
-      var e = el(what);
-      if (!e.querySelector(".type-mask")) {
-        if (e.children.length)
-          throw new Error("typeIn needs an element that holds only text: " + what);
-        var mask = document.createElement("span");
-        mask.className = "type-mask";
-        glyphs(e.textContent.trim()).forEach(function (g) {
-          var c = document.createElement("span");
-          c.className = "type-char";
-          c.textContent = g;
-          mask.appendChild(c);
-        });
-        e.textContent = "";
-        e.appendChild(mask);
-      }
       // Hidden until its turn, so a character waiting below the mask line is not laid out as a
       // box sticking out of the line.
       return tl.fromTo(
-        e.querySelectorAll(".type-char"),
+        charSpans(what, "typeIn"),
         { yPercent: 110, autoAlpha: 0 },
         {
           yPercent: 0,
@@ -297,6 +326,55 @@
           duration: o.dur || 0.5,
           ease: "expo.out",
           stagger: o.stagger === undefined ? 0.04 : o.stagger,
+        },
+        at
+      );
+    },
+    // Brings in the text of `what` as the narration of scene `id` starts saying `w`, shown 8 ms
+    // early as a hit is (kit/beat.js). The text is hidden until then. o.how: "rise" (each character
+    // rises, as film.typeIn), "scramble" (every character runs through others of its kind and they
+    // settle left to right), "write" (one character after another, in place). o.n: which time the
+    // narration says `w` (1); o.lead: seconds early (0.008); o.dur and o.stagger: as film.typeIn.
+    say: function (tl, what, id, w, o) {
+      o = o || {};
+      var lead = o.lead === undefined ? 0.008 : o.lead;
+      var at = Math.max(0, window.film.at(id, window.film.word(id, w, o.n)) - lead);
+      var how = o.how || "rise";
+      if (how === "rise") return window.film.typeIn(tl, what, at, o);
+      var chars = charSpans(what, "say");
+      var stagger = o.stagger === undefined ? 0.05 : o.stagger;
+      if (how === "write")
+        return tl.fromTo(
+          chars,
+          { autoAlpha: 0 },
+          { autoAlpha: 1, duration: 0.001, ease: "none", stagger: stagger },
+          at
+        );
+      if (how !== "scramble")
+        throw new Error('film.say: o.how must be "rise", "scramble" or "write", not ' + how);
+      var finals = chars.map(function (c) {
+        return c.textContent;
+      });
+      var dur = o.dur || 0.45,
+        total = dur + stagger * (chars.length - 1),
+        run = { t: 0 };
+      tl.fromTo(chars, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.001, ease: "none" }, at);
+      // 24 changes a second, from the time alone: seeking back and forth draws the same glyphs.
+      return tl.fromTo(
+        run,
+        { t: 0 },
+        {
+          t: total,
+          duration: total,
+          ease: "none",
+          onUpdate: function () {
+            var k = Math.floor(run.t * 24);
+            // before its start (seeking back) the text is the final one, as on a fresh page
+            chars.forEach(function (c, i) {
+              var done = run.t <= 0 || run.t >= dur + stagger * i;
+              c.textContent = done ? finals[i] : standIn(finals[i], i, k);
+            });
+          },
         },
         at
       );
