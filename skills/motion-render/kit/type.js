@@ -122,6 +122,25 @@
     );
   }
 
+  // An inset() clip that cuts `amount` (0 to 1) of the box away from one side: 0 top, 1 right,
+  // 2 bottom, 3 left. Every value carries its unit, so no tween has to guess one.
+  function inset(side, amount) {
+    var v = ["0%", "0%", "0%", "0%"];
+    v[side] = amount * 100 + "%";
+    return "inset(" + v.join(" ") + ")";
+  }
+
+  // Sets the clip-path of `target` to at(p) for the eased progress p of [at, at + dur], computed
+  // from the time on every render (and at(0) until then), so a frame mid-wipe is the same after
+  // seeking back: a tween between clip-path strings is not (#60).
+  function clip(tl, target, at, dur, value) {
+    var ease = gsap.parseEase("power2.inOut");
+    target.style.clipPath = value(0);
+    return over(tl, at, dur, function (t) {
+      target.style.clipPath = value(ease(Math.min(1, t / dur)));
+    });
+  }
+
   // ---- entrances: film.say(tl, what, id, word, { how }) ----
 
   // Each returns the timeline. `c` is the list of glyph spans, `e` the element, `o` the options.
@@ -239,23 +258,15 @@
     // An edge sweeps across and uncovers the text (o.dir: "right", "left", "down", "up").
     wipe: function (tl, c, e, at, o) {
       var dir = o.dir || "right";
-      var hidden = {
-        right: "inset(0 100% 0 0)",
-        left: "inset(0 0 0 100%)",
-        down: "inset(0 0 100% 0)",
-        up: "inset(100% 0 0 0)",
-      }[dir];
-      if (!hidden) throw new Error('o.dir must be "right", "left", "down" or "up", not ' + dir);
-      var m = e.querySelector(".type-mask");
+      var side = { right: 1, left: 3, down: 2, up: 0 }[dir];
+      if (side === undefined)
+        throw new Error('o.dir must be "right", "left", "down" or "up", not ' + dir);
       // hidden outright until the wipe starts, so nothing reads the clipped text as shown
       tl.set(c, { autoAlpha: 0 }, 0);
       tl.set(c, { autoAlpha: 1 }, at);
-      return tl.fromTo(
-        m,
-        { clipPath: hidden },
-        { clipPath: "inset(0 0 0 0)", duration: opt(o.dur, 0.5), ease: "power2.inOut" },
-        at
-      );
+      return clip(tl, e.querySelector(".type-mask"), at, opt(o.dur, 0.5), function (p) {
+        return inset(side, 1 - p);
+      });
     },
     // A solid bar grows across the text, then pulls away to the other side and leaves the text
     // behind (a box reveal). Its colour is --kt-box, else the accent.
@@ -394,13 +405,23 @@
     circle: function (tl, e, at, o) {
       var d = decoration(e, "kt-circle");
       d.innerHTML =
-        '<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path pathLength="1" d="M52 4 C80 3 98 22 97 50 C96 79 74 97 48 96 C21 95 3 76 4 49 C5 22 26 6 58 7"/></svg>';
-      return tl.fromTo(
-        d.querySelector("path"),
-        { strokeDashoffset: 1 },
-        { strokeDashoffset: 0, duration: opt(o.dur, 0.5), ease: "power2.inOut" },
-        at
-      );
+        '<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M52 4 C80 3 98 22 97 50 C96 79 74 97 48 96 C21 95 3 76 4 49 C5 22 26 6 58 7"/></svg>';
+      var path = d.querySelector("path"),
+        ease = gsap.parseEase("power2.inOut"),
+        dur = opt(o.dur, 0.5);
+      path.style.visibility = "hidden";
+      // The stroke keeps its width on a stretched box (non-scaling-stroke), so its dashes are in
+      // screen px: the loop's length is taken from the box (an ellipse's perimeter, Ramanujan's
+      // approximation, with room for the overlapping tail), from the layout alone.
+      return over(tl, at, dur, function (t) {
+        var a = d.offsetWidth * 0.47,
+          b = d.offsetHeight * 0.47,
+          len = 1.15 * Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+        var p = ease(Math.min(1, t / dur));
+        path.style.visibility = p > 0 && len > 0 ? "visible" : "hidden";
+        path.style.strokeDasharray = len + " " + len;
+        path.style.strokeDashoffset = String(len * (1 - p));
+      });
     },
     // The text turns to the accent colour (o.color).
     color: function (tl, e, at, o) {
@@ -463,18 +484,12 @@
       tl.set(x.b, { autoAlpha: 0 }, 0);
       tl.set(x.b, { autoAlpha: 1 }, at);
       tl.set(x.a, { autoAlpha: 0 }, at + d);
-      tl.fromTo(
-        x.a,
-        { clipPath: "inset(0 0 0 0%)" },
-        { clipPath: "inset(0 0 0 100%)", duration: d, ease: "power2.inOut" },
-        at
-      );
-      return tl.fromTo(
-        x.b,
-        { clipPath: "inset(0 100% 0 0)" },
-        { clipPath: "inset(0 0% 0 0)", duration: d, ease: "power2.inOut" },
-        at
-      );
+      clip(tl, x.a, at, d, function (p) {
+        return inset(3, p); // the old text is cut away from its left
+      });
+      return clip(tl, x.b, at, d, function (p) {
+        return inset(1, 1 - p); // the new text is uncovered towards its right
+      });
     },
     // The old text blurs out, then the new one comes into focus, without overlapping.
     blur: function (tl, x, at, o) {

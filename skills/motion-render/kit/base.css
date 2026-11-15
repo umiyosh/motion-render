@@ -125,7 +125,6 @@ section.scene {
   stroke: var(--kt-line, var(--accent, #3ed6c4));
   stroke-width: 3;
   stroke-linecap: round;
-  stroke-dasharray: 1;
   vector-effect: non-scaling-stroke;
 }
 /* film.swap: the old and the new text in one cell, so the line is as wide as the wider. */

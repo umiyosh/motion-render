@@ -224,3 +224,64 @@ describe("film.karaoke", () => {
     passesCheck(dir);
   });
 });
+
+// Every way of every tool, as the code that runs it.
+const EVERY = [
+  ...ENTER.map((how) => `film.say(tl, "#t", "intro", "動く", { how: "${how}", cursor: true });`),
+  ...["left", "down", "up"].map(
+    (dir) => `film.say(tl, "#t", "intro", "動く", { how: "wipe", dir: "${dir}" });`
+  ),
+  ...["highlight", "underline", "strike", "circle", "color", "bump"].map(
+    (how) => `film.mark(tl, "#t", "intro", "動く", { how: "${how}" });`
+  ),
+  ...["roll", "wipe", "blur", "cut"].map(
+    (how) => `film.swap(tl, "#t", "intro", "動く", "着く", { how: "${how}" });`
+  ),
+  `film.count(tl, "#n", "intro", "動く");`,
+];
+
+describe("a frame in the middle of a move", () => {
+  it("is the same drawn first and drawn again after seeking away, in every way", async () => {
+    const differ: string[] = [];
+    for (const code of EVERY) {
+      const { dir, at } = film(code);
+      const f = await openFilm(dir, { pages: 1 });
+      try {
+        for (const dt of [0.1, 0.25]) {
+          const first = await f.frame(at + dt);
+          await f.frame(at + 1.1);
+          await f.frame(0.3);
+          if (!first.equals(await f.frame(at + dt))) differ.push(`${code} at +${dt}`);
+        }
+      } finally {
+        await f.close();
+      }
+    }
+    expect(differ).toEqual([]);
+  });
+});
+
+describe("film.mark circle", () => {
+  it("is absent before the word, is drawn round over its time, and holds once drawn", async () => {
+    const { dir, at } = film(`film.mark(tl, "#t", "intro", "動く", { how: "circle" });`);
+    await withFilm(dir, async (f) => {
+      const [early, before, a, b, c, done, later] = [
+        await f.frame(at - 0.5),
+        await f.frame(at - FRAME),
+        await f.frame(at + 0.15),
+        await f.frame(at + 0.3),
+        await f.frame(at + 0.45),
+        await f.frame(at + 0.7),
+        await f.frame(at + 0.9),
+      ];
+      expect(early.equals(before)).toBe(true); // nothing of it before the word
+      for (const [x, y] of [
+        [before, a],
+        [a, b],
+        [b, c],
+      ] as const)
+        expect(x!.equals(y!)).toBe(false); // it grows
+      expect(done.equals(later)).toBe(true); // and holds once drawn (it closes a little early: its length is taken generously)
+    });
+  });
+});
