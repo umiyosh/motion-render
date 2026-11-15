@@ -141,7 +141,7 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 
 | Command                                           | What it does                                                                                                                                                                                                                                                                                                            |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `motion-render narrate <work>`                    | Generates narration from `script.json` and writes scene lengths to `timing.json`. With `bpm`, scenes start on beats and sections on bar lines, and a table of the times is printed. With `ELEVENLABS_API_KEY`, also writes when each character of the narration is said to `words.json`                                 |
+| `motion-render narrate <work>`                    | Generates narration from `script.json` and writes scene lengths to `timing.json`. With `bpm`, scenes start on beats and sections on bar lines, and a table of the times is printed. It also measures on the audio when each character of the narration is said (`words.json`)                                           |
 | `motion-render bgm <work>`                        | With `bpm`, generates four takes from `score.txt` and prints each bar by bar (level, kicks, snares, hats), then a draft of the bars to play for each take, best first. Without it, one piece from the `bgm` prompt in `script.json`                                                                                     |
 | `motion-render score <work>`                      | Plays the bars chosen in `script.json`'s `score` onto the film's tempo and bars, hands the drum hits to the film, lists the moments a listener notices (the music drops out, comes back, a lone hit), and checks that the music lands on the cues                                                                       |
 | `motion-render sync <work> <mp4>`                 | Measures on the MP4 the pauses in the narration, the change of the picture on each drop and on the final hit, and the reactions to the kicks in the drops (`build` runs it too)                                                                                                                                         |
@@ -156,14 +156,14 @@ Each video uses one work directory (`<work>`). Its layout and the `script.json` 
 | `motion-render times <work>`                      | Shows how long each step took, as a table (each command, and Claude's work between them)                                                                                                                                                                                                                                |
 | `motion-render --version`                         | Prints the version                                                                                                                                                                                                                                                                                                      |
 
-| Environment variable    | Effect                                                                                                                                                          |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GEMINI_API_KEY`        | Required for narration and BGM                                                                                                                                  |
-| `ELEVENLABS_API_KEY`    | Used for sound effects and for when each character of the narration is said (`words.json`); without it there are no sound effects and those times are estimated |
-| `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path                                                                                                       |
-| `CHROMIUM_PATH`         | Use your own Chrome or Chromium instead of the bundled one                                                                                                      |
-| `FFMPEG_PATH`           | Use your own ffmpeg instead of the bundled one                                                                                                                  |
-| `MOTION_RENDER_PAGES`   | Browsers that draw frames at once (default: half the cores, at most 8). Lower it if the machine is busy                                                         |
+| Environment variable    | Effect                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`        | Required for narration and BGM                                                                          |
+| `ELEVENLABS_API_KEY`    | Required for sound effects (none are added without it)                                                  |
+| `MOTION_RENDER_OUT_DIR` | Default output directory when `build` gets no output path                                               |
+| `CHROMIUM_PATH`         | Use your own Chrome or Chromium instead of the bundled one                                              |
+| `FFMPEG_PATH`           | Use your own ffmpeg instead of the bundled one                                                          |
+| `MOTION_RENDER_PAGES`   | Browsers that draw frames at once (default: half the cores, at most 8). Lower it if the machine is busy |
 
 ## Troubleshooting
 

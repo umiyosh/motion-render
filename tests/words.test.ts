@@ -1,49 +1,59 @@
-// When each character of the narration is said (#59): the alignment to the script, words.json and
-// its cache, the times a page gets, film.word, and the narration against the film's stops.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+// When each character of the narration is said (#59): measured on each scene's WAV, given to the
+// page for film.word, and checked against the film's stops.
+import { describe, expect, it } from "vitest";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  alignChars,
-  loadWords,
+  charTimes,
   pageWords,
   voiceInStops,
   writeWords,
-  type Timed,
 } from "../skills/motion-render/scripts/words.ts";
 import { loadScript, writeTiming } from "../skills/motion-render/scripts/work.ts";
 import { writeKit } from "../skills/motion-render/scripts/kit.ts";
 import { openFilm } from "../skills/motion-render/scripts/render.ts";
 import { pcmWav, voice, workDir } from "./helpers.ts";
 
-// What Forced Alignment returns for `text`: one character every 0.1 s from `from`.
-const timed = (text: string, from = 0.1): Timed[] =>
-  [...text].map((c, i) => ({ text: c, start: from + i * 0.1, end: from + i * 0.1 + 0.08 }));
+const RATE = 24000;
 
-describe("alignChars", () => {
-  it("gives each character of the text the time of its partner", () => {
-    expect(alignChars("一打", timed("一打"))).toEqual([
-      [0.1, 0.18],
-      [0.2, 0.28],
-    ]);
+// Speech-like phrases with silence before, between and after them: [silence s, voice s, ...].
+function spoken(parts: number[], seed = 1): Float32Array {
+  const out: number[] = [];
+  parts.forEach((s, i) => {
+    if (i % 2 === 0) out.push(...new Array<number>(Math.round(s * RATE)).fill(0));
+    else out.push(...voice(s, seed + i));
+  });
+  out.push(...new Array<number>(Math.round(0.2 * RATE)).fill(0));
+  return Float32Array.from(out);
+}
+
+const near = (t: number, want: number): void => expect(Math.abs(t - want)).toBeLessThan(0.05);
+
+describe("charTimes", () => {
+  it("starts each phrase where its voice rises and spreads its characters evenly", () => {
+    // はじめに from 0.20 to 1.00 s, a pause, 動く from 1.25 to 2.05 s
+    const t = charTimes(spoken([0.2, 0.8, 0.25, 0.8]), "はじめに、動く。");
+    near(t[0]![0], 0.2);
+    near(t[3]![0], 0.2 + (3 / 4) * 0.8); // に, the 4th of 4
+    near(t[5]![0], 1.25); // 動, after the pause
+    near(t[6]![0], 1.25 + 0.4); // く
+    // the 、 sits between に and 動, the 。 after く
+    expect(t[4]![0]).toBeGreaterThanOrEqual(t[3]![1] - 1e-9);
+    expect(t[4]![1]).toBeLessThanOrEqual(t[5]![0] + 1e-9);
+    expect(t[7]![0]).toBeGreaterThanOrEqual(t[6]![1] - 1e-9);
   });
 
-  it("pairs hiragana with katakana, skips extra characters and puts a missing one between its neighbors", () => {
-    // the API wrote ぎっと for ギット, and an extra "、"; "ブ" came back as nothing
-    const got = [...timed("ぎっと、", 0), ...timed("は", 0.5)];
-    const t = alignChars("ギットブは", got);
-    expect(t.slice(0, 3)).toEqual([
-      [0, 0.08],
-      [0.1, 0.18],
-      [0.2, 0.28],
-    ]);
-    expect(t[3]![0]).toBeGreaterThanOrEqual(0.28);
-    expect(t[3]![1]).toBeLessThanOrEqual(0.5);
-    expect(t[4]).toEqual([0.5, 0.58]);
+  it("joins a pause the text does not mark into its phrase", () => {
+    // a breath of 0.12 s inside はじめに: three runs of voice for two phrases
+    const t = charTimes(spoken([0.2, 0.4, 0.12, 0.4, 0.3, 0.6]), "はじめに、動く。");
+    near(t[0]![0], 0.2);
+    near(t[5]![0], 1.42);
   });
 
-  it("refuses an empty answer", () => {
-    expect(() => alignChars("一打", [])).toThrow(/no characters/);
+  it("spreads the whole voice when it ran on through a pause the text marks", () => {
+    const t = charTimes(spoken([0.3, 1.2]), "はじめに、動く。");
+    near(t[0]![0], 0.3);
+    near(t[5]![0], 0.3 + (4 / 6) * 1.2); // 動 after 4 of the 6 voiced characters
   });
 });
 
@@ -56,155 +66,60 @@ const SCRIPT = {
   ],
 };
 
-// A work whose narration WAVs are speech-like (the times in the tests come from the mocked API).
-function work(): string {
+// A work whose intro says はじめに at 0.2-1.0 s and 動く at 1.25-2.05 s into its WAV (by default).
+function work(intro = [0.2, 0.8, 0.25, 0.8]): string {
   const w = workDir(SCRIPT);
-  writeFileSync(join(w, "audio", "intro.wav"), pcmWav(voice(1.2, 1)));
-  writeFileSync(join(w, "audio", "drop.wav"), pcmWav(voice(0.9, 2)));
+  writeFileSync(join(w, "audio", "intro.wav"), pcmWav(spoken(intro)));
+  writeFileSync(join(w, "audio", "drop.wav"), pcmWav(spoken([0.2, 0.7], 5)));
   return w;
 }
 
-function aligned(): Response {
-  return new Response(
-    JSON.stringify({ characters: timed("はじめに、動く。"), words: [], loss: 0.1 })
-  );
-}
-
-describe("word times", () => {
-  beforeEach(() => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-  });
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
-  it("writes words.json from Forced Alignment, and never sends the same audio twice", async () => {
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => aligned())
-    );
-    const w = work();
-    const script = loadScript(w);
-    expect(await writeWords(w, script)).toBe(2);
-    const sent = vi.mocked(fetch).mock.calls[0]!;
-    expect(sent[0]).toBe("https://api.elevenlabs.io/v1/forced-alignment");
-    const form = sent[1]!.body as FormData;
-    expect(form.get("text")).toMatch(/^(はじめに、動く。|一打で着く。)$/);
-    expect((sent[1]!.headers as Record<string, string>)["xi-api-key"]).toBe("test-key");
-    const saved = JSON.parse(readFileSync(join(w, "words.json"), "utf8"));
-    expect(saved.scenes.intro.chars[5][0]).toBeCloseTo(0.6, 6); // "動", after "、"
-    expect(await writeWords(w, script)).toBe(2);
-    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
-  });
-
-  it("drops the times of a scene whose audio changed", async () => {
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => aligned())
-    );
-    const w = work();
-    const script = loadScript(w);
-    await writeWords(w, script);
-    writeFileSync(join(w, "audio", "intro.wav"), pcmWav(voice(1.3, 9)));
-    expect(Object.keys(loadWords(w, script))).toEqual(["drop"]);
-  });
-
-  it("warns and goes on without a key, and when the API refuses", async () => {
-    vi.stubEnv("ELEVENLABS_API_KEY", "");
-    const w = work();
-    const script = loadScript(w);
-    expect(await writeWords(w, script)).toBe(0);
-    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(
-      /ELEVENLABS_API_KEY is not set: no word times/
-    );
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify({ detail: { message: "missing the permission" } }), {
-            status: 401,
-          })
-      )
-    );
-    expect(await writeWords(w, script)).toBe(0);
-    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(
-      /no word times for "intro": HTTP 401 missing the permission/
-    );
-    expect(existsSync(join(w, "words.json"))).toBe(true);
-  });
-
-  it("gives a page each character's time from its scene's start: lead, then the time at speed", async () => {
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => aligned())
-    );
+describe("word times of a work", () => {
+  it("writes words.json and gives a page each character's time from its scene's start", () => {
     const w = work();
     const script = loadScript(w);
     const timing = writeTiming(w, script);
-    await writeWords(w, script);
+    expect(writeWords(w, script)).toBe(2);
+    const saved = JSON.parse(readFileSync(join(w, "words.json"), "utf8"));
+    near(saved.scenes.intro.chars[5][0], 1.25);
     const p = pageWords(w, script, timing);
-    expect(p.intro!.at![5]).toBeCloseTo(0.25 + 0.6 / 1.1, 3);
-    vi.stubEnv("ELEVENLABS_API_KEY", "");
-    writeFileSync(join(w, "audio", "drop.wav"), pcmWav(voice(1, 3)));
-    expect(pageWords(w, script, timing).drop!.at).toBeNull();
+    // lead 0.25 s, then the WAV's time at 1.1x
+    expect(p.intro!.at![5]).toBeCloseTo(0.25 + saved.scenes.intro.chars[5][0] / 1.1, 2);
+    expect(p.intro!.text).toBe("はじめに、動く。");
   });
 });
 
 describe("the narration against the stops", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
   // 120 BPM: bars of 2 s. The stop is bar 2 (4-6 s); the drop starts at 6 s.
   const timing = {
     total: 10,
     bpm: 120,
     end: 8,
     scenes: [
-      { id: "intro", name: "intro", start: 0, dur: 6, speech: 1, section: "intro" as const },
+      { id: "intro", name: "intro", start: 0, dur: 6, speech: 2, section: "intro" as const },
       { id: "drop", name: "drop", start: 6, dur: 4, speech: 0.8, section: "drop" as const },
     ],
   };
-  const scored = (bars: string) => ({ ...loadScript(work()), score: { take: 1, bars } });
+  const scored = (w: string, bars: string) => ({ ...loadScript(w), score: { take: 1, bars } });
 
   it("passes a film whose narration rests in the stop", () => {
-    const s = scored("0-1,-1,2-4");
-    const r = voiceInStops(work(), s, timing);
-    expect(r.problems).toEqual([]);
-    expect(r.lines).toEqual(["stop 0:04.00-0:06.00: no voice in it (by scene speech spans)"]);
+    const w = work();
+    const r = voiceInStops(w, scored(w, "0-1,-1,2-4"), timing);
+    expect(r).toEqual({ lines: ["stop 0:04.00-0:06.00: no voice in it"], problems: [] });
   });
 
-  it("names the words said in the stop", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    // the intro's "動く" comes 4.4-4.6 s into its WAV, 3.9-4.4 s into the film at 1.1x: into the stop at 4 s
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () => new Response(JSON.stringify({ characters: timed("はじめに、動く。", 3.9) }))
-      )
-    );
-    const w = work();
-    const s = { ...loadScript(w), score: { take: 1, bars: "0-1,-1,2-4" } };
-    await writeWords(w, s);
-    const r = voiceInStops(w, s, timing);
-    expect(r.problems[0]).toMatch(
-      /speaks in the stop at 0:04\.00-0:06\.00 \("[^"]*く" of "intro"\)/
-    );
-    expect(r.lines[0]).toMatch(/voice in it \(by word times\)/);
+  it("names the words said in the stop", () => {
+    // 動く said 4.3-5.1 s into the WAV: 4.2-4.9 s into the film at 1.1x, inside the stop
+    const w = work([0.2, 0.8, 3.3, 0.8]);
+    const r = voiceInStops(w, scored(w, "0-1,-1,2-4"), timing);
+    expect(r.problems[0]).toMatch(/speaks in the stop at 0:04\.00-0:06\.00 \("動く" of "intro"\)/);
+    expect(r.lines).toEqual(["stop 0:04.00-0:06.00: voice in it"]);
   });
 
   it("checks nothing without a score or a stop", () => {
-    expect(voiceInStops(work(), loadScript(work()), timing)).toEqual({ lines: [], problems: [] });
-    expect(voiceInStops(work(), scored("0-4"), timing).lines).toEqual([]);
+    const w = work();
+    expect(voiceInStops(w, loadScript(w), timing)).toEqual({ lines: [], problems: [] });
+    expect(voiceInStops(w, scored(w, "0-4"), timing).lines).toEqual([]);
   });
 });
 
@@ -224,12 +139,6 @@ const WORD_PAGE = (word: string) => `<!doctype html>
 </script></body></html>`;
 
 describe("film.word", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
   async function pageText(w: string, word: string): Promise<string> {
     const dir = writeKit(w);
     writeFileSync(join(dir, "index.html"), WORD_PAGE(word));
@@ -242,20 +151,12 @@ describe("film.word", () => {
     }
   }
 
-  it("returns when the word starts, from the word times or, without them, from its place in the text", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+  it("returns when the word starts, in seconds from its scene's start", async () => {
     const w = work();
     const script = loadScript(w);
-    writeTiming(w, script);
-    // no times: "動" comes after 4 of the 6 spoken characters (はじめに動く), over 1.2/1.1 s of speech
-    expect(await pageText(w, "動く")).toContain(`at ${(0.25 + (4 / 6) * (1.2 / 1.1)).toFixed(3)}`);
-    vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => aligned())
-    );
-    await writeWords(w, script);
-    expect(await pageText(w, "動く")).toContain(`at ${(0.25 + 0.6 / 1.1).toFixed(3)}`);
+    const timing = writeTiming(w, script);
+    const at = pageWords(w, script, timing).intro!.at![5]!;
+    expect(await pageText(w, "動く")).toContain(`at ${at.toFixed(3)}`);
   });
 
   it("stops the page on a word the narration does not say", async () => {

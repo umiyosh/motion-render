@@ -46,7 +46,7 @@ const sfxFile = (work: string, prompt: string, duration: number, ext: "mp3" | "j
   join(work, "audio", "sfx", `${sfxKey(prompt, duration)}.${ext}`);
 
 // The reason ElevenLabs gives: a plain string, {message}, or a validation list of {msg}.
-export function apiReason(body: unknown): string {
+function apiReason(body: unknown): string {
   const detail = field(body, "detail");
   if (typeof detail === "string") return detail;
   const message = field(detail, "message");

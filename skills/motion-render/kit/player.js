@@ -124,8 +124,9 @@
       return window.film.at(id, scenes[id] ? scenes[id].dur - (dt || 0) : 0);
     },
     // Seconds into scene `id` at which its narration starts saying `w` (its n-th time, from 1). The
-    // times come from words.json; without them, from where `w` sits in the text, spread over the
-    // narration's length. A word the narration does not say is an error, so check stops on it.
+    // times are measured on the scene's audio (scripts/words.ts); before there is any audio, they come
+    // from where `w` sits in the text, spread over the narration's length. A word the narration does not
+    // say is an error, so check stops on it.
     word: function (id, w, n) {
       n = n || 1;
       var W = window.__words && window.__words[id];

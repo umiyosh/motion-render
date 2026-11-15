@@ -156,7 +156,7 @@ async function runNarrate(work: string): Promise<void> {
   const script = loadScript(work);
   await narrate(work, script);
   const timing = writeTiming(work, script);
-  const timed = await writeWords(work, script);
+  const timed = writeWords(work, script);
   console.log(
     `words: times for ${timed} of ${script.scenes.length} scenes -> ${join(work, "words.json")}`
   );
