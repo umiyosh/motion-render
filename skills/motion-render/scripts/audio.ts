@@ -471,7 +471,9 @@ export async function mix(
     ...loop.chains,
     `[${loop.label}]atrim=0:${total},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,${loop.shape}[bgm]`,
     ...fx.map((f) => f.chain),
-    `[nar][bgm]${fx.map((f) => f.label).join("")}amix=inputs=${2 + fx.length}:normalize=0,alimiter=limit=0.95[out]`,
+    // latency=1: the limiter looks ahead by its attack (5 ms) and delays the sound by as much unless
+    // told to make up for it; the MP4's own sound showed every part 5.0 ms late (#58)
+    `[nar][bgm]${fx.map((f) => f.label).join("")}amix=inputs=${2 + fx.length}:normalize=0,alimiter=limit=0.95:latency=1[out]`,
   ].join(";");
   await runFfmpeg([
     ...inputs,
