@@ -349,7 +349,15 @@
         copy = s.cloneNode(true);
       clip.id = "mr-wipe-" + wipes.length;
       clip.setAttribute("clipPathUnits", "userSpaceOnUse");
-      copy.removeAttribute("id");
+      // Only the shape's geometry is the clip. A copy keeps what the shape shows as when wipe is called,
+      // and a timeline that has just set it hidden (a fromTo with autoAlpha 0) left the clip empty: the
+      // next scene never showed through it. The shape's own transform is in the screen matrix set
+      // each frame; the transforms of the parts of a group are part of its geometry and stay.
+      [copy].concat(Array.prototype.slice.call(copy.querySelectorAll("*"))).forEach(function (e) {
+        ["id", "style", "class", "visibility", "opacity", "display"].forEach(function (a) {
+          e.removeAttribute(a);
+        });
+      });
       clip.appendChild(copy);
       wipeDefs().appendChild(clip);
       wipes.push({
