@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { loadScript, writeTiming } from "../skills/motion-render/scripts/work.ts";
 import { pageWords } from "../skills/motion-render/scripts/words.ts";
 import { writeKit } from "../skills/motion-render/scripts/kit.ts";
@@ -90,13 +90,21 @@ const drawn = async (f: Film, t: number): Promise<number> =>
 
 // How many pixels of two PNG frames differ clearly in brightness: a glyph is thousands, the way
 // two pages composite the same text is a handful.
-function differ(a: Buffer, b: Buffer): number {
+// ffmpeg runs without blocking the worker, which must keep answering vitest while it decodes.
+async function differ(a: Buffer, b: Buffer): Promise<number> {
   const gray = (png: Buffer) =>
-    spawnSync(findFfmpeg(), ["-v", "error", "-i", "-", "-f", "rawvideo", "-pix_fmt", "gray", "-"], {
-      input: png,
-      maxBuffer: 1 << 24,
-    }).stdout;
-  const [x, y] = [gray(a), gray(b)];
+    new Promise<Buffer>((ok, fail) => {
+      const args = ["-v", "error", "-i", "-", "-f", "rawvideo", "-pix_fmt", "gray", "-"];
+      const p = spawn(findFfmpeg(), args);
+      const out: Buffer[] = [];
+      p.stdout.on("data", (c: Buffer) => out.push(c));
+      p.on("error", fail);
+      p.on("close", (code) =>
+        code === 0 ? ok(Buffer.concat(out)) : fail(new Error(`ffmpeg exited with ${code}`))
+      );
+      p.stdin.end(png);
+    });
+  const [x, y] = await Promise.all([gray(a), gray(b)]);
   let n = 0;
   for (let i = 0; i < x.length; i++) if (Math.abs(x[i]! - y[i]!) > 64) n++;
   return n;
@@ -135,7 +143,7 @@ describe("film.say", () => {
       await withFilm(a.dir, (f) => f.frame(end)),
       await withFilm(fade.dir, (f) => f.frame(end)),
     ];
-    expect(differ(fa, fb)).toBeLessThan(50);
+    expect(await differ(fa, fb)).toBeLessThan(50);
   });
 
   it("keeps every character where it settles while the scramble runs", async () => {
