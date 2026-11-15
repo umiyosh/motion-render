@@ -284,7 +284,7 @@ describe("mix", () => {
     expect(graph).toContain("[2:a]atrim=0:10,");
     expect(graph).toContain("volume=0.2,afade=t=in:d=0.8,afade=t=out:st=7:d=3[bgm]");
     expect(graph.split(";").at(-1)).toBe(
-      "[nar][bgm]amix=inputs=2:normalize=0,alimiter=limit=0.95[out]"
+      "[nar][bgm]amix=inputs=2:normalize=0,alimiter=limit=0.95:latency=1[out]"
     );
     expect(args.slice(-9)).toEqual([
       "-map",
@@ -326,7 +326,7 @@ describe("mix", () => {
       "[3:a]atrim=0:1.5,asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,volume=0.1235,afade=t=in:d=0.01,afade=t=out:st=1.25:d=0.25,adelay=3000:all=1[s1]"
     );
     expect(graph.at(-1)).toBe(
-      "[nar][bgm][s0][s1]amix=inputs=4:normalize=0,alimiter=limit=0.95[out]"
+      "[nar][bgm][s0][s1]amix=inputs=4:normalize=0,alimiter=limit=0.95:latency=1[out]"
     );
   });
 

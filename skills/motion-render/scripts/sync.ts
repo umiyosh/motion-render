@@ -7,11 +7,12 @@ import { once } from "node:events";
 import { inOrder } from "./inorder.ts";
 import { findFfmpeg, exited, FFMPEG_MS } from "./audio.ts";
 import { limit } from "./limit.ts";
-
-const FRAME_MS = 60_000; // ffmpeg taking one picture, or finishing after the last
 import { clock, type Script, type Timing } from "./work.ts";
 import type { Hit } from "./hits.ts";
 import { percentile } from "./signal.ts";
+import { measureAudio, type AudioRefs } from "./audiosync.ts";
+
+const FRAME_MS = 60_000; // ffmpeg taking one picture, or finishing after the last
 
 const W = 240,
   H = 135;
@@ -278,19 +279,24 @@ function measure(
   return { lines: parts.flatMap((p) => p.lines), problems: parts.flatMap((p) => p.problems) };
 }
 
-// The whole report for one MP4 of a beat-synced film.
+// The whole report for one MP4 of a beat-synced film. With `audio`, the MP4's own sound is measured
+// too, against where the mix placed the score and the narration.
 export async function measureSync(
   mp4: string,
   timing: Timing,
   script: Pick<Script, "lead">,
-  hits: Hit[]
+  hits: Hit[],
+  audio?: AudioRefs
 ): Promise<SyncResult> {
   bpmOf(timing);
   const motion = await motionOf(mp4);
   // The film renders at a whole frame rate. Its MP4 can decode a frame short, and frames/total would
   // then time every later frame late (11 ms at 57 s of a 60 fps film).
   const fps = Math.round(motion.frames / timing.total);
-  return measure(motion, fps, timing, script, hits);
+  const r = measure(motion, fps, timing, script, hits);
+  if (!audio) return r;
+  const a = measureAudio(mp4, audio, fps);
+  return { lines: [...a.lines, ...r.lines], problems: [...a.problems, ...r.problems] };
 }
 
 // The frames whose change the report reads: around each drop and the final hit, the frames before
