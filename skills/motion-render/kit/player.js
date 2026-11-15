@@ -110,6 +110,30 @@
     });
   }
 
+  // The text of `what` as one span per glyph inside a mask (made once), for film.typeIn and
+  // film.say. `who` names the caller in the error for an element that holds more than text.
+  function charSpans(what, who) {
+    var e = el(what);
+    if (!e.querySelector(".type-mask")) {
+      if (e.children.length)
+        throw new Error(who + " needs an element that holds only text: " + what);
+      var mask = document.createElement("span");
+      mask.className = "type-mask";
+      glyphs(e.textContent.trim()).forEach(function (g) {
+        var c = document.createElement("span");
+        c.className = "type-char";
+        c.textContent = g;
+        mask.appendChild(c);
+      });
+      e.textContent = "";
+      e.appendChild(mask);
+    }
+    return Array.prototype.slice.call(e.querySelectorAll(".type-char"));
+  }
+
+  // Characters that are not voiced: spaces and punctuation.
+  var QUIET = /[\s、。，．,.!?！？「」『』（）()・…:：;；"'“”‘’]/;
+
   window.film = {
     scenes: scenes,
     total: T.total,
@@ -123,15 +147,31 @@
     end: function (id, dt) {
       return window.film.at(id, scenes[id] ? scenes[id].dur - (dt || 0) : 0);
     },
-    // Seconds into scene `id` at which its narration starts saying `w` (its n-th time, from 1). The
-    // times are measured on the scene's audio (scripts/words.ts); before there is any audio, they come
-    // from where `w` sits in the text, spread over the narration's length. A word the narration does not
-    // say is an error, so check stops on it.
-    word: function (id, w, n) {
-      n = n || 1;
+    // Seconds into scene `id` at which its narration starts saying each character of its text (by
+    // code point). The times are measured on the scene's audio (scripts/words.ts); before there is
+    // any audio, the voiced characters are spread over the narration's length.
+    times: function (id) {
       var W = window.__words && window.__words[id];
       if (!scenes[id]) throw new Error('scene "' + id + '" is not in timing.json');
       if (!W) throw new Error('film.word: no narration for "' + id + '" in kit/timing.js');
+      if (W.at) return W.at.slice();
+      var chars = Array.from(W.text),
+        voiced = chars.filter(function (c) {
+          return !QUIET.test(c);
+        }).length,
+        k = 0;
+      return chars.map(function (c) {
+        var t = W.lead + (W.speech * k) / Math.max(1, voiced);
+        if (!QUIET.test(c)) k++;
+        return t;
+      });
+    },
+    // Seconds into scene `id` at which its narration starts saying `w` (its n-th time, from 1), from
+    // film.times. A word the narration does not say is an error, so check stops on it.
+    word: function (id, w, n) {
+      n = n || 1;
+      var times = window.film.times(id),
+        W = window.__words[id];
       if (!w) throw new Error("film.word needs a word");
       var i = -1;
       for (var k = 0; k < n; k++) {
@@ -146,13 +186,12 @@
               (n > 1 ? " " + n + " times" : "")
           );
       }
-      var cps = Array.from(W.text.slice(0, i)).length;
-      if (W.at) return W.at[cps];
-      var spoken = function (s) {
-        return Array.from(s.replace(/[\s、。，．,.!?！？「」『』（）()・…:：;；"'“”‘’]/g, ""))
-          .length;
-      };
-      return W.lead + (W.speech * spoken(W.text.slice(0, i))) / Math.max(1, spoken(W.text));
+      return times[Array.from(W.text.slice(0, i)).length];
+    },
+    // The text of `what` split into one span per glyph (.type-char, inside a .type-mask), once; the
+    // spans are returned. kit/type.js and film.typeIn animate these.
+    chars: function (what) {
+      return charSpans(what, "film.chars");
     },
     // Runs fn(timeline) once the fonts are in, so text has its real size when the page measures it.
     build: function (fn) {
@@ -271,25 +310,10 @@
     // o: { dur = 0.5, stagger = 0.04 }.
     typeIn: function (tl, what, at, o) {
       o = o || {};
-      var e = el(what);
-      if (!e.querySelector(".type-mask")) {
-        if (e.children.length)
-          throw new Error("typeIn needs an element that holds only text: " + what);
-        var mask = document.createElement("span");
-        mask.className = "type-mask";
-        glyphs(e.textContent.trim()).forEach(function (g) {
-          var c = document.createElement("span");
-          c.className = "type-char";
-          c.textContent = g;
-          mask.appendChild(c);
-        });
-        e.textContent = "";
-        e.appendChild(mask);
-      }
       // Hidden until its turn, so a character waiting below the mask line is not laid out as a
       // box sticking out of the line.
       return tl.fromTo(
-        e.querySelectorAll(".type-char"),
+        charSpans(what, "typeIn"),
         { yPercent: 110, autoAlpha: 0 },
         {
           yPercent: 0,

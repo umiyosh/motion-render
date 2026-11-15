@@ -12,20 +12,7 @@ import {
 import { loadScript, writeTiming } from "../skills/motion-render/scripts/work.ts";
 import { writeKit } from "../skills/motion-render/scripts/kit.ts";
 import { openFilm } from "../skills/motion-render/scripts/render.ts";
-import { pcmWav, voice, workDir } from "./helpers.ts";
-
-const RATE = 24000;
-
-// Speech-like phrases with silence before, between and after them: [silence s, voice s, ...].
-function spoken(parts: number[], seed = 1): Float32Array {
-  const out: number[] = [];
-  parts.forEach((s, i) => {
-    if (i % 2 === 0) out.push(...new Array<number>(Math.round(s * RATE)).fill(0));
-    else out.push(...voice(s, seed + i));
-  });
-  out.push(...new Array<number>(Math.round(0.2 * RATE)).fill(0));
-  return Float32Array.from(out);
-}
+import { pcmWav, spoken, workDir } from "./helpers.ts";
 
 const near = (t: number, want: number): void => expect(Math.abs(t - want)).toBeLessThan(0.05);
 

@@ -116,7 +116,15 @@ export function writeKit(work: string): string {
   const film = join(work, "film");
   const kit = join(film, "kit");
   mkdirSync(join(kit, "fonts"), { recursive: true });
-  for (const f of ["player.js", "beat.js", "fx.js", "base.css", "styles.css", "parts.css"])
+  for (const f of [
+    "player.js",
+    "type.js",
+    "beat.js",
+    "fx.js",
+    "base.css",
+    "styles.css",
+    "parts.css",
+  ])
     copyFileSync(join(KIT, f), join(kit, f));
   copyLibraries(kit);
   writeFileSync(join(kit, "fonts.css"), FONT_CSS.map((f) => fontCss(f, kit)).join("\n"));

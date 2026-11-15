@@ -120,6 +120,17 @@ export function voice(seconds: number, seed = 1): Float32Array {
   return x;
 }
 
+// Speech-like phrases at 24 kHz with silence before, between and after them: [silence s, voice s, ...].
+export function spoken(parts: number[], seed = 1): Float32Array {
+  const out: number[] = [];
+  parts.forEach((s, i) => {
+    if (i % 2 === 0) out.push(...new Array<number>(Math.round(s * 24000)).fill(0));
+    else out.push(...voice(s, seed + i));
+  });
+  out.push(...new Array<number>(Math.round(0.2 * 24000)).fill(0));
+  return Float32Array.from(out);
+}
+
 // A mono 16-bit PCM WAV of the samples.
 export function pcmWav(x: Float32Array, rate = 24000): Buffer {
   const data = Buffer.alloc(x.length * 2);
