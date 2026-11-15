@@ -88,8 +88,10 @@
     return v;
   }
 
+  // A move of no length is done on the frame it starts: a shot { t: 0, dur: 0 } opens the film on
+  // its view from the first frame.
   function prog(t, t0, d) {
-    if (t <= t0) return 0;
+    if (t < t0) return 0;
     return d > 0 ? Math.min(1, (t - t0) / d) : 1;
   }
   // The default ease of a camera move: it starts and stops gently (cubic in-out).

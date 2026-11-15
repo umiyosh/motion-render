@@ -131,6 +131,13 @@ describe("fx.camera", () => {
     expect(cam(2)).toEqual({ x: 1420, y: 540, s: 2 });
   });
 
+  it("opens on the view of a shot of no length at 0 s, from the first frame", () => {
+    const { fx } = loadKit();
+    const cam = fx.camera("#cam", [{ t: 0, x: 700, y: 400, s: 2, dur: 0 }]);
+    expect(cam(0)).toEqual({ x: 700, y: 400, s: 2 });
+    expect(fx.zoom(0, 0, 1, 4, 0)).toBe(4);
+  });
+
   it("never looks past the layer's edges", () => {
     const { fx } = loadKit();
     const cam = fx.camera("#cam", [
