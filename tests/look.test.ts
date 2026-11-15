@@ -106,9 +106,10 @@ describe("a film with a look", () => {
     expect(luma(a.mp4, 0.9, 0) - luma(a.mp4, 0.2, 0)).toBeGreaterThan(8);
     expect(Math.abs(luma(a.mp4, 0.9, 1700) - luma(a.mp4, 0.2, 1700))).toBeLessThanOrEqual(1);
     expect(Math.abs(luma(a.mp4, 2.8, 0) - luma(a.mp4, 0.2, 0))).toBeLessThanOrEqual(1);
-    // the glow: the whole frame is brighter on the drop's head than just before, and settles
+    // the glow: the whole frame is brighter on the drop's head than just before, and settles back to
+    // where it was before the leak (at 1.9 s the leak is still fading)
     expect(luma(a.mp4, 2.0, 900) - luma(a.mp4, 1.9, 900)).toBeGreaterThan(8);
-    expect(Math.abs(luma(a.mp4, 2.8, 900) - luma(a.mp4, 1.9, 900))).toBeLessThanOrEqual(1);
+    expect(Math.abs(luma(a.mp4, 2.8, 900) - luma(a.mp4, 0.2, 900))).toBeLessThanOrEqual(1);
     // sync's copy is the picture before the look: still, so no light reads as a reaction
     const grey = ff(["-i", a.plain, "-f", "rawvideo", "-"]);
     const size = 240 * 135,
