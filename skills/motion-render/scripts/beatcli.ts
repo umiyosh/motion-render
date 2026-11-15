@@ -2,15 +2,16 @@
 // takes shown bar by bar, scoring the film with the chosen bars, and measuring the MP4.
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { bgmTakes } from "./audio.ts";
 import { clock, loadScript, loadTiming, type Script, type Timing } from "./work.ts";
-import { filmTable, measureTake, renderScore, takeTable, type Take } from "./score.ts";
+import { filmTable, loadTakes, measureTake, renderScore, takeTable, type Take } from "./score.ts";
 import { draftScores, type Draft } from "./draft.ts";
 import { measureSync, measureSyncPictures, type SyncResult } from "./sync.ts";
 import type { Film } from "./render.ts";
 import { writeKitTiming } from "./kit.ts";
-import { isRecord, readJson } from "./json.ts";
+import { errorMessage, isRecord, readJson } from "./json.ts";
+import { checkTakes, downbeatLine } from "./downbeat.ts";
 import type { Hit } from "./hits.ts";
 import { voiceInStops } from "./words.ts";
 
@@ -77,6 +78,28 @@ function tempoAdvice(takes: Take[], bpm: number, work: string): string | null {
   return `tempo: every take is more than 5% off ${bpm} BPM (${Math.min(...off)}-${Math.max(...off)} BPM), and locking one to ${bpm} would shift its pitch and sound. Set "bpm" to ${near} in script.json, run "motion-render narrate ${work}" (it keeps the speech) and "motion-render bgm ${work} --again" to measure these takes at ${near} BPM without making new ones`;
 }
 
+// The line under each take whose bar starts Beat This! disagrees with (downbeat.ts). Without
+// onnxruntime-node there are none, and a check that fails is reported and left out.
+async function downbeatNotes(work: string, takes: Take[]): Promise<Map<number, string>> {
+  const notes = new Map<number, string>();
+  try {
+    const audio = takes.map((t) => ({
+      take: t.take,
+      file: resolve(work, t.file),
+      filter: t.filter,
+      t0: t.bars[0]?.t ?? 0,
+      beat: t.beat,
+    }));
+    for (const [take, v] of (await checkTakes(audio)) ?? []) {
+      const line = downbeatLine(take, v);
+      if (line) notes.set(take, line);
+    }
+  } catch (e) {
+    console.error(`downbeat: not checked (${errorMessage(e)})`);
+  }
+  return notes;
+}
+
 export async function runBeatBgm(
   work: string,
   script: Script,
@@ -91,8 +114,9 @@ export async function runBeatBgm(
       `draft: { "take": ${d.take}, "bars": "${d.bars}" }  (${d.checks} check lines, ${d.moments} moments, ${d.joins} joins)`
   );
   const advice = tempoAdvice(takes, bpm, work);
+  const notes = await downbeatNotes(work, takes);
   const text = [
-    ...takes.map((t) => takeTable(t, bpm)),
+    ...takes.map((t) => [takeTable(t, bpm), notes.get(t.take)].filter(Boolean).join("\n")),
     drafts.join("\n"),
     ...(advice ? [advice] : []),
   ].join("\n\n");
@@ -103,7 +127,7 @@ export async function runBeatBgm(
   );
 }
 
-export function runScore(work: string): void {
+export async function runScore(work: string): Promise<void> {
   const script = loadScript(work),
     timing = loadTiming(work);
   if (!script.bpm || !timing.bpm)
@@ -115,6 +139,8 @@ export function runScore(work: string): void {
   console.log(filmTable(timing, s, script.bpm));
   for (const m of s.moments) console.log(`moment: ${m}`);
   for (const n of s.notes) console.log(`check: ${n}`);
+  const chosen = loadTakes(work).filter((t) => t.take === script.score?.take);
+  for (const line of (await downbeatNotes(work, chosen)).values()) console.log(line);
   const n = (k: Hit["k"]): number => s.hits.filter((h) => h.k === k).length;
   console.log(
     `score: ${s.wav} (${n("kick")} kicks, ${n("snare")} snares, ${n("hat")} hats) -> audio/hits.json`
