@@ -38,6 +38,7 @@ import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 import { stepsTable, timed, workOf } from "./steps.ts";
 import { writeWords } from "./words.ts";
+import { loudnessReport, measureLoudness, normalize } from "./loudness.ts";
 import { mp4Picture, writeSheet } from "./sheet.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
@@ -279,7 +280,13 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
       audio
     );
     mkdirSync(dirname(out), { recursive: true });
-    const count = await encode(film, fps, audio, out, script.motionBlur);
+    const count = await encode(
+      film,
+      fps,
+      await setLoudness(work, script, audio),
+      out,
+      script.motionBlur
+    );
     for (const w of await film.warnings()) console.error("runner", w);
     const extra = sfx.length ? ` + ${sfx.length} sound effects` : "";
     console.log(`done: ${out} (${film.meta.duration}s, ${count} frames, narration + BGM${extra})`);
@@ -287,6 +294,26 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
     await film.close();
   }
   if (timing.bpm) await syncReport(work, script, timing, out);
+  reportLoudness(script, out);
+}
+
+// The mix set to script.json's "loudness" (a copy beside it), or the mix itself when none is asked for.
+async function setLoudness(work: string, script: Script, mixed: string): Promise<string> {
+  if (script.loudness === undefined) return mixed;
+  const set = join(work, "audio", "mix-loudness.m4a");
+  const short = await normalize(mixed, set, script.loudness, script.truePeak);
+  if (short > 0.05)
+    console.error(
+      `warning: raising the sound to ${script.loudness} LUFS would push its peaks over ${script.truePeak} dBTP: it stops ${short.toFixed(1)} LU short, so the narration and the score keep their balance`
+    );
+  return set;
+}
+
+// Prints how loud the MP4 is and warns when it peaks over the ceiling or misses the target.
+function reportLoudness(script: Script, mp4: string): void {
+  const r = loudnessReport(measureLoudness(mp4), script);
+  console.log(r.line);
+  for (const w of r.warnings) console.error(`warning: ${w}`);
 }
 
 interface Options {

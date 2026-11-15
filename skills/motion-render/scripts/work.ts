@@ -48,6 +48,8 @@ export interface Script {
   score?: ScoreCut;
   scoreLevel: number; // dB of the score's loud bars against the narration's mean level
   motionBlur: number; // pictures averaged into each frame of the MP4 (1 = no blur)
+  loudness?: number; // LUFS the whole mix is set to before encoding (none: left as mixed)
+  truePeak: number; // dBTP the MP4's sound may reach: measured after build, and the ceiling when setting loudness
 }
 
 export interface TimingScene {
@@ -80,6 +82,9 @@ const DEFAULTS = {
   // the same film with the score at 0.9 times that (+4.1 dB) was judged right (2026-11-12).
   scoreLevel: 4.1,
   motionBlur: 1,
+  // AAC can overshoot the mix's sample peaks between samples; -1 dBTP is the ceiling streaming
+  // services ask for (EBU R 128 s1, ITU-R BS.1770-4 true peak).
+  truePeak: -1,
 };
 
 const SFX_DURATION = 1.5; // asked for when a sound effect gives no length, so none runs long
@@ -204,6 +209,8 @@ export function loadScript(work: string): Script {
     bgmModel: name(s, "bgmModel"),
     scoreLevel: num(s, "scoreLevel", -20, 12),
     motionBlur: whole(s, "motionBlur", 1, 8),
+    truePeak: num(s, "truePeak", -9, 0),
+    ...(s.loudness === undefined ? {} : { loudness: num(s, "loudness", -40, -5) }),
     ...(s.bpm === undefined ? {} : { bpm: num(s, "bpm", 60, 200) }),
     ...(s.score === undefined ? {} : { score: parseScore(s.score) }),
   };
