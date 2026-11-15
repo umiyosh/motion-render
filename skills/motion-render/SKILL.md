@@ -139,6 +139,10 @@ motion-render narrate <work>
 
 `bpm` があると、場面の開始・小節の位置・区間・最後の一打・映像の小節の数を表で出す。この表の時刻で曲の指示文と映像を書く。
 
+`ELEVENLABS_API_KEY` があると、各場面の原稿の文字ごとに、言い始めの秒を `<work>/words.json` に書く（ElevenLabs Forced Alignment）。
+映像は `film.word(場面, "語")` でその秒を引く。キーが無い、または取れなかった場面では警告だけ出して進み、
+`film.word` は語りの長さを文字数で割った見込みの秒を返す。同じ音声は二度送らない。
+
 ### 3. 映像の計画を書く
 
 [references/html-film.md](references/html-film.md) を読む（特に「演出」と「音ハメ」の節）。`motion-render kit <work>` で

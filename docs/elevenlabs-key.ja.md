@@ -20,7 +20,7 @@ Sound Effects API は無料プランでは使えない。従量課金の残高�
 ## 2. キーを作る
 
 1. Developers の **API Keys** タブで、新しいキーを作る。名前は `motion-render` など。
-2. **Restrict key**（キーを制限）をオンのままにし、**Sound Effects**（サウンドエフェクト）だけを **Access** にする。ほかはすべて **No Access** のままにする。漏れたときの被害を効果音の生成に限るため。
+2. **Restrict key**（キーを制限）をオンのままにし、**Sound Effects**（サウンドエフェクト）と **Forced Alignment**（語りの文字ごとの時刻。`film.word` が使う）だけを **Access** にする。ほかはすべて **No Access** のままにする。漏れたときの被害を、この 2 つに限るため。Forced Alignment が No Access でも動画は作れる（文字の時刻は見込みになる）。
 3. 使用制限（クレジット）は空欄でよい。残高を超えて使われることはない。
 4. 作成すると、キーが 1 回だけ表示される。後からは末尾 4 文字しか見られないので、すぐにコピーする。
 

@@ -20,7 +20,7 @@ The account now shows "Pay As You Go". When the balance reaches zero, the API st
 ## 2. Create the key
 
 1. In the **API Keys** tab of Developers, create a key, for example `motion-render`.
-2. Keep **Restrict key** on and set only **Sound Effects** to **Access**; leave everything else at **No Access**. A leaked key can then only make sound effects.
+2. Keep **Restrict key** on and set only **Sound Effects** and **Forced Alignment** (when each character of the narration is said, for `film.word`) to **Access**; leave everything else at **No Access**. A leaked key can then do only these two. Videos are still made with Forced Alignment at No Access (character times are then estimated).
 3. Leave the credit limit empty: usage can never exceed the balance.
 4. The key is shown once. Copy it now: afterwards only its last four characters are visible.
 

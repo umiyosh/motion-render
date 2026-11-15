@@ -5,19 +5,19 @@
 
 ## html の映像の工程
 
-| 工程                         | する人                                 | 読むもの                                       | 書くもの                                                       | 待つ人           |
-| ---------------------------- | -------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------- | ---------------- |
-| 原稿と山場                   | Claude                                 | 依頼                                           | `script.json`（場面・語り・`bpm`・`section`）                  | ナレーション     |
-| ナレーション（`narrate`）    | API（4 本ずつ）                        | `script.json`                                  | `audio/<場面>.wav`、`timing.json`（拍と小節にそろえる）        | 計画、曲の指示文 |
-| 絵コンテと山場の計画         | Claude                                 | `timing.json`                                  | `plan.md`                                                      | 効果音、映像     |
-| 曲の指示文                   | Claude                                 | narrate の表、`plan.md`                        | `score.txt`                                                    | 曲の候補         |
-| 曲の候補（`bgm`）            | API（4 本同時）・裏                    | `score.txt`                                    | `audio/bgm/take*.mp3`、`takes.txt`（小節表）                   | 曲の並べ替え     |
-| 効果音（`sfx`）              | API（3 本ずつ）・裏                    | `script.json` の `sfx` の `prompt`・`duration` | `audio/sfx/`                                                   | 書き出し         |
-| 映像（共通部分と音ハメの層） | Claude                                 | `plan.md`、html-film.md の「音ハメ」           | `film/index.html`                                              | 確認             |
-| 場面                         | サブエージェント（まとまりごとに同時） | `plan.md`、`index.html`                        | `film/scenes/*.html`                                           | 確認             |
-| 曲の並べ替え（`score`）      | Claude が選び、コマンドが書き出す      | `takes.txt`、narrate の表                      | `script.json` の `score`、`audio/score.wav`、`audio/hits.json` | 確認、書き出し   |
-| 確認（`check`・`stills`）    | Claude                                 | 映像                                           | 直し、`sfx` の `at`                                            | 書き出し         |
-| 書き出し（`build`）          | 描画                                   | すべて                                         | MP4、`sync:` の行                                              | —                |
+| 工程                         | する人                                 | 読むもの                                       | 書くもの                                                              | 待つ人           |
+| ---------------------------- | -------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------- | ---------------- |
+| 原稿と山場                   | Claude                                 | 依頼                                           | `script.json`（場面・語り・`bpm`・`section`）                         | ナレーション     |
+| ナレーション（`narrate`）    | API（4 本ずつ）                        | `script.json`                                  | `audio/<場面>.wav`、`timing.json`（拍と小節にそろえる）、`words.json` | 計画、曲の指示文 |
+| 絵コンテと山場の計画         | Claude                                 | `timing.json`                                  | `plan.md`                                                             | 効果音、映像     |
+| 曲の指示文                   | Claude                                 | narrate の表、`plan.md`                        | `score.txt`                                                           | 曲の候補         |
+| 曲の候補（`bgm`）            | API（4 本同時）・裏                    | `score.txt`                                    | `audio/bgm/take*.mp3`、`takes.txt`（小節表）                          | 曲の並べ替え     |
+| 効果音（`sfx`）              | API（3 本ずつ）・裏                    | `script.json` の `sfx` の `prompt`・`duration` | `audio/sfx/`                                                          | 書き出し         |
+| 映像（共通部分と音ハメの層） | Claude                                 | `plan.md`、html-film.md の「音ハメ」           | `film/index.html`                                                     | 確認             |
+| 場面                         | サブエージェント（まとまりごとに同時） | `plan.md`、`index.html`                        | `film/scenes/*.html`                                                  | 確認             |
+| 曲の並べ替え（`score`）      | Claude が選び、コマンドが書き出す      | `takes.txt`、narrate の表                      | `script.json` の `score`、`audio/score.wav`、`audio/hits.json`        | 確認、書き出し   |
+| 確認（`check`・`stills`）    | Claude                                 | 映像                                           | 直し、`sfx` の `at`                                                   | 書き出し         |
+| 書き出し（`build`）          | 描画                                   | すべて                                         | MP4、`sync:` の行                                                     | —                |
 
 裏で動かすのは、結果を使う工程が先にあるものだけ。曲の候補は曲の並べ替えまで、効果音は書き出しまで誰も待たない。
 ナレーションは場面の秒数を決めるので、終わるまで計画と曲の指示文を書かない。映像は曲の並べ替えより前に書いてよい
