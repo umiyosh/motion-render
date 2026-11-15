@@ -101,6 +101,7 @@ Claude Motion を使うのは、利用者が Motion を指定したときと、�
 - `score` は、曲の候補のどれを使い、映像の小節ごとにその候補のどの小節を鳴らすか（手順 6）
 - 任意: `voice`・`speed`・`scoreLevel`（曲の大きな小節の、ナレーションに対する音量。既定 +4.1 dB）・`sfxVolume`・`lead`・`tail`・`endHold`、
   `motionBlur`（1 コマに重ねる絵の枚数。既定 1。速く動く物がある映像で使う。references/html-film.md の「表現の道具」）、
+  `look`（書き出しでかける仕上げ。作風と同じ名前を選ぶ。references/html-film.md の「仕上げ」）、
   場面ごとの `sfx`（下の「効果音」）
 
 ## 手順
