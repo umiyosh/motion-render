@@ -25,6 +25,7 @@ export interface LayoutBox {
 interface BoxText {
   px: number; // font size as drawn, after transforms
   contrast: number | null; // WCAG ratio over its background; null when faded or not measurable
+  chars?: number; // characters of its own text, spaces left out
 }
 
 export interface LayoutSample {
@@ -33,7 +34,7 @@ export interface LayoutSample {
 }
 
 export interface LayoutIssue {
-  kind: "overlap" | "outside" | "frame" | "hidden" | "small" | "faint";
+  kind: "overlap" | "outside" | "frame" | "hidden" | "small" | "faint" | "brief" | "repeat";
   from: number;
   to: number;
   message: string;
@@ -101,7 +102,9 @@ function textFindings(b: LayoutBox): Finding[] {
 // What is wrong with one still box on its own: cut by the frame, out of its box, or hidden.
 function boxFindings(b: LayoutBox, byKey: Map<number, LayoutBox>, quiet: Set<number>): Finding[] {
   const out: Finding[] = [];
-  if (b.cut)
+  // A marked thing with no text of its own (a tilted desk, a canvas bigger than the frame) may run
+  // off the frame on purpose; text never may.
+  if (b.cut && !(b.ok && !b.text))
     out.push({
       id: `frame:${b.key}`,
       kind: "frame",
@@ -158,9 +161,80 @@ interface Seen extends LayoutIssue {
   best: number; // longest run
 }
 
+// Big text (headings, big numbers, words that land on a hit) has to stay long enough to read:
+// 2 s, and 1 s per 4 characters. A viewer shown 点火 for 0.13 s sees a flicker, not a word.
+const READ_MIN = 2;
+const READ_CHARS = 4;
+
+interface Run {
+  from: number;
+  n: number;
+  label: string;
+  chars: number;
+  edge: boolean; // started where the samples start: its true length is unknown
+}
+
+// Text that stays until its scene is about to end is read with that scene's narration; what is
+// judged is text taken away while its scene goes on. 0.5 s: film.caption leaves 0.45 s before the end.
+const SCENE_END = 0.5;
+
+// The scenes as [start, end) spans, for the scene a run of samples starts in.
+export type SceneSpan = { a0: number; dur: number };
+
+function lastsItsScene(from: number, to: number, scenes: SceneSpan[]): boolean {
+  const s = scenes.find((p) => from >= p.a0 - 1e-6 && from < p.a0 + p.dur);
+  return !!s && to >= s.a0 + s.dur - SCENE_END - 1e-6;
+}
+
+function briefIssue(r: Run, to: number, step: number, scenes: SceneSpan[]): LayoutIssue[] {
+  const secs = r.n * step,
+    need = Math.max(READ_MIN, r.chars / READ_CHARS);
+  if (r.edge || secs + 1e-6 >= need || lastsItsScene(r.from, to, scenes)) return [];
+  return [
+    {
+      kind: "brief",
+      from: r.from,
+      to,
+      message: `${r.label} is on screen for ${secs.toFixed(1)}s, needs ${need.toFixed(1)}s (big text stays 2 s, and 1 s per 4 characters)`,
+    },
+  ];
+}
+
+// Runs of samples in which each big text box is on screen. A run that touches the first or the last
+// sample of a stretch of samples (the film's ends, or the edges of the scenes being checked) is
+// not judged, since it may go on outside them.
+function briefTexts(samples: LayoutSample[], scenes: SceneSpan[]): LayoutIssue[] {
+  const step = samples.length > 1 ? samples[1]!.t - samples[0]!.t : 0.1;
+  const open = new Map<number, Run>();
+  const out: LayoutIssue[] = [];
+  samples.forEach((s, i) => {
+    const edge = i === 0 || s.t - samples[i - 1]!.t > step * 1.5;
+    if (edge) open.clear();
+    const here = new Set<number>();
+    for (const b of s.boxes) {
+      if (!b.text || b.text.px < LARGE_PX || !b.text.chars) continue;
+      here.add(b.key);
+      const r = open.get(b.key);
+      if (r) r.n++;
+      else open.set(b.key, { from: s.t, n: 1, label: b.label, chars: b.text.chars, edge });
+    }
+    for (const [k, r] of open)
+      if (!here.has(k)) {
+        out.push(...briefIssue(r, s.t, step, scenes));
+        open.delete(k);
+      }
+  });
+  return out;
+}
+
 // A finding counts when it holds in at least two samples in a row, so a single in-between frame of
 // a transition is not reported. Each finding is reported once with the span it was seen over.
-export function findLayoutIssues(samples: LayoutSample[]): LayoutIssue[] {
+// `scenes` lets big text that lasts its scene pass the reading-time rule.
+export function findLayoutIssues(samples: LayoutSample[], scenes: SceneSpan[] = []): LayoutIssue[] {
+  return [...stillIssues(samples), ...briefTexts(samples, scenes)].sort((a, b) => a.from - b.from);
+}
+
+function stillIssues(samples: LayoutSample[]): LayoutIssue[] {
   const seen = new Map<string, Seen>();
   let prev = new Map<number, LayoutBox>();
   samples.forEach((s, i) => {
@@ -196,7 +270,7 @@ const num = (v: unknown): v is number => typeof v === "number" && Number.isFinit
 function parseText(v: unknown): BoxText | null | undefined {
   if (v === null) return null;
   if (isRecord(v) && num(v.px) && (v.contrast === null || num(v.contrast)))
-    return { px: v.px, contrast: v.contrast };
+    return { px: v.px, contrast: v.contrast, ...(num(v.chars) ? { chars: v.chars } : {}) };
   return undefined;
 }
 
@@ -248,5 +322,5 @@ export async function checkLayout(film: Film, step = 0.1): Promise<LayoutIssue[]
   };
   const samples: LayoutSample[] = [];
   for await (const s of inOrder(times.length, film.pages, sample)) samples.push(s);
-  return findLayoutIssues(samples);
+  return findLayoutIssues(samples, film.meta.parts);
 }

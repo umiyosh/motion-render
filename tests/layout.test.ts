@@ -81,6 +81,16 @@ describe("findLayoutIssues", () => {
     ]);
   });
 
+  it("lets a marked thing with no text run off the frame, but never text", () => {
+    const boxes = [
+      box(1, [-200, -100, 2400, 1300], { cut: true, ok: true }), // a tilted desk canvas
+      box(2, [1880, 500, 100, 40], { cut: true, ok: true, text: { px: 40, contrast: 7 } }),
+    ];
+    expect(findLayoutIssues(held(boxes)).map(formatIssue)).toEqual([
+      "0.2-0.4s: #b2 is cut off by the frame",
+    ]);
+  });
+
   it("does not call a card hidden by a chip resting inside it", () => {
     const boxes = [box(1, [0, 0, 600, 120], { under: 2 }), box(2, [340, 30, 240, 64])];
     expect(findLayoutIssues(held(boxes))).toEqual([]);

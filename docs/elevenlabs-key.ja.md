@@ -43,7 +43,7 @@ macOS のキーチェーンに入れる方法は、[Gemini のキーの手順](a
 
 ElevenLabs のヘルプ（[Can I publish the content I generate on the platform?](https://elevenlabs.io/docs/help-center/legal/can-i-publish-the-content-i-generate-on-the-platform)）では、商用ライセンスが付くのは有料の月額プランで作ったものだけで、それ以外は非商用に限られ、公開するときは題名に `elevenlabs.io` か `11.ai` を入れる。従量課金についての記述は無い。
 
-motion-render は、効果音を付けた動画のタイトルの場面に `🎧:11.ai` を入れる。商用に使う動画には、月額プランに入ってから効果音を作ること（プラン外で作った音は、後から加入しても商用に使えない）。
+motion-render は、効果音を付けた動画のタイトルの場面に `SFX: 11.ai` を入れる。商用に使う動画には、月額プランに入ってから効果音を作ること（プラン外で作った音は、後から加入しても商用に使えない）。
 
 ## キーが漏れたとき
 

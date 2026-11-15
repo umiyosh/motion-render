@@ -95,7 +95,19 @@
     return {
       px: Math.round(parseFloat(cs.fontSize) * scale * 10) / 10,
       contrast: shown < 0.9 ? null : contrast(el, cs),
+      chars: ownChars(el),
     };
+  }
+
+  // Characters of the element's own text, spaces left out: what a viewer has to read.
+  function ownChars(el) {
+    return Array.prototype.reduce.call(
+      el.childNodes,
+      function (n, c) {
+        return c.nodeType === 3 ? n + c.textContent.replace(/\s/g, "").length : n;
+      },
+      0
+    );
   }
 
   function ownText(el) {

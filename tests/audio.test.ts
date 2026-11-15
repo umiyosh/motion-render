@@ -40,6 +40,7 @@ const {
   bgmLoop,
   encodeArgs,
   findFfmpeg,
+  pictureTime,
   mediaSeconds,
   mix,
   narrate,
@@ -406,5 +407,15 @@ describe("encodeArgs", () => {
     expect(args.join(" ")).toBe(
       "-y -loglevel error -f image2pipe -framerate 24 -i - -i /w/mix.m4a -map 0:v -map 1:a -c:v libx264 -pix_fmt yuv420p -crf 18 -preset medium -c:a aac -b:a 192k -shortest -movflags +faststart /out/film.mp4"
     );
+  });
+});
+
+describe("pictureTime", () => {
+  it("spreads the pictures of a frame over half a frame around its time, never before 0", () => {
+    expect(pictureTime(10, 0, 60, 1)).toBeCloseTo(10 / 60);
+    const four = [0, 1, 2, 3].map((j) => pictureTime(60, j, 60, 4));
+    expect((four[0]! + four[3]!) / 2).toBeCloseTo(1);
+    expect(four[3]! - four[0]!).toBeCloseTo((0.5 / 60) * 0.75);
+    expect(pictureTime(0, 0, 60, 4)).toBe(0);
   });
 });

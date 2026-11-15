@@ -277,6 +277,22 @@ describe("html film", () => {
   });
 });
 
+describe("the preview command", () => {
+  it("draws the contact sheet of a film without building it", () => {
+    const work = tempDir("mr-html-");
+    writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+    const scenes = [
+      { id: "intro", narration: "a" },
+      { id: "deny", narration: "b" },
+    ];
+    writeFileSync(join(work, "script.json"), JSON.stringify({ bgm: "x", scenes }));
+    writeFileSync(join(writeKit(work), "index.html"), page(false));
+    const out = execFileSync(process.execPath, [CLI, "preview", work], { encoding: "utf8" });
+    expect(out).toMatch(/sheet: .*sheet\.png \(2 frames/);
+    expect(existsSync(join(work, "sheet.png"))).toBe(true);
+  });
+});
+
 describe("film.spot and ids", () => {
   it("sends an <svg> icon and a shape inside a scaled diagram to their targets", async () => {
     const film = await openFilm(filmOf(svgPage()));

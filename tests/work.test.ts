@@ -88,6 +88,11 @@ describe("loadScript", () => {
       /"a" is duplicated/,
     ],
     [
+      "id of the film's own audio",
+      { ...SCRIPT, scenes: [{ id: "score", narration: "x" }] },
+      /"score" is taken: audio\/score\.\* holds the film's own audio/,
+    ],
+    [
       "empty narration",
       { ...SCRIPT, scenes: [{ id: "a", narration: "" }] },
       /narration is required/,
