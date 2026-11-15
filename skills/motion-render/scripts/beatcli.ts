@@ -11,7 +11,7 @@ import { measureSync, measureSyncPictures, type SyncResult } from "./sync.ts";
 import type { Film } from "./render.ts";
 import { writeKitTiming } from "./kit.ts";
 import { errorMessage, isRecord, readJson } from "./json.ts";
-import { checkTakes, downbeatLine } from "./downbeat.ts";
+import { beatsToMove, checkTakes, downbeatLine, movedLine } from "./downbeat.ts";
 import type { Hit } from "./hits.ts";
 import { voiceInStops } from "./words.ts";
 
@@ -78,9 +78,15 @@ function tempoAdvice(takes: Take[], bpm: number, work: string): string | null {
   return `tempo: every take is more than 5% off ${bpm} BPM (${Math.min(...off)}-${Math.max(...off)} BPM), and locking one to ${bpm} would shift its pitch and sound. Set "bpm" to ${near} in script.json, run "motion-render narrate ${work}" (it keeps the speech) and "motion-render bgm ${work} --again" to measure these takes at ${near} BPM without making new ones`;
 }
 
-// The line under each take whose bar starts Beat This! disagrees with (downbeat.ts). Without
-// onnxruntime-node there are none, and a check that fails is reported and left out.
-async function downbeatNotes(work: string, takes: Take[]): Promise<Map<number, string>> {
+// The takes with their bar starts checked by Beat This! (downbeat.ts), and the line to print under
+// each it had something to say about. With `bpm`, a take whose downbeats it hears clearly on
+// another beat is measured again from there; else such a take only gets a warning. Without
+// onnxruntime-node nothing changes, and a check that fails is reported and left out.
+async function checkDownbeats(
+  work: string,
+  takes: Take[],
+  bpm?: number
+): Promise<{ takes: Take[]; notes: Map<number, string> }> {
   const notes = new Map<number, string>();
   try {
     const audio = takes.map((t) => ({
@@ -90,14 +96,21 @@ async function downbeatNotes(work: string, takes: Take[]): Promise<Map<number, s
       t0: t.bars[0]?.t ?? 0,
       beat: t.beat,
     }));
-    for (const [take, v] of (await checkTakes(audio)) ?? []) {
-      const line = downbeatLine(take, v);
-      if (line) notes.set(take, line);
-    }
+    const verdicts = await checkTakes(audio);
+    if (!verdicts) return { takes, notes };
+    const checked = takes.map((t) => {
+      const v = verdicts.get(t.take);
+      if (!v) return t;
+      const move = bpm ? beatsToMove(v) : 0;
+      const line = move ? movedLine(t.take, v) : downbeatLine(t.take, v);
+      if (line) notes.set(t.take, line);
+      return move ? measureTake(work, t.file, t.take, bpm!, move) : t;
+    });
+    return { takes: checked, notes };
   } catch (e) {
     console.error(`downbeat: not checked (${errorMessage(e)})`);
+    return { takes, notes };
   }
-  return notes;
 }
 
 export async function runBeatBgm(
@@ -107,14 +120,17 @@ export async function runBeatBgm(
   again = false
 ): Promise<void> {
   const files = again ? keptTakes(work) : await bgmTakes(work, script, bpm);
-  const takes = files.map((f) => measureTake(work, f, Number(/take(\d+)/.exec(f)?.[1] ?? 0), bpm));
+  const measured = files.map((f) =>
+    measureTake(work, f, Number(/take(\d+)/.exec(f)?.[1] ?? 0), bpm)
+  );
+  // Before the drafts: a take whose bars Beat This! moved is drafted on its new bars.
+  const { takes, notes } = await checkDownbeats(work, measured, bpm);
   writeFileSync(join(work, "audio", "bgm", "takes.json"), JSON.stringify(takes));
   const drafts = rankDrafts(work, script, draftScores(takes, loadTiming(work), bpm)).map(
     (d) =>
       `draft: { "take": ${d.take}, "bars": "${d.bars}" }  (${d.checks} check lines, ${d.moments} moments, ${d.joins} joins)`
   );
   const advice = tempoAdvice(takes, bpm, work);
-  const notes = await downbeatNotes(work, takes);
   const text = [
     ...takes.map((t) => [takeTable(t, bpm), notes.get(t.take)].filter(Boolean).join("\n")),
     drafts.join("\n"),
@@ -140,7 +156,7 @@ export async function runScore(work: string): Promise<void> {
   for (const m of s.moments) console.log(`moment: ${m}`);
   for (const n of s.notes) console.log(`check: ${n}`);
   const chosen = loadTakes(work).filter((t) => t.take === script.score?.take);
-  for (const line of (await downbeatNotes(work, chosen)).values()) console.log(line);
+  for (const line of (await checkDownbeats(work, chosen)).notes.values()) console.log(line);
   const n = (k: Hit["k"]): number => s.hits.filter((h) => h.k === k).length;
   console.log(
     `score: ${s.wav} (${n("kick")} kicks, ${n("snare")} snares, ${n("hat")} hats) -> audio/hits.json`

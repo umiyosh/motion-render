@@ -7,11 +7,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   beatOfBar,
+  beatsToMove,
   cacheDir,
   checkTakes,
   downbeatLine,
   inWindows,
   loadOrt,
+  movedLine,
   peaks,
   spectrogram,
 } from "../skills/motion-render/scripts/downbeat.ts";
@@ -36,6 +38,18 @@ describe("which beat of our bars the downbeats fall on", () => {
     expect(downbeatLine(3, { beat: 4, share: 0.97, n: 33 })).toBe(
       "downbeat: take 3 disagrees (ml says beat 4: 97% of its 33 downbeats fall on beat 4 of these bars)"
     );
+  });
+
+  it("moves a take's bars only on a clear vote: 90% of 8 or more downbeats on another beat", () => {
+    expect(beatsToMove({ beat: 4, share: 1, n: 29 })).toBe(3);
+    expect(beatsToMove({ beat: 2, share: 0.94, n: 67 })).toBe(1);
+    expect(beatsToMove({ beat: 3, share: 0.73, n: 33 })).toBe(0); // a warning only
+    expect(beatsToMove({ beat: 4, share: 1, n: 5 })).toBe(0);
+    expect(beatsToMove({ beat: 1, share: 1, n: 30 })).toBe(0);
+    expect(movedLine(1, { beat: 4, share: 1, n: 29 })).toBe(
+      "downbeat: take 1's bars moved by 3 beats (ml heard 100% of its 29 downbeats on beat 4 of the bars measured first)"
+    );
+    expect(movedLine(2, { beat: 2, share: 0.94, n: 67 })).toMatch(/moved by 1 beat \(/);
   });
 
   it("picks frames above 0 that are the highest within 3 frames, at 50 a second", () => {
@@ -75,10 +89,12 @@ describe("which beat of our bars the downbeats fall on", () => {
     expect(mid.indexOf(Math.max(...mid))).toBe(23);
   });
 
-  it("does nothing without onnxruntime-node", async () => {
+  it("does nothing without onnxruntime-node, or with MOTION_RENDER_DOWNBEAT=off", async () => {
     expect(
       await checkTakes([{ take: 1, file: "x.mp3", filter: "anull", t0: 0, beat: 0.5 }], null)
     ).toBeNull();
+    expect(process.env.MOTION_RENDER_DOWNBEAT).toBe("off"); // vitest.config.ts
+    expect(loadOrt()).toBeNull();
   });
 });
 
@@ -110,7 +126,8 @@ function song(file: string): void {
   writeWav(x, file);
 }
 
-const model = loadOrt() !== null && existsSync(join(cacheDir(), "beat_this.onnx"));
+const ort = loadOrt(true);
+const model = ort !== null && existsSync(join(cacheDir(), "beat_this.onnx"));
 
 describe.skipIf(!model)("Beat This! on a song (with the model in the cache)", () => {
   it("finds the bars where they start, and one beat off when the song is moved by a beat", async () => {
@@ -123,7 +140,7 @@ describe.skipIf(!model)("Beat This! on a song (with the model in the cache)", ()
       t0: 0.5,
       beat: 0.5,
     });
-    const v = await checkTakes([at(0), at(1)]);
+    const v = await checkTakes([at(0), at(1)], ort);
     expect(v?.get(0)).toMatchObject({ beat: 1 });
     expect(v?.get(0)!.share).toBeGreaterThan(0.9);
     expect(v?.get(1)).toMatchObject({ beat: 4 });

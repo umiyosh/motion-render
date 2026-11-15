@@ -60,8 +60,10 @@ function isOrt(v: unknown): v is Ort {
   return typeof s === "function" && "create" in s && typeof s.create === "function";
 }
 
-// onnxruntime-node, or null when it is not installed.
-export function loadOrt(): Ort | null {
+// onnxruntime-node, or null when it is not installed or MOTION_RENDER_DOWNBEAT is "off" (the tests set
+// it, so a test run never fetches the model; `force` ignores it).
+export function loadOrt(force = false): Ort | null {
+  if (!force && process.env.MOTION_RENDER_DOWNBEAT === "off") return null;
   try {
     const m: unknown = createRequire(import.meta.url)("onnxruntime-node");
     return isOrt(m) ? m : null;
@@ -217,8 +219,20 @@ export function beatOfBar(downbeats: number[], t0: number, beat: number): Verdic
   return { beat: votes.indexOf(most) + 1, share: n ? most / n : 0, n };
 }
 
-// The line bgm and score print for a take whose bar starts the model disagrees with, or null. A
-// warning only: our bars stay as they are.
+// Beats to move a take's bar starts by, when the model hears its downbeats clearly on another beat
+// (at least 90% of 8 or more), else 0. On the 22 takes of earlier films, the 10 it moved all had 90%
+// or more on one beat, and the 5 of those whose bar start sat on a snare it moved to the kick.
+export function beatsToMove(v: Verdict): number {
+  return v.n >= 8 && v.share >= 0.9 && v.beat !== 1 ? v.beat - 1 : 0;
+}
+
+// The line bgm prints for a take whose bar starts it moved.
+export function movedLine(take: number, v: Verdict): string {
+  return `downbeat: take ${take}'s bars moved by ${v.beat - 1} beat${v.beat === 2 ? "" : "s"} (ml heard ${Math.round(100 * v.share)}% of its ${v.n} downbeats on beat ${v.beat} of the bars measured first)`;
+}
+
+// The line for a take whose bar starts the model disagrees with, or null: bgm prints it for a take
+// it did not move (not clear enough to), and score for the take chosen.
 export function downbeatLine(take: number, v: Verdict): string | null {
   if (v.n < 8 || v.share < 0.6 || v.beat === 1) return null;
   return `downbeat: take ${take} disagrees (ml says beat ${v.beat}: ${Math.round(100 * v.share)}% of its ${v.n} downbeats fall on beat ${v.beat} of these bars)`;
