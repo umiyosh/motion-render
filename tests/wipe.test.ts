@@ -21,7 +21,9 @@ const TIMING = {
 };
 
 // A blue dot on dark ground; the next scene is red all over, with a word on it.
-function film(): string {
+function film(
+  build = 'film.build(function () { film.wipe("#sun", "red", { dur: 0.6 }); });'
+): string {
   const work = tempDir("mr-wipe-");
   writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
   const dir = writeKit(work);
@@ -40,7 +42,7 @@ function film(): string {
     <circle id="sun" cx="400" cy="540" r="60" fill="#3a8ee8"/></svg></section>
   <section class="scene" id="red"><div id="ground" class="layer-bg"></div><p id="word" class="layer-caption">赤い場面</p></section>
 </div>
-<script>film.build(function () { film.wipe("#sun", "red", { dur: 0.6 }); });</script>
+<script>${build}</script>
 </body></html>`
   );
   return dir;
@@ -90,6 +92,20 @@ describe("film.wipe", () => {
       // the same frame after seeking back
       await f.frame(3.5);
       expect((await f.frame(1.7)).equals(mid)).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("clips to the shape's outline even when the timeline hid the shape before wipe was called", async () => {
+    // fromTo with autoAlpha 0 hides the dot at once; the wipe must still see its outline
+    const f = await openFilm(
+      film(
+        'film.build(function (tl) { tl.fromTo("#sun", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 }, 0.1); film.wipe("#sun", "red", { dur: 0.6 }); });'
+      )
+    );
+    try {
+      expect(red(pixel(await f.frame(1.7), 400, 540))).toBe(true);
     } finally {
       await f.close();
     }
