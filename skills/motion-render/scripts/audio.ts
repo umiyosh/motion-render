@@ -341,7 +341,7 @@ export async function bgmTakes(work: string, script: Script, bpm: number): Promi
   const direction = join(work, "score.txt");
   if (!existsSync(direction))
     throw new Error(
-      `write ${direction} first: the music direction with the film's times (SKILL.md)`
+      `write ${direction} first: the music direction with the film's times (skills/rich/SKILL.md)`
     );
   const prompt = `${readFileSync(direction, "utf8").trim()}\n\nInstrumental only, no vocals. Keep exactly ${bpm} BPM in 4/4 from the first beat to the last.`;
   mkdirSync(join(work, "audio", "bgm"), { recursive: true });
