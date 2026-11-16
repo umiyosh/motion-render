@@ -135,6 +135,14 @@ auto mode を使っていて、それでも実行が拒否される場合は、`
 - できた後に「BGM を変えて」「ここの説明を短く」と頼めば、その部分だけ作り直します
 - 既存の Motion の動画なら、URL を渡して「MP4 にして」と頼みます。ナレーションと BGM も付きます
 
+### 手早い説明動画: `/motion-render:lite`
+
+```
+/motion-render:lite DNS がドメイン名を引く仕組みを説明して
+```
+
+短く素直な説明動画なら、`lite` が 1 回で作ります。平面のカード・ラベル・番号付きの流れの図に、ナレーションと、一定の小さな音量の BGM を 1 曲付けます。音ハメ、three.js、書き出し前の見直し、同期の測定は行わず、書き出しは 1 回です（1 分の説明動画で約 10 分）。「さっと」「簡単に」のように頼んだときも、こちらが選ばれます。宣伝動画や凝った演出の動画は、今までどおり `/motion-render` で作ります。
+
 ### コマンド（Claude が内部で使うもの）
 
 動画 1 本ごとに作業フォルダ（`<work>`）を 1 つ使います。中身と `script.json` の書き方は [SKILL.md](skills/motion-render/SKILL.md) にあります。
@@ -236,6 +244,7 @@ bin/motion-render         # プラグインが PATH に載せるコマンド（s
 package.json              # プラグインの依存。Claude Code がプラグインを入れるときに自動で入れる。`npm run typecheck` で型を検査する
 package-lock.json
 tsconfig.json             # TypeScript の設定（型の検査用。実行時は Node が .ts をそのまま動かす）
+skills/lite/SKILL.md      # /motion-render:lite: 短く素直な説明動画を 1 回で作る（同じ CLI を使い、音ハメはしない）
 skills/motion-render/     # スキル本体（skills CLI とプラグインの両方がここを読む）
   SKILL.md                # Claude が読む手順（準備、原稿と山場、曲の作風・指示文・小節の選び方を含む）
   package.json            # motion-render コマンドと、依存の版（playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one）

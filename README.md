@@ -135,6 +135,14 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 - After it is done, ask "change the BGM" or "shorten this part" and only that part is redone
 - For an existing Motion film, pass its URL and ask for an MP4. Narration and BGM are added too
 
+### Quick explainers: `/motion-render:lite`
+
+```
+/motion-render:lite Explain how DNS resolves a domain name
+```
+
+For a short, plain explainer, `lite` makes the film in one pass: flat cards, labels and a numbered flow, narration, and one BGM at a constant low level under it. It skips the beat sync, three.js, the review before the build and the sync report, and builds once (a one-minute explainer in about 10 minutes). It is also picked when you ask for a video "quickly" or "simply". Promos and anything that should feel rich stay with `/motion-render`.
+
 ### Commands (used by Claude under the hood)
 
 Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md).
@@ -236,6 +244,7 @@ bin/motion-render         # Command the plugin puts on PATH (runs the CLI in ski
 package.json              # Plugin dependencies, installed by Claude Code with the plugin. `npm run typecheck` checks the scripts
 package-lock.json
 tsconfig.json             # TypeScript settings (type check only; Node runs the .ts files directly)
+skills/lite/SKILL.md      # /motion-render:lite: a short, plain explainer in one pass (same CLI, no beat sync)
 skills/motion-render/     # The skill (read by both the skills CLI and the plugin)
   SKILL.md                # Instructions for Claude (setup, script and big moments, music style, music direction and choosing bars)
   package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one)
