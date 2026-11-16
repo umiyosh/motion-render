@@ -67,19 +67,39 @@ export function findFfmpeg(): string {
   throw new Error("ffmpeg not found: install ffmpeg or set FFMPEG_PATH");
 }
 
+interface FfmpegSyncOptions {
+  ms?: number;
+  maxBuffer?: number;
+  /** written to ffmpeg's stdin */
+  input?: Buffer;
+  /** runs in all; an ffmpeg that runs past ms is run again until they are used up */
+  tries?: number;
+}
+
 // Runs ffmpeg to the end and returns what it wrote to stdout. `what` names the job in errors
 // ("tile the sheet"). An ffmpeg that runs past ms is killed instead of waited on (#51).
 export function ffmpegSync(
   args: string[],
   what: string,
-  { ms = FFMPEG_MS, maxBuffer = 64 * 1024 * 1024 } = {}
+  { ms = FFMPEG_MS, maxBuffer = 64 * 1024 * 1024, input, tries = 1 }: FfmpegSyncOptions = {}
 ): Buffer {
-  const r = spawnSync(findFfmpeg(), args, { maxBuffer, timeout: ms, killSignal: "SIGKILL" });
-  if (r.error && "code" in r.error && r.error.code === "ETIMEDOUT")
-    throw new Error(`ffmpeg did not ${what} in ${ms / 1000}s`);
-  if (r.status !== 0)
-    throw new Error(`ffmpeg could not ${what}: ${r.error?.message ?? String(r.stderr).trim()}`);
-  return r.stdout;
+  for (let n = 1; ; n++) {
+    const r = spawnSync(findFfmpeg(), args, {
+      input,
+      maxBuffer,
+      timeout: ms,
+      killSignal: "SIGKILL",
+    });
+    if (r.error && "code" in r.error && r.error.code === "ETIMEDOUT") {
+      if (n < tries) continue;
+      throw new Error(
+        `ffmpeg did not ${what} in ${ms / 1000}s${tries > 1 ? ` (${tries} tries)` : ""}`
+      );
+    }
+    if (r.status !== 0)
+      throw new Error(`ffmpeg could not ${what}: ${r.error?.message ?? String(r.stderr).trim()}`);
+    return r.stdout;
+  }
 }
 
 // Resolves with ffmpeg's exit code once it has exited.
