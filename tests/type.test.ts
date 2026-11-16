@@ -4,12 +4,13 @@
 import { describe, expect, it } from "vitest";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { loadScript, writeTiming } from "../skills/motion-render/scripts/work.ts";
 import { pageWords } from "../skills/motion-render/scripts/words.ts";
 import { writeKit } from "../skills/motion-render/scripts/kit.ts";
 import { openFilm, type Film } from "../skills/motion-render/scripts/render.ts";
 import type { LayoutBox } from "../skills/motion-render/scripts/layout.ts";
+import { findFfmpeg } from "../skills/motion-render/scripts/audio.ts";
 import { pcmWav, spoken, workDir } from "./helpers.ts";
 
 const CLI = join(import.meta.dirname, "..", "skills", "motion-render", "scripts", "cli.ts");
@@ -87,6 +88,28 @@ const boxes = async (f: Film, t: number): Promise<LayoutBox[]> => (await f.inspe
 const drawn = async (f: Film, t: number): Promise<number> =>
   (await boxes(f, t)).filter((b) => /^span\.(type-char|kt-box)/.test(b.label)).length;
 
+// How many pixels of two PNG frames differ clearly in brightness: a glyph is thousands, the way
+// two pages composite the same text is a handful.
+// ffmpeg runs without blocking the worker, which must keep answering vitest while it decodes.
+async function differ(a: Buffer, b: Buffer): Promise<number> {
+  const gray = (png: Buffer) =>
+    new Promise<Buffer>((ok, fail) => {
+      const args = ["-v", "error", "-i", "-", "-f", "rawvideo", "-pix_fmt", "gray", "-"];
+      const p = spawn(findFfmpeg(), args);
+      const out: Buffer[] = [];
+      p.stdout.on("data", (c: Buffer) => out.push(c));
+      p.on("error", fail);
+      p.on("close", (code) =>
+        code === 0 ? ok(Buffer.concat(out)) : fail(new Error(`ffmpeg exited with ${code}`))
+      );
+      p.stdin.end(png);
+    });
+  const [x, y] = await Promise.all([gray(a), gray(b)]);
+  let n = 0;
+  for (let i = 0; i < x.length; i++) if (Math.abs(x[i]! - y[i]!) > 64) n++;
+  return n;
+}
+
 const passesCheck = (dir: string): void => {
   const r = spawnSync(process.execPath, [CLI, "check", dir], { encoding: "utf8" });
   expect(r.stdout + r.stderr).toContain("layout ok");
@@ -108,6 +131,20 @@ describe("film.say", () => {
       });
     });
   }
+
+  it("lets every character of a scramble settle on its own glyph, the last one too", async () => {
+    // 4 glyphs: the last settles at 0.45 + 3 × 0.05 = 0.6000000000000001 s, which GSAP rendered as
+    // 0.6, so it kept its stand-in to the end of the scene. Kana, as a Latin run is one glyph
+    const text = "音ハメだ";
+    const a = film(`film.say(tl, "#t", "intro", "動く", { how: "scramble" });`, text);
+    const fade = film(`film.say(tl, "#t", "intro", "動く", { how: "fade" });`, text);
+    const end = a.at + 1; // both settled, still in the scene
+    const [fa, fb] = [
+      await withFilm(a.dir, (f) => f.frame(end)),
+      await withFilm(fade.dir, (f) => f.frame(end)),
+    ];
+    expect(await differ(fa, fb)).toBeLessThan(50);
+  });
 
   it("keeps every character where it settles while the scramble runs", async () => {
     const { dir, at } = film(`film.say(tl, "#t", "intro", "動く", { how: "scramble" });`);
