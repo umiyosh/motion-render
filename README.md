@@ -8,9 +8,25 @@ An Agent Skill that turns a theme into an **animated explainer video with narrat
 /motion-render:motion-render Make a video that explains how GitHub Actions authenticates to Google Cloud with Workload Identity Federation
 ```
 
-From that one line, Claude writes a storyboard and a narration script, generates the narration (Gemini TTS) and music scored to the climaxes of the animation (Lyria), builds the animation, and renders it to an MP4 on your machine.
+From that one line, Claude writes a narration script, generates the narration (Gemini TTS) and a BGM (Lyria), draws a flat explainer (cards, labels, a numbered flow) whose moves follow the words as they are said, and renders it to an MP4 on your machine. A one-minute explainer takes about 10 minutes, with no questions in between.
 
-**Every film is cut to the beat.** The narration sets the time, the animation builds its big moments inside it, and the music follows those moments (it builds into each drop, and stops dead at most once, where the story holds its breath). The music is Lyria's own performance, generated from a description of what happens on screen at each moment and rearranged bar by bar to land on the cues. Every drum hit is detected in the music: the scenes' own moves start on the beat, and in the drops the thing that drives the story (an engine, a press) answers every kick. The finished MP4 is measured for pauses in the narration, the timing of the big moments and the reactions to the hits.
+**For a film cut to the beat, ask for the rich version.**
+
+```
+/motion-render:rich Make a promo for …
+```
+
+The narration sets the time, the animation builds its big moments inside it, and the music follows those moments (it builds into each drop, and stops dead at most once, where the story holds its breath). The music is Lyria's own performance, generated from a description of what happens on screen at each moment and rearranged bar by bar to land on the cues. Every drum hit is detected in the music: the scenes' own moves start on the beat, and in the drops the thing that drives the story (an engine, a press) answers every kick. Before the build, a critic reviews the key frames; after it, the MP4 is measured for pauses in the narration, the timing of the big moments and the reactions to the hits. A film takes about an hour.
+
+|                           | `/motion-render:motion-render` (default)                                  | `/motion-render:rich`                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| For                       | Explaining how something works, quickly                                   | Promos and films that should look and sound rich                                                       |
+| Picture                   | Flat cards, labels and a numbered flow, moving with the narration's words | Built around big moments, moving on the beat; three.js, motion blur and a finishing look when they fit |
+| Music                     | One BGM at a constant low level under the narration                       | Four Lyria takes, rearranged bar by bar onto the film's cues, with every drum hit detected             |
+| Checks                    | The layout check and still frames, then one build                         | The layout check, a preview reviewed by a critic, one build, then a sync report on the MP4             |
+| Time (one minute of film) | About 10 minutes                                                          | About an hour                                                                                          |
+
+The default makes the same kind of film as motion-render 1.1, so existing requests keep working the way they did.
 
 ## Demo
 
@@ -30,7 +46,7 @@ More videos, including one with sound effects, are in [Examples](https://github.
 
 ## Two ways to make the animation
 
-Narration, BGM, sound effects and the MP4 are the same either way. Only the animation is made differently. New films are made as HTML, since only an HTML film can react to every drum hit. [Claude **Motion**](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) is used when you ask for it, and for turning an existing Motion film into an MP4.
+Narration, BGM, sound effects and the MP4 are the same either way. Only the animation is made differently. New films are made as HTML (in the rich version, only an HTML film can react to every drum hit). [Claude **Motion**](https://support.claude.com/en/articles/17454997-get-started-with-claude-motion) is used when you ask for it, and for turning an existing Motion film into an MP4.
 
 |                        | Claude Motion                                                  | HTML                                                                                                                                                                 |
 | ---------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,7 +85,7 @@ On Claude Code versions before 2.1.275, run it as two lines:
 ```
 
 The rendering command and its dependencies come with the plugin, so there is nothing else to install.
-Plugin skills are prefixed with the plugin name, so you call it as `/motion-render:motion-render <theme>`.
+Plugin skills are prefixed with the plugin name, so you call them as `/motion-render:motion-render <theme>` and `/motion-render:rich <theme>`.
 
 **Without the plugin system: install with the skills CLI**
 
@@ -123,7 +139,7 @@ If you use auto mode and runs are still refused, also add this line to `autoMode
 /motion-render:motion-render Make a 30-second video that explains …
 ```
 
-(If you installed with the skills CLI: `/motion-render Make a …`)
+(If you installed with the skills CLI: `/motion-render Make a …`, and `/rich Make a …` for the rich version)
 
 On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automatically.
 
@@ -134,18 +150,11 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 - Without an output location, the video goes to `$MOTION_RENDER_OUT_DIR`, or the current directory
 - After it is done, ask "change the BGM" or "shorten this part" and only that part is redone
 - For an existing Motion film, pass its URL and ask for an MP4. Narration and BGM are added too
-
-### Quick explainers: `/motion-render:lite`
-
-```
-/motion-render:lite Explain how DNS resolves a domain name
-```
-
-For a short, plain explainer, `lite` makes the film in one pass: flat cards, labels and a numbered flow, narration, and one BGM at a constant low level under it. It skips the beat sync, three.js, the review before the build and the sync report, and builds once (a one-minute explainer in about 10 minutes). It is also picked when you ask for a video "quickly" or "simply". Promos and anything that should feel rich stay with `/motion-render`.
+- Asking for a promo, beat sync or a rich film picks `/motion-render:rich` even without its name. Anything else goes to the default
 
 ### Commands (used by Claude under the hood)
 
-Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md).
+Each video uses one work directory (`<work>`). Its layout and the `script.json` format are in [SKILL.md](skills/motion-render/SKILL.md) (the default) and [skills/rich/SKILL.md](skills/rich/SKILL.md) (the rich version, which adds `bpm`, sections and the score).
 
 | Command                                           | What it does                                                                                                                                                                                                                                                                                                            |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -244,9 +253,9 @@ bin/motion-render         # Command the plugin puts on PATH (runs the CLI in ski
 package.json              # Plugin dependencies, installed by Claude Code with the plugin. `npm run typecheck` checks the scripts
 package-lock.json
 tsconfig.json             # TypeScript settings (type check only; Node runs the .ts files directly)
-skills/lite/SKILL.md      # /motion-render:lite: a short, plain explainer in one pass (same CLI, no beat sync)
-skills/motion-render/     # The skill (read by both the skills CLI and the plugin)
-  SKILL.md                # Instructions for Claude (setup, script and big moments, music style, music direction and choosing bars)
+skills/rich/SKILL.md      # /motion-render:rich: instructions for a film cut to the beat (script and big moments, music style, music direction and choosing bars). Uses the command and references in skills/motion-render
+skills/motion-render/     # The default skill and the command (read by both the skills CLI and the plugin)
+  SKILL.md                # Instructions for Claude: setup, and a plain explainer in one pass
   package.json            # The motion-render command and pinned dependencies (playwright-core, ffmpeg-static, gsap, @fontsource/noto-sans-jp, @fontsource/klee-one)
   references/html-film.md # How Claude writes an HTML film: cutting to the beat, layout, motion, and reading the checks
   references/pipeline.md  # How the steps depend on each other (what waits, what runs in the background), and how to add a step
