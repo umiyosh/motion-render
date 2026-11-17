@@ -16,7 +16,8 @@
         "source": "git-subdir",
         "url": "https://github.com/kajisho5/ffmpeg-skill.git",
         "path": "ffmpeg-skill",
-        "ref": "plugin"
+        "ref": "plugin",
+        "sha": "9a51812b2630d82c9abfec98d0c763ba74a3caa0"
       },
       "description": "Local FFmpeg video and audio editing by kajisho5 (MIT), installed with motion-render as its dependency."
     }

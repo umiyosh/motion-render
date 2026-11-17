@@ -85,6 +85,7 @@ Claude Code 2.1.275 より前の版では、2 行に分けて実行します。
 ```
 
 描画用のコマンドと部品も一緒に入るので、ほかに入れるものはありません。
+[ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill)（kajisho5 作、MIT）も、中身を確かめたコミットに固定して一緒に入ります。
 プラグインのスキルは名前の前にプラグイン名が付くので、使うときは `/motion-render:motion-render <テーマ>` と `/motion-render:rich <テーマ>` です。
 
 **プラグインを使わない場合: skills CLI で入れる**
