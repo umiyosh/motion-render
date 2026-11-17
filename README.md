@@ -85,6 +85,7 @@ On Claude Code versions before 2.1.275, run it as two lines:
 ```
 
 The rendering command and its dependencies come with the plugin, so there is nothing else to install.
+The plugin also installs [ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) (MIT, by kajisho5), pinned to a reviewed commit.
 Plugin skills are prefixed with the plugin name, so you call them as `/motion-render:motion-render <theme>` and `/motion-render:rich <theme>`.
 
 **Without the plugin system: install with the skills CLI**
