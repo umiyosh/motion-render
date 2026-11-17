@@ -6,5 +6,6 @@
     "name": "umiyosh"
   },
   "repository": "https://github.com/umiyosh/motion-render",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": ["ffmpeg-skill"]
 }

@@ -9,6 +9,16 @@
       "name": "motion-render",
       "source": "./",
       "description": "Make an animated explainer video from a theme with Claude Motion (or as an HTML page when Motion is not available), add narration, BGM and sound effects, and render it to MP4."
+    },
+    {
+      "name": "ffmpeg-skill",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/kajisho5/ffmpeg-skill.git",
+        "path": "ffmpeg-skill",
+        "ref": "plugin"
+      },
+      "description": "Local FFmpeg video and audio editing by kajisho5 (MIT), installed with motion-render as its dependency."
     }
   ]
 }
