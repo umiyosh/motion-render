@@ -263,3 +263,24 @@ describe("placeSfx", () => {
     expect(placeSfx(script([], [pop]), [parts[0]!], vi.fn())).toEqual([]);
   });
 });
+
+describe("sound effects timed by a word", () => {
+  it("reads a word with an offset and a snap to a hit", () => {
+    const s = loadScript(
+      workDir(
+        sfxScript([{ at: { word: "はじめ", offset: 0.1, snap: "hit" }, prompt: "soft UI pop" }])
+      )
+    );
+    expect(s.scenes[0]?.sfx[0]).toMatchObject({
+      at: 0,
+      word: { word: "はじめ", offset: 0.1, snap: true },
+    });
+  });
+
+  it.each([
+    [{ word: "" }, /\.word must be a word of the narration/],
+    [{ word: "はじめ", snap: "beat" }, /\.snap must be "hit"/],
+  ])("rejects %j", (at, msg) => {
+    expect(() => loadScript(workDir(sfxScript([{ at, prompt: "pop" }])))).toThrow(msg);
+  });
+});

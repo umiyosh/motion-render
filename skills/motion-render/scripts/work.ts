@@ -6,8 +6,17 @@ import { isRecord, readJson, type Json } from "./json.ts";
 import { isLook, LOOKS, type LookName } from "./look.ts";
 
 // A sound effect, `at` seconds after its scene starts.
+// A sound effect timed by a word of its scene's narration, resolved by words.ts as the film resolves
+// film.word, and snapped to the nearest hit when the film snaps its motion with beat.snap.
+interface SfxWord {
+  word: string;
+  offset: number;
+  snap: boolean;
+}
+
 export interface Sfx {
-  at: number;
+  at: number; // seconds into the scene; for an effect timed by `word`, set by resolveSfxTimes
+  word?: SfxWord;
   prompt: string;
   duration: number;
   volume: number;
@@ -94,6 +103,15 @@ function fail(msg: string): never {
   throw new Error(`script.json: ${msg}`);
 }
 
+function parseSfxWord(v: Json, path: string): SfxWord {
+  const { word, snap } = v;
+  if (typeof word !== "string" || !word.trim())
+    fail(`${path}.word must be a word of the narration`);
+  if (snap !== undefined && snap !== "hit") fail(`${path}.snap must be "hit"`);
+  const offset = v.offset === undefined ? 0 : num(v, "offset", -5, 5, path);
+  return { word, offset, snap: snap === "hit" };
+}
+
 function parseSfx(value: unknown, path: string, volume: number): Sfx[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) fail(`${path} must be an array`);
@@ -103,8 +121,10 @@ function parseSfx(value: unknown, path: string, volume: number): Sfx[] {
     const { prompt } = fx;
     if (typeof prompt !== "string" || !prompt.trim()) fail(`${at}.prompt is required`);
     const s = { duration: SFX_DURATION, volume, ...fx };
+    const word = isRecord(fx.at) ? parseSfxWord(fx.at, `${at}.at`) : undefined;
     return {
-      at: num(s, "at", 0, 600, at),
+      at: word ? 0 : num(s, "at", 0, 600, at),
+      ...(word ? { word } : {}),
       prompt,
       duration: num(s, "duration", 0.5, 10, at),
       volume: num(s, "volume", 0, 1, at),

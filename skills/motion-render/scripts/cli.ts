@@ -50,7 +50,7 @@ import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.t
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 import { stepsTable, timed, workOf } from "./steps.ts";
-import { writeWords } from "./words.ts";
+import { resolveSfxTimes, writeWords } from "./words.ts";
 import { mp4Picture, writeSheet } from "./sheet.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
@@ -219,7 +219,14 @@ async function runBgm(work: string, again: boolean): Promise<void> {
 async function runSfx(work: string): Promise<void> {
   const script = loadScript(work);
   const made = await makeSfx(work, script);
-  const preview = await previewSfx(work, script);
+  // Effects timed by a word show their second once the narration is there; before it, as written.
+  let timed = script;
+  try {
+    timed = resolveSfxTimes(work, script, loadTiming(work));
+  } catch {
+    // no narration or timing yet: the list shows the times as written, and build resolves them
+  }
+  const preview = await previewSfx(work, timed);
   if (!preview) {
     console.log("no sound effects in script.json");
     return;
@@ -314,7 +321,8 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
     const warn = (w: string) => console.error(`warning: ${w}`);
     const scenes = placeOnFilm(timing, film.meta, script, warn);
     const narration = await narrationLevel(work, script);
-    const sfx = placeSfx(script, film.meta.parts, warn).map((c) => sfxTrack(work, c, narration));
+    const timedSfx = resolveSfxTimes(work, script, timing);
+    const sfx = placeSfx(timedSfx, film.meta.parts, warn).map((c) => sfxTrack(work, c, narration));
     const audio = join(work, "audio", "mix.m4a");
     const score = script.bpm ? scoreInput(work, script, narration) : undefined;
     await mix(

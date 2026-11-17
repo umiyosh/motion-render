@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   charTimes,
   pageWords,
+  resolveSfxTimes,
   voiceInStops,
   writeWords,
 } from "../skills/motion-render/scripts/words.ts";
@@ -150,5 +151,48 @@ describe("film.word", () => {
     const w = work();
     writeTiming(w, loadScript(w));
     await expect(pageText(w, "止まる")).rejects.toThrow(/does not say "止まる"/);
+  });
+});
+
+describe("resolveSfxTimes", () => {
+  const timedScript = (at: object) => ({
+    ...SCRIPT,
+    scenes: [
+      { ...SCRIPT.scenes[0], sfx: [{ at, prompt: "pop", duration: 0.5 }] },
+      SCRIPT.scenes[1],
+    ],
+  });
+
+  it("puts an effect timed by a word where film.word puts that word, plus its offset", () => {
+    const work = workDir(timedScript({ word: "めに", offset: 0.1 }), { intro: 1.3, drop: 1 });
+    const script = loadScript(work);
+    const timing = writeTiming(work, script);
+    const film = pageWords(work, script, timing).intro!.at![2]!;
+    const at = resolveSfxTimes(work, script, timing).scenes[0]!.sfx[0]!.at;
+    expect(at).toBeCloseTo(film + 0.1, 3);
+  });
+
+  it("snaps to the nearest hit within an eighth of a bar, and keeps the word time without one", () => {
+    const work = workDir(timedScript({ word: "めに", snap: "hit" }), { intro: 1.3, drop: 1 });
+    const script = loadScript(work);
+    const timing = writeTiming(work, script);
+    const word = resolveSfxTimes(work, script, timing).scenes[0]!.sfx[0]!.at;
+    const hits = (t: number) =>
+      writeFileSync(
+        join(work, "audio", "hits.json"),
+        JSON.stringify({ bar: 2, hits: [{ t, k: "kick", v: 1 }] })
+      );
+    hits(word + 0.2);
+    expect(resolveSfxTimes(work, script, timing).scenes[0]!.sfx[0]!.at).toBeCloseTo(word + 0.2, 3);
+    hits(word + 0.6); // farther than 2 / 8 s: no snap
+    expect(resolveSfxTimes(work, script, timing).scenes[0]!.sfx[0]!.at).toBeCloseTo(word, 3);
+  });
+
+  it("names the scene when its narration does not say the word", () => {
+    const work = workDir(timedScript({ word: "おわり" }), { intro: 1.3, drop: 1 });
+    const script = loadScript(work);
+    expect(() => resolveSfxTimes(work, script, writeTiming(work, script))).toThrow(
+      /"intro" does not say "おわり"/
+    );
   });
 });
