@@ -44,6 +44,7 @@ import {
   scoreInput,
   syncPreview,
   syncReport,
+  stopBarLines,
   timingTable,
 } from "./beatcli.ts";
 import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.ts";
@@ -203,8 +204,10 @@ async function runNarrate(work: string): Promise<void> {
   console.log(
     `words: times for ${timed} of ${script.scenes.length} scenes -> ${join(work, "words.json")}`
   );
-  if (timing.bpm) console.log(timingTable(timing));
-  else for (const s of timing.scenes) console.log(`${s.id}\tstart ${s.start}s\tdur ${s.dur}s`);
+  if (timing.bpm) {
+    console.log(timingTable(timing));
+    for (const line of stopBarLines(timing, script)) console.log(line);
+  } else for (const s of timing.scenes) console.log(`${s.id}\tstart ${s.start}s\tdur ${s.dur}s`);
   console.log(`total: ${timing.total}s -> ${join(work, "timing.json")}`);
 }
 
