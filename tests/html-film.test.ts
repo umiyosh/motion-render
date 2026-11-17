@@ -499,3 +499,42 @@ describe("drawing styles", () => {
     }
   });
 });
+
+// A film that draws its text only on a canvas, in the hand-written face: no element of the page uses
+// Klee One, but the script names it.
+const CANVAS_TEXT_PAGE = `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
+<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
+<script src="kit/beat.js"></script><script src="kit/fx.js"></script>
+<style>#cv { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }</style>
+</head><body><div id="root"><canvas id="cv"></canvas></div>
+<script>
+  var ctx = fx.canvas("#cv");
+  film.draw(function (t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#f4f2ec";
+    ctx.fillRect(0, 0, 1920, 1080);
+    // The text is drawn only when the face is already in: the player has to load it before the first frame.
+    if (t < 1 && document.fonts.check("600 96px 'Klee One'", "要点")) {
+      ctx.fillStyle = "#d23a2a";
+      ctx.font = "600 96px 'Klee One', sans-serif";
+      ctx.fillText("要点が絵になっていない", 200, 540);
+    }
+  });
+</script>
+</body></html>`;
+
+describe("canvas text", () => {
+  it("loads a face the page uses only on a canvas before the first frame", async () => {
+    const film = await openFilm(filmOf(CANVAS_TEXT_PAGE));
+    try {
+      // The first frame has the hand-written text; the second is the bare paper.
+      const text = await film.frame(0.5);
+      expect(text.equals(await film.frame(1.5))).toBe(false);
+      expect((await film.frame(0.5)).equals(text)).toBe(true);
+    } finally {
+      await film.close();
+    }
+  });
+});
