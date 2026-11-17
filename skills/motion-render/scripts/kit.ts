@@ -121,6 +121,7 @@ export function writeKit(work: string): string {
     "type.js",
     "beat.js",
     "fx.js",
+    "sketch.js",
     "base.css",
     "styles.css",
     "parts.css",
