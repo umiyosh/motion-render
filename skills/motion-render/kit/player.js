@@ -522,6 +522,26 @@
         throw new Error("font " + f.spec + ' did not load. Run "motion-render kit" again.');
     });
   }
+  // Sound effects made without a paid ElevenLabs plan must credit 11.ai. kit writes sfxCredit when the
+  // film has sound effects, and the credit sits in the bottom-right corner of the first scene, on its
+  // own dark chip so it reads on any ground. The layout check takes it as placed on purpose.
+  var credit = null;
+  function addCredit() {
+    if (!T.sfxCredit) return;
+    credit = document.createElement("div");
+    credit.id = "mr-sfx-credit";
+    credit.setAttribute("data-layout-ok", "");
+    credit.textContent = "SFX: 11.ai";
+    credit.style.cssText =
+      "position:absolute;right:152px;bottom:89px;z-index:60;padding:2px 10px;border-radius:4px;" +
+      'font:400 24px "Noto Sans JP",sans-serif;color:#fff;background:rgba(0,0,0,0.55)';
+    (document.getElementById("root") || document.body).appendChild(credit);
+  }
+  function showCredit(t) {
+    if (!credit) return;
+    var first = T.scenes[0];
+    credit.style.visibility = t < first.start + first.dur ? "" : "hidden";
+  }
   function addFilters() {
     var holder = document.createElement("div");
     holder.innerHTML = FILTERS;
@@ -553,6 +573,7 @@
             ". A selector #id reaches all of them, so hiding or moving one also hides or moves the others"
         );
       addFilters();
+      addCredit();
       await loadFonts();
       builders.forEach(function (fn) {
         fn(timeline);
@@ -572,6 +593,7 @@
       var f = frame === undefined ? t : frame;
       window.film.frameTime = f;
       show(t);
+      showCredit(t);
       boil(t);
       // suppressEvents=false so onUpdate callbacks (count-ups) run on every seek. GSAP renders
       // nothing when the playhead is already at t, and a new timeline sits at 0 s: without the forced

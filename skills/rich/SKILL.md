@@ -91,7 +91,7 @@ Claude Motion を使うのは、利用者が Motion を指定したときと、�
 - `bpm` は曲の速さ（下の「曲の作風」）。これがあると、場面の頭が拍に、`section` のある場面の頭が小節の頭にそろう
 - `section` はその場面から始まる曲の区間: `intro`（入り）・`build`（溜め）・`drop`（全開）・`break`（音を大きく減らす。無音にはしない）・`groove`（落ち着いた刻み）・`outro`（終わり）
 - `score` は、曲の候補のどれを使い、映像の小節ごとにその候補のどの小節を鳴らすか（手順 6）
-- 任意: `voice`・`speed`・`scoreLevel`（曲の大きな小節の、ナレーションに対する音量。既定 +4.1 dB）・`sfxVolume`・`lead`・`tail`・`endHold`、
+- 任意: `voice`・`speed`・`scoreLevel`（曲の大きな小節の、ナレーションに対する音量。既定 +4.1 dB）・`sfxVolume`・`sfxCredit`（既定 true。効果音の表記を自動で描く）・`lead`・`tail`・`endHold`、
   `motionBlur`（1 コマに重ねる絵の枚数。既定 1。速く動く物がある映像で使う。references/html-film.md の「表現の道具」）、
   `look`（書き出しでかける仕上げ。作風と同じ名前を選ぶ。references/html-film.md の「仕上げ」）、
   場面ごとの `sfx`（下の「効果音」）
@@ -346,7 +346,9 @@ Lyria は区間を 4・8 小節に丸め、0〜4 小節ずらし、ときに抜�
 
 **表記**: 月額プランなしで作った効果音は、商用に使えず、公開するときは題名に `elevenlabs.io` か `11.ai` を入れる
 （ElevenLabs のヘルプ「Can I publish the content I generate on the platform?」）。効果音を付けた動画では、
-タイトルの場面に `SFX: 11.ai` を小さく入れる。利用者が月額プランに入っていると言った場合は省いてよい。
+タイトルの場面に `SFX: 11.ai` を小さく入れる。html の映像では、プレーヤーが最初の場面の右下に自動で描く（手で入れない）。
+Claude Motion で作る映像では、タイトルの場面に手で小さく入れる。利用者が月額プランに入っていると言った場合は、
+`script.json` に `"sfxCredit": false` を書いて外す（Motion では入れない）。
 
 ## Motion で作るとき
 
