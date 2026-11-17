@@ -5,7 +5,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   charTimes,
+  charTiming,
   pageWords,
+  ranOnLines,
   voiceInStops,
   writeWords,
 } from "../skills/motion-render/scripts/words.ts";
@@ -41,6 +43,18 @@ describe("charTimes", () => {
     const t = charTimes(spoken([0.3, 1.2]), "はじめに、動く。");
     near(t[0]![0], 0.3);
     near(t[5]![0], 0.3 + (4 / 6) * 1.2); // 動 after 4 of the 6 voiced characters
+  });
+
+  it("places phrases by position when a small っ leaves a silence and the voice runs on through a 、 (#71)", () => {
+    // あいうえ from 0.2 s runs on into かきくけ (no pause at the 、), a 0.12 s silence splits かきくけ like a
+    // small っ, then a real pause before さしすせ: three runs for three phrases, but not one each.
+    const t = charTimes(spoken([0.2, 1.2, 0.12, 0.4, 0.3, 0.8]), "あいうえ、かきくけ、さしすせ。");
+    near(t[0]![0], 0.2); // あ
+    near(t[5]![0], 1.0); // か: 4 characters of 0.2 s after あ, inside the first run
+    near(t[10]![0], 2.22); // さ: after the real pause
+    expect(
+      charTiming(spoken([0.2, 1.2, 0.12, 0.4, 0.3, 0.8]), "あいうえ、かきくけ、さしすせ。").ranOn
+    ).toBe(1);
   });
 });
 
@@ -150,5 +164,23 @@ describe("film.word", () => {
     const w = work();
     writeTiming(w, loadScript(w));
     await expect(pageText(w, "止まる")).rejects.toThrow(/does not say "止まる"/);
+  });
+});
+
+describe("ranOnLines", () => {
+  it("names a scene whose voice ran on through a pause, and only that scene", () => {
+    const script = {
+      bgm: "x",
+      scenes: [
+        { id: "ran", narration: "あいうえ、かきくけ、さしすせ。" },
+        { id: "fine", narration: "はじめに、動く。" },
+      ],
+    };
+    const work = workDir(script);
+    writeFileSync(join(work, "audio", "ran.wav"), pcmWav(spoken([0.2, 1.2, 0.12, 0.4, 0.3, 0.8])));
+    writeFileSync(join(work, "audio", "fine.wav"), pcmWav(spoken([0.2, 0.8, 0.25, 0.8])));
+    const lines = ranOnLines(work, loadScript(work));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/the voice of "ran" ran on through 1 of 2 pauses/);
   });
 });
