@@ -499,3 +499,47 @@ describe("drawing styles", () => {
     }
   });
 });
+
+// A work whose narration matches TIMING, with a sound effect in the first scene unless `credit` is
+// false or there are no sound effects.
+function creditFilm(o: { sfx: boolean; credit?: boolean }): string {
+  const work = tempDir("mr-html-");
+  writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+  const sfx = o.sfx ? [{ at: 0.2, prompt: "soft UI pop", duration: 0.5 }] : [];
+  writeFileSync(
+    join(work, "script.json"),
+    JSON.stringify({
+      bgm: "calm",
+      ...(o.credit === undefined ? {} : { sfxCredit: o.credit }),
+      scenes: [
+        { id: "intro", narration: "はじめに", sfx },
+        { id: "deny", narration: "だめ" },
+      ],
+    })
+  );
+  const film = writeKit(work);
+  writeFileSync(join(film, "index.html"), page(false));
+  return film;
+}
+
+describe("the SFX credit", () => {
+  it("is drawn on the first scene of a film with sound effects, and passes the layout check", async () => {
+    const film = await openFilm(creditFilm({ sfx: true }));
+    try {
+      const shown = async (t: number) =>
+        ((await film.inspect?.(t)) ?? []).some((b) => b.label.includes("SFX: 11.ai"));
+      expect(await shown(0.5)).toBe(true);
+      expect(await shown(1.5)).toBe(false);
+      expect(await checkLayout(film)).toEqual([]);
+    } finally {
+      await film.close();
+    }
+  });
+
+  it("is left out without sound effects, and when the script turns it off", () => {
+    for (const o of [{ sfx: false }, { sfx: true, credit: false }]) {
+      const timing = readFileSync(join(creditFilm(o), "kit", "timing.js"), "utf8");
+      expect(timing).not.toContain("sfxCredit");
+    }
+  });
+});

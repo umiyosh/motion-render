@@ -48,6 +48,7 @@ export function writeKitTiming(work: string): void {
       speech,
       ...(section ? { section } : {}),
     })),
+    ...(sfxCreditFor(work) ? { sfxCredit: true } : {}),
   };
   const hitsFile = join(work, "audio", "hits.json");
   const hits = existsSync(hitsFile) ? JSON.stringify(readJson(hitsFile)) : "null";
@@ -55,6 +56,18 @@ export function writeKitTiming(work: string): void {
     join(work, "film", "kit", "timing.js"),
     `window.__timing = ${JSON.stringify(data)};\nwindow.__hits = ${hits};\nwindow.__words = ${wordsFor(work)};\n`
   );
+}
+
+// Whether the player draws the 11.ai credit: the film has sound effects and the script did not turn
+// the credit off. A script that does not load yet (kit before the narration) has no credit.
+function sfxCreditFor(work: string): boolean {
+  let script: Script;
+  try {
+    script = loadScript(work);
+  } catch {
+    return false; // an incomplete or missing script.json: build writes timing.js again
+  }
+  return script.sfxCredit && script.scenes.some((sc) => sc.sfx.length > 0);
 }
 
 // The narration of each scene and when its characters are said, for film.word. kit may run before

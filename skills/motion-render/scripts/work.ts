@@ -59,6 +59,7 @@ export interface Script {
   scoreLevel: number; // dB of the score's loud bars against the narration's mean level
   motionBlur: number; // pictures averaged into each frame of the MP4 (1 = no blur)
   look?: LookName; // the finishing layer put on at export (look.ts)
+  sfxCredit: boolean; // draw "SFX: 11.ai" on the first scene when the film has sound effects (player.js)
 }
 
 export interface TimingScene {
@@ -91,6 +92,8 @@ const DEFAULTS = {
   // the same film with the score at 0.9 times that (+4.1 dB) was judged right (2026-11-12).
   scoreLevel: 4.1,
   motionBlur: 1,
+  // Sound effects made without a paid ElevenLabs plan must credit 11.ai; the player draws it.
+  sfxCredit: true,
 };
 
 const SFX_DURATION = 1.5; // asked for when a sound effect gives no length, so none runs long
@@ -206,6 +209,12 @@ function name(s: Json, key: string): string {
   return v;
 }
 
+function bool(s: Json, key: string): boolean {
+  const v = s[key];
+  if (typeof v !== "boolean") fail(`"${key}" must be true or false`);
+  return v;
+}
+
 export function loadScript(work: string): Script {
   const file = join(work, "script.json");
   if (!existsSync(file))
@@ -232,6 +241,7 @@ export function loadScript(work: string): Script {
     bgmModel: name(s, "bgmModel"),
     scoreLevel: num(s, "scoreLevel", -20, 12),
     motionBlur: whole(s, "motionBlur", 1, 8),
+    sfxCredit: bool(s, "sfxCredit"),
     ...(s.bpm === undefined ? {} : { bpm: num(s, "bpm", 60, 200) }),
     ...(s.score === undefined ? {} : { score: parseScore(s.score) }),
     ...(s.look === undefined ? {} : { look: parseLook(s.look) }),

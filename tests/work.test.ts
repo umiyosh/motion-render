@@ -264,6 +264,19 @@ describe("placeSfx", () => {
   });
 });
 
+describe("the SFX credit option", () => {
+  it("credits the sound effects unless the script turns it off", () => {
+    expect(loadScript(workDir(SCRIPT)).sfxCredit).toBe(true);
+    expect(loadScript(scriptWith({ sfxCredit: false })).sfxCredit).toBe(false);
+  });
+
+  it("rejects a value that is not true or false", () => {
+    expect(() => loadScript(scriptWith({ sfxCredit: "no" }))).toThrow(
+      /"sfxCredit" must be true or false/
+    );
+  });
+});
+
 describe("sound effects timed by a word", () => {
   it("reads a word with an offset and a snap to a hit", () => {
     const s = loadScript(
