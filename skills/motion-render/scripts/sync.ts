@@ -156,7 +156,12 @@ function peaks(m: Motion, fps: number, timing: Timing): SyncResult {
         `${c.what} at ${clock(c.t)}: the picture changes only ${x.toFixed(1)}x its usual large change (needs 4x): change the whole picture on this hit, in the way the story's event calls for`
       );
     else if (Math.abs(ms) > 1000 / fps + 10)
-      problems.push(`${c.what} at ${clock(c.t)}: the change is ${ms.toFixed(0)} ms off the hit`);
+      problems.push(
+        `${c.what} at ${clock(c.t)}: the change is ${ms.toFixed(0)} ms off the hit` +
+          (ms > 0
+            ? ": make the biggest change on the hit's own frame, with a cut or a single step (an eased zoom, above all one that scales by ratio, changes most a few frames after it starts)"
+            : "")
+      );
   }
   return { lines, problems };
 }
