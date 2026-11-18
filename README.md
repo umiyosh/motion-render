@@ -10,24 +10,6 @@ An Agent Skill that turns a theme into an **animated explainer video with narrat
 
 From that one line, Claude writes a narration script, generates the narration (Gemini TTS) and a BGM (Lyria), draws a flat explainer (cards, labels, a numbered flow) whose moves follow the words as they are said, and renders it to an MP4 on your machine. A one-minute explainer takes about 10 minutes, with no questions in between.
 
-**For a film cut to the beat, ask for the rich version.**
-
-```
-/motion-render:rich Make a promo for …
-```
-
-The narration sets the time, the animation builds its big moments inside it, and the music follows those moments (it builds into each drop, and stops dead at most once, where the story holds its breath). The music is Lyria's own performance, generated from a description of what happens on screen at each moment and rearranged bar by bar to land on the cues. Every drum hit is detected in the music: the scenes' own moves start on the beat, and in the drops the thing that drives the story (an engine, a press) answers every kick. Before the build, a critic reviews the key frames; after it, the MP4 is measured for pauses in the narration, the timing of the big moments and the reactions to the hits. A film takes about an hour.
-
-|                           | `/motion-render:motion-render` (default)                                  | `/motion-render:rich`                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| For                       | Explaining how something works, quickly                                   | Promos and films that should look and sound rich                                                       |
-| Picture                   | Flat cards, labels and a numbered flow, moving with the narration's words | Built around big moments, moving on the beat; three.js, motion blur and a finishing look when they fit |
-| Music                     | One BGM at a constant low level under the narration                       | Four Lyria takes, rearranged bar by bar onto the film's cues, with every drum hit detected             |
-| Checks                    | The layout check and still frames, then one build                         | The layout check, a preview reviewed by a critic, one build, then a sync report on the MP4             |
-| Time (one minute of film) | About 10 minutes                                                          | About an hour                                                                                          |
-
-The default makes the same kind of film as motion-render 1.1, so existing requests keep working the way they did.
-
 ## Demo
 
 An introduction video made by motion-render itself (57 seconds, with sound).
@@ -152,6 +134,24 @@ On the first run, Chromium (about 210 MB) and ffmpeg are downloaded automaticall
 - After it is done, ask "change the BGM" or "shorten this part" and only that part is redone
 - For an existing Motion film, pass its URL and ask for an MP4. Narration and BGM are added too
 - Asking for a promo, beat sync or a rich film picks `/motion-render:rich` even without its name. Anything else goes to the default
+
+### Films cut to the beat: the rich version
+
+```
+/motion-render:rich Make a promo for …
+```
+
+The narration sets the time, the animation builds its big moments inside it, and the music follows those moments (it builds into each drop, and stops dead at most once, where the story holds its breath). The music is Lyria's own performance, generated from a description of what happens on screen at each moment and rearranged bar by bar to land on the cues. Every drum hit is detected in the music: the scenes' own moves start on the beat, and in the drops the thing that drives the story (an engine, a press) answers every kick. Before the build, a critic reviews the key frames; after it, the MP4 is measured for pauses in the narration, the timing of the big moments and the reactions to the hits. A film takes about an hour.
+
+|                           | `/motion-render:motion-render` (default)                                  | `/motion-render:rich`                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| For                       | Explaining how something works, quickly                                   | Promos and films that should look and sound rich                                                       |
+| Picture                   | Flat cards, labels and a numbered flow, moving with the narration's words | Built around big moments, moving on the beat; three.js, motion blur and a finishing look when they fit |
+| Music                     | One BGM at a constant low level under the narration                       | Four Lyria takes, rearranged bar by bar onto the film's cues, with every drum hit detected             |
+| Checks                    | The layout check and still frames, then one build                         | The layout check, a preview reviewed by a critic, one build, then a sync report on the MP4             |
+| Time (one minute of film) | About 10 minutes                                                          | About an hour                                                                                          |
+
+The default makes the same kind of film as motion-render 1.1, so existing requests keep working the way they did.
 
 ### Commands (used by Claude under the hood)
 
