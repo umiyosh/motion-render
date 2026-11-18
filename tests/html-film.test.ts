@@ -500,41 +500,46 @@ describe("drawing styles", () => {
   });
 });
 
-// A film that draws its text only on a canvas, in the hand-written face: no element of the page uses
-// Klee One, but the script names it.
-const CANVAS_TEXT_PAGE = `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8">
-<link rel="stylesheet" href="kit/fonts.css"><link rel="stylesheet" href="kit/base.css">
-<script src="kit/gsap.min.js"></script><script src="kit/timing.js"></script><script src="kit/player.js"></script>
-<script src="kit/beat.js"></script><script src="kit/fx.js"></script>
-<style>#cv { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }</style>
-</head><body><div id="root"><canvas id="cv"></canvas></div>
-<script>
-  var ctx = fx.canvas("#cv");
-  film.draw(function (t) {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#f4f2ec";
-    ctx.fillRect(0, 0, 1920, 1080);
-    // The text is drawn only when the face is already in: the player has to load it before the first frame.
-    if (t < 1 && document.fonts.check("600 96px 'Klee One'", "要点")) {
-      ctx.fillStyle = "#d23a2a";
-      ctx.font = "600 96px 'Klee One', sans-serif";
-      ctx.fillText("要点が絵になっていない", 200, 540);
-    }
-  });
-</script>
-</body></html>`;
+// A work whose narration matches TIMING, with a sound effect in the first scene unless `credit` is
+// false or there are no sound effects.
+function creditFilm(o: { sfx: boolean; credit?: boolean }): string {
+  const work = tempDir("mr-html-");
+  writeFileSync(join(work, "timing.json"), JSON.stringify(TIMING));
+  const sfx = o.sfx ? [{ at: 0.2, prompt: "soft UI pop", duration: 0.5 }] : [];
+  writeFileSync(
+    join(work, "script.json"),
+    JSON.stringify({
+      bgm: "calm",
+      ...(o.credit === undefined ? {} : { sfxCredit: o.credit }),
+      scenes: [
+        { id: "intro", narration: "はじめに", sfx },
+        { id: "deny", narration: "だめ" },
+      ],
+    })
+  );
+  const film = writeKit(work);
+  writeFileSync(join(film, "index.html"), page(false));
+  return film;
+}
 
-describe("canvas text", () => {
-  it("loads a face the page uses only on a canvas before the first frame", async () => {
-    const film = await openFilm(filmOf(CANVAS_TEXT_PAGE));
+describe("the SFX credit", () => {
+  it("is drawn on the first scene of a film with sound effects, and passes the layout check", async () => {
+    const film = await openFilm(creditFilm({ sfx: true }));
     try {
-      // The first frame has the hand-written text; the second is the bare paper.
-      const text = await film.frame(0.5);
-      expect(text.equals(await film.frame(1.5))).toBe(false);
-      expect((await film.frame(0.5)).equals(text)).toBe(true);
+      const shown = async (t: number) =>
+        ((await film.inspect?.(t)) ?? []).some((b) => b.label.includes("SFX: 11.ai"));
+      expect(await shown(0.5)).toBe(true);
+      expect(await shown(1.5)).toBe(false);
+      expect(await checkLayout(film)).toEqual([]);
     } finally {
       await film.close();
+    }
+  });
+
+  it("is left out without sound effects, and when the script turns it off", () => {
+    for (const o of [{ sfx: false }, { sfx: true, credit: false }]) {
+      const timing = readFileSync(join(creditFilm(o), "kit", "timing.js"), "utf8");
+      expect(timing).not.toContain("sfxCredit");
     }
   });
 });

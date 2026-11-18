@@ -82,7 +82,7 @@ argument-hint: "<動画のテーマ。長さ・出力先などの指定があれ
 - **`bpm`・`section`・`score` は書かない。** これらがあると、コマンドが音ハメの流れ（`/motion-render:rich` の、曲の候補 4 本と並べ替え）で動く
 - `id` は英小文字・数字・`-`。`bgm`・`score`・`mix`・`hits`・`sfx` は使えない
 - `narration` は TTS に読ませる文。英語の固有名詞・略語はカタカナで書く（`GitHub Actions` → `ギットハブアクションズ`）。画面の文字は元の表記のまま
-- 任意: `voice`（既定 `Kore`）・`speed`（既定 1.1）・`bgmVolume`（既定 0.15）・`sfxVolume`・`lead`・`tail`・`endHold`、場面ごとの `sfx`（下の「効果音」）。既定のままなら書かない
+- 任意: `voice`（既定 `Kore`）・`speed`（既定 1.1）・`bgmVolume`（既定 0.15）・`sfxVolume`・`sfxCredit`（既定 true。効果音の表記を自動で描く）・`lead`・`tail`・`endHold`、場面ごとの `sfx`（下の「効果音」）。既定のままなら書かない
 
 ## 手順
 
@@ -192,7 +192,9 @@ motion-render build <work> [<出力.mp4>]
 
 **表記**: 月額プランなしで作った効果音は、商用に使えず、公開するときは題名に `elevenlabs.io` か `11.ai` を入れる
 （ElevenLabs のヘルプ「Can I publish the content I generate on the platform?」）。効果音を付けた動画では、
-タイトルの場面に `SFX: 11.ai` を小さく入れる。利用者が月額プランに入っていると言った場合は省いてよい。
+タイトルの場面に `SFX: 11.ai` を小さく入れる。html の映像では、プレーヤーが最初の場面の右下に自動で描く（手で入れない）。
+Claude Motion で作る映像では、タイトルの場面に手で小さく入れる。利用者が月額プランに入っていると言った場合は、
+`script.json` に `"sfxCredit": false` を書いて外す（Motion では入れない）。
 
 ## Claude Motion で作るとき
 
