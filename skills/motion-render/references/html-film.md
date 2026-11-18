@@ -738,5 +738,7 @@ motion-render check <work>/film
 ## 効果音
 
 `script.json` の `sfx` の `at` には、その音を鳴らす動きに渡した `film.at(場面, 秒)` の秒をそのまま書く。
+語に合わせた動きの音は `"at": { "word": "語", "offset": 0.1, "snap": "hit" }` と語で書く（`offset` と `snap` は任意）。
+`build` が映像の `film.word` と同じ計算で秒にし、`"snap": "hit"` なら `beat.snap` と同じく近くの一打に寄せる。
 例えば `tl.fromTo("#key", …, film.at("problem", 1.6))` に合わせる音は、場面 `problem` の `"at": 1.6`。
 効果音を付けた動画では、プレーヤーが最初の場面の右下に `SFX: 11.ai` を自動で描く（`script.json` の `"sfxCredit": false` で外す）。

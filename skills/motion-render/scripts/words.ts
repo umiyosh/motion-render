@@ -11,6 +11,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { db, decodeMono, envelope } from "./signal.ts";
 import { clock, type Script, type Timing } from "./work.ts";
+import { isRecord, readJson } from "./json.ts";
 import { parseBars } from "./score.ts";
 import type { SyncResult } from "./sync.ts";
 
@@ -203,4 +204,65 @@ export function voiceInStops(work: string, script: Script, timing: Timing): Sync
     return `stop ${clock(a)}-${clock(b)}: ${hit.length ? "voice in it" : "no voice in it"}`;
   });
   return { lines, problems };
+}
+
+// The second, into its scene, of each sound effect timed by a word: the film's film.word for that
+// word (lead + its time in the scene's WAV / speed), plus the offset, and with `snap` the nearest
+// kick, snare or rim hit within an eighth of a bar, as beat.snap moves the film's motion. Times
+// copied from words.json by hand were off by 0.03-0.40 s in #87. Before the score is arranged there
+// are no hits, and a snapped effect keeps its word time.
+export function resolveSfxTimes(work: string, script: Script, timing: Timing): Script {
+  if (!script.scenes.some((s) => s.sfx.some((fx) => fx.word))) return script;
+  const words = loadWords(work, script);
+  const hits = loadSnapHits(work);
+  const scenes = script.scenes.map((sc) => ({
+    ...sc,
+    sfx: sc.sfx.map((fx) => {
+      if (!fx.word) return fx;
+      const w = words[sc.id];
+      if (!w)
+        throw new Error(
+          `sound effect "${fx.prompt}": scene "${sc.id}" has no narration audio yet (run narrate)`
+        );
+      const i = w.text.indexOf(fx.word.word);
+      if (i < 0)
+        throw new Error(
+          `sound effect "${fx.prompt}": the narration of "${sc.id}" does not say "${fx.word.word}"`
+        );
+      let at = script.lead + w.chars[i]![0] / script.speed + fx.word.offset;
+      const start = timing.scenes.find((t) => t.id === sc.id)?.start ?? 0;
+      if (fx.word.snap && hits) {
+        const near = nearestHit(hits, start + at);
+        if (near !== null) at = near - start;
+      }
+      return { ...fx, at: Math.round(at * 1000) / 1000 };
+    }),
+  }));
+  return { ...script, scenes };
+}
+
+interface SnapHits {
+  bar: number;
+  times: number[];
+}
+
+function loadSnapHits(work: string): SnapHits | null {
+  const file = join(work, "audio", "hits.json");
+  if (!existsSync(file)) return null;
+  const raw = readJson(file);
+  if (!isRecord(raw) || typeof raw.bar !== "number" || !Array.isArray(raw.hits)) return null;
+  const times = raw.hits.flatMap((h: unknown) =>
+    isRecord(h) && typeof h.t === "number" && (h.k === "kick" || h.k === "snare" || h.k === "rim")
+      ? [h.t]
+      : []
+  );
+  return { bar: raw.bar, times };
+}
+
+function nearestHit(h: SnapHits, t: number): number | null {
+  let best: number | null = null;
+  for (const x of h.times)
+    if (Math.abs(x - t) <= h.bar / 8 && (best === null || Math.abs(x - t) < Math.abs(best - t)))
+      best = x;
+  return best;
 }
