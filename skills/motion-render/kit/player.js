@@ -484,12 +484,16 @@
   // Load every glyph the film shows before the first frame, and fail if any is missing.
   function usesFamily(family) {
     var name = family.replace(/"/g, "");
+    // Text drawn on a canvas uses no element, and the canvas does not load the face before it draws.
+    // A face the page's own markup or scripts name counts as used, so it is in before the first frame.
+    if (document.documentElement.innerHTML.indexOf(name) >= 0) return true;
     return Array.prototype.some.call(document.querySelectorAll("body, body *"), function (e) {
       return getComputedStyle(e).fontFamily.indexOf(name) >= 0;
     });
   }
   async function loadFonts() {
-    var text = document.body.textContent.replace(/\s+/g, "") + "0123456789";
+    // The whole page's text, scripts included: a canvas draws strings that only a script holds.
+    var text = document.documentElement.textContent.replace(/\s+/g, "") + "0123456789";
     var faces = [];
     FONTS.forEach(function (f) {
       if (f.optional && !usesFamily(f.family)) return;
