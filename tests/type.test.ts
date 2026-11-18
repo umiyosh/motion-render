@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { loadScript, writeTiming } from "../skills/motion-render/scripts/work.ts";
 import { pageWords } from "../skills/motion-render/scripts/words.ts";
 import { writeKit } from "../skills/motion-render/scripts/kit.ts";
@@ -110,11 +110,20 @@ async function differ(a: Buffer, b: Buffer): Promise<number> {
   return n;
 }
 
-const passesCheck = (dir: string): void => {
-  const r = spawnSync(process.execPath, [CLI, "check", dir], { encoding: "utf8" });
-  expect(r.stdout + r.stderr).toContain("layout ok");
-  expect(r.status).toBe(0);
-};
+// The check command runs without blocking the worker too (#113): two tests check every way in
+// turn, and a blocking run held the worker long enough for vitest's "onTaskUpdate" to time out.
+async function passesCheck(dir: string): Promise<void> {
+  const r = await new Promise<{ out: string; code: number | null }>((ok, fail) => {
+    const p = spawn(process.execPath, [CLI, "check", dir]);
+    let out = "";
+    p.stdout.on("data", (c: Buffer) => (out += c.toString()));
+    p.stderr.on("data", (c: Buffer) => (out += c.toString()));
+    p.on("error", fail);
+    p.on("close", (code) => ok({ out, code }));
+  });
+  expect(r.out).toContain("layout ok");
+  expect(r.code).toBe(0);
+}
 
 describe("film.say", () => {
   for (const how of ENTER) {
@@ -179,9 +188,9 @@ describe("film.say", () => {
     });
   });
 
-  it("passes the check command (layout, and the same frames after seeking back) in every way", () => {
+  it("passes the check command (layout, and the same frames after seeking back) in every way", async () => {
     for (const how of ENTER)
-      passesCheck(
+      await passesCheck(
         film(`film.say(tl, "#t", "intro", "動く", { how: "${how}", cursor: true });`).dir
       );
   });
@@ -209,9 +218,9 @@ describe("film.mark", () => {
     });
   }
 
-  it("passes the check command in every way", () => {
+  it("passes the check command in every way", async () => {
     for (const how of ["highlight", "underline", "strike", "circle", "color", "bump"])
-      passesCheck(film(`film.mark(tl, "#t", "intro", "動く", { how: "${how}" });`).dir);
+      await passesCheck(film(`film.mark(tl, "#t", "intro", "動く", { how: "${how}" });`).dir);
   });
 });
 
@@ -225,7 +234,7 @@ describe("film.swap", () => {
         expect(await texts(at - FRAME)).toEqual(['span "動く"']);
         expect(await texts(at + 1)).toEqual(['span "着く"']);
       });
-      passesCheck(dir);
+      await passesCheck(dir);
     });
   }
 });
@@ -242,7 +251,7 @@ describe("film.count", () => {
       expect(mid).toBeLessThan(1200);
       expect(await shown(at + 1)).toBe("1,200");
     });
-    passesCheck(dir);
+    await passesCheck(dir);
   });
 });
 
@@ -258,7 +267,7 @@ describe("film.karaoke", () => {
       expect(await lit(at - 0.2, "動")).toBe(false);
       expect(await lit(at + 0.3, "動")).toBe(true);
     });
-    passesCheck(dir);
+    await passesCheck(dir);
   });
 });
 
