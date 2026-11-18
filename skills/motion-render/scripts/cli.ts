@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
+import { passedUnchanged, recordPass } from "./layoutcache.ts";
 import { openFilm, checkFilmDir, isHtmlFilm, capturePages, type Film } from "./render.ts";
 import { inOrder } from "./inorder.ts";
 import { checkLayout, formatIssue } from "./layout.ts";
@@ -176,6 +177,12 @@ async function stills(filmDir: string, outDir: string, list: string): Promise<vo
 async function check(filmDir: string, scenes: string[]): Promise<void> {
   if (!isHtmlFilm(filmDir))
     throw new Error("check works on html films only (Motion films draw in their own player)");
+  // A whole film that passed and has not changed since is not checked again; scene files are.
+  const since = scenes.length ? null : passedUnchanged(filmDir);
+  if (since) {
+    console.log(`layout ok: ${filmDir} (unchanged since ${since})`);
+    return;
+  }
   const film = await openFilm(filmDir, { pages: capturePages(), scenes });
   let n: number;
   try {
@@ -188,6 +195,7 @@ async function check(filmDir: string, scenes: string[]): Promise<void> {
   }
   const what = scenes.length ? `${filmDir} (${scenes.join(", ")})` : filmDir;
   if (n) throw new Error(`${n} layout issues in ${what}`);
+  if (!scenes.length) recordPass(filmDir);
   console.log(`layout ok: ${what}`);
 }
 
@@ -282,6 +290,11 @@ async function encode(
 // forth, and frames are captured on new pages that only go forward, as a viewer's player does.
 async function checkBeforeCapture(filmDir: string): Promise<void> {
   if (!isHtmlFilm(filmDir)) return;
+  const since = passedUnchanged(filmDir);
+  if (since) {
+    console.error(`layout: ok (unchanged since ${since})`);
+    return;
+  }
   const film = await openFilm(filmDir, { pages: capturePages() });
   try {
     if (await reportLayout(film, filmDir))
@@ -291,6 +304,7 @@ async function checkBeforeCapture(filmDir: string): Promise<void> {
   } finally {
     await film.close();
   }
+  recordPass(filmDir);
 }
 
 function checkInputs(work: string, script: Script): void {
