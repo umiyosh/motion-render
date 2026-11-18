@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
+import { passedUnchanged, recordPass } from "./layoutcache.ts";
 import { openFilm, checkFilmDir, isHtmlFilm, capturePages, type Film } from "./render.ts";
 import { inOrder } from "./inorder.ts";
 import { checkLayout, formatIssue } from "./layout.ts";
@@ -44,13 +45,14 @@ import {
   scoreInput,
   syncPreview,
   syncReport,
+  stopBarLines,
   timingTable,
 } from "./beatcli.ts";
 import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.ts";
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 import { stepsTable, timed, workOf } from "./steps.ts";
-import { ranOnLines, writeWords } from "./words.ts";
+import { ranOnLines, resolveSfxTimes, writeWords } from "./words.ts";
 import { mp4Picture, writeSheet } from "./sheet.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
@@ -175,6 +177,12 @@ async function stills(filmDir: string, outDir: string, list: string): Promise<vo
 async function check(filmDir: string, scenes: string[]): Promise<void> {
   if (!isHtmlFilm(filmDir))
     throw new Error("check works on html films only (Motion films draw in their own player)");
+  // A whole film that passed and has not changed since is not checked again; scene files are.
+  const since = scenes.length ? null : passedUnchanged(filmDir);
+  if (since) {
+    console.log(`layout ok: ${filmDir} (unchanged since ${since})`);
+    return;
+  }
   const film = await openFilm(filmDir, { pages: capturePages(), scenes });
   let n: number;
   try {
@@ -187,6 +195,7 @@ async function check(filmDir: string, scenes: string[]): Promise<void> {
   }
   const what = scenes.length ? `${filmDir} (${scenes.join(", ")})` : filmDir;
   if (n) throw new Error(`${n} layout issues in ${what}`);
+  if (!scenes.length) recordPass(filmDir);
   console.log(`layout ok: ${what}`);
 }
 
@@ -204,8 +213,10 @@ async function runNarrate(work: string): Promise<void> {
     `words: times for ${timed} of ${script.scenes.length} scenes -> ${join(work, "words.json")}`
   );
   for (const line of ranOnLines(work, script)) console.log(line);
-  if (timing.bpm) console.log(timingTable(timing));
-  else for (const s of timing.scenes) console.log(`${s.id}\tstart ${s.start}s\tdur ${s.dur}s`);
+  if (timing.bpm) {
+    console.log(timingTable(timing));
+    for (const line of stopBarLines(timing, script)) console.log(line);
+  } else for (const s of timing.scenes) console.log(`${s.id}\tstart ${s.start}s\tdur ${s.dur}s`);
   console.log(`total: ${timing.total}s -> ${join(work, "timing.json")}`);
 }
 
@@ -220,7 +231,14 @@ async function runBgm(work: string, again: boolean): Promise<void> {
 async function runSfx(work: string): Promise<void> {
   const script = loadScript(work);
   const made = await makeSfx(work, script);
-  const preview = await previewSfx(work, script);
+  // Effects timed by a word show their second once the narration is there; before it, as written.
+  let timed = script;
+  try {
+    timed = resolveSfxTimes(work, script, loadTiming(work));
+  } catch {
+    // no narration or timing yet: the list shows the times as written, and build resolves them
+  }
+  const preview = await previewSfx(work, timed);
   if (!preview) {
     console.log("no sound effects in script.json");
     return;
@@ -273,6 +291,11 @@ async function encode(
 // forth, and frames are captured on new pages that only go forward, as a viewer's player does.
 async function checkBeforeCapture(filmDir: string): Promise<void> {
   if (!isHtmlFilm(filmDir)) return;
+  const since = passedUnchanged(filmDir);
+  if (since) {
+    console.error(`layout: ok (unchanged since ${since})`);
+    return;
+  }
   const film = await openFilm(filmDir, { pages: capturePages() });
   try {
     if (await reportLayout(film, filmDir))
@@ -282,6 +305,7 @@ async function checkBeforeCapture(filmDir: string): Promise<void> {
   } finally {
     await film.close();
   }
+  recordPass(filmDir);
 }
 
 function checkInputs(work: string, script: Script): void {
@@ -315,7 +339,8 @@ async function build(work: string, out: string, fpsArg: number): Promise<void> {
     const warn = (w: string) => console.error(`warning: ${w}`);
     const scenes = placeOnFilm(timing, film.meta, script, warn);
     const narration = await narrationLevel(work, script);
-    const sfx = placeSfx(script, film.meta.parts, warn).map((c) => sfxTrack(work, c, narration));
+    const timedSfx = resolveSfxTimes(work, script, timing);
+    const sfx = placeSfx(timedSfx, film.meta.parts, warn).map((c) => sfxTrack(work, c, narration));
     const audio = join(work, "audio", "mix.m4a");
     const score = script.bpm ? scoreInput(work, script, narration) : undefined;
     await mix(

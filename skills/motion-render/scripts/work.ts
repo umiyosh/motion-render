@@ -6,8 +6,17 @@ import { isRecord, readJson, type Json } from "./json.ts";
 import { isLook, LOOKS, type LookName } from "./look.ts";
 
 // A sound effect, `at` seconds after its scene starts.
+// A sound effect timed by a word of its scene's narration, resolved by words.ts as the film resolves
+// film.word, and snapped to the nearest hit when the film snaps its motion with beat.snap.
+interface SfxWord {
+  word: string;
+  offset: number;
+  snap: boolean;
+}
+
 export interface Sfx {
-  at: number;
+  at: number; // seconds into the scene; for an effect timed by `word`, set by resolveSfxTimes
+  word?: SfxWord;
   prompt: string;
   duration: number;
   volume: number;
@@ -50,6 +59,7 @@ export interface Script {
   scoreLevel: number; // dB of the score's loud bars against the narration's mean level
   motionBlur: number; // pictures averaged into each frame of the MP4 (1 = no blur)
   look?: LookName; // the finishing layer put on at export (look.ts)
+  sfxCredit: boolean; // draw "SFX: 11.ai" on the first scene when the film has sound effects (player.js)
 }
 
 export interface TimingScene {
@@ -82,6 +92,8 @@ const DEFAULTS = {
   // the same film with the score at 0.9 times that (+4.1 dB) was judged right (2026-11-12).
   scoreLevel: 4.1,
   motionBlur: 1,
+  // Sound effects made without a paid ElevenLabs plan must credit 11.ai; the player draws it.
+  sfxCredit: true,
 };
 
 const SFX_DURATION = 1.5; // asked for when a sound effect gives no length, so none runs long
@@ -94,6 +106,15 @@ function fail(msg: string): never {
   throw new Error(`script.json: ${msg}`);
 }
 
+function parseSfxWord(v: Json, path: string): SfxWord {
+  const { word, snap } = v;
+  if (typeof word !== "string" || !word.trim())
+    fail(`${path}.word must be a word of the narration`);
+  if (snap !== undefined && snap !== "hit") fail(`${path}.snap must be "hit"`);
+  const offset = v.offset === undefined ? 0 : num(v, "offset", -5, 5, path);
+  return { word, offset, snap: snap === "hit" };
+}
+
 function parseSfx(value: unknown, path: string, volume: number): Sfx[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) fail(`${path} must be an array`);
@@ -103,8 +124,10 @@ function parseSfx(value: unknown, path: string, volume: number): Sfx[] {
     const { prompt } = fx;
     if (typeof prompt !== "string" || !prompt.trim()) fail(`${at}.prompt is required`);
     const s = { duration: SFX_DURATION, volume, ...fx };
+    const word = isRecord(fx.at) ? parseSfxWord(fx.at, `${at}.at`) : undefined;
     return {
-      at: num(s, "at", 0, 600, at),
+      at: word ? 0 : num(s, "at", 0, 600, at),
+      ...(word ? { word } : {}),
       prompt,
       duration: num(s, "duration", 0.5, 10, at),
       volume: num(s, "volume", 0, 1, at),
@@ -186,6 +209,12 @@ function name(s: Json, key: string): string {
   return v;
 }
 
+function bool(s: Json, key: string): boolean {
+  const v = s[key];
+  if (typeof v !== "boolean") fail(`"${key}" must be true or false`);
+  return v;
+}
+
 export function loadScript(work: string): Script {
   const file = join(work, "script.json");
   if (!existsSync(file))
@@ -212,6 +241,7 @@ export function loadScript(work: string): Script {
     bgmModel: name(s, "bgmModel"),
     scoreLevel: num(s, "scoreLevel", -20, 12),
     motionBlur: whole(s, "motionBlur", 1, 8),
+    sfxCredit: bool(s, "sfxCredit"),
     ...(s.bpm === undefined ? {} : { bpm: num(s, "bpm", 60, 200) }),
     ...(s.score === undefined ? {} : { score: parseScore(s.score) }),
     ...(s.look === undefined ? {} : { look: parseLook(s.look) }),

@@ -263,3 +263,37 @@ describe("placeSfx", () => {
     expect(placeSfx(script([], [pop]), [parts[0]!], vi.fn())).toEqual([]);
   });
 });
+
+describe("the SFX credit option", () => {
+  it("credits the sound effects unless the script turns it off", () => {
+    expect(loadScript(workDir(SCRIPT)).sfxCredit).toBe(true);
+    expect(loadScript(scriptWith({ sfxCredit: false })).sfxCredit).toBe(false);
+  });
+
+  it("rejects a value that is not true or false", () => {
+    expect(() => loadScript(scriptWith({ sfxCredit: "no" }))).toThrow(
+      /"sfxCredit" must be true or false/
+    );
+  });
+});
+
+describe("sound effects timed by a word", () => {
+  it("reads a word with an offset and a snap to a hit", () => {
+    const s = loadScript(
+      workDir(
+        sfxScript([{ at: { word: "はじめ", offset: 0.1, snap: "hit" }, prompt: "soft UI pop" }])
+      )
+    );
+    expect(s.scenes[0]?.sfx[0]).toMatchObject({
+      at: 0,
+      word: { word: "はじめ", offset: 0.1, snap: true },
+    });
+  });
+
+  it.each([
+    [{ word: "" }, /\.word must be a word of the narration/],
+    [{ word: "はじめ", snap: "beat" }, /\.snap must be "hit"/],
+  ])("rejects %j", (at, msg) => {
+    expect(() => loadScript(workDir(sfxScript([{ at, prompt: "pop" }])))).toThrow(msg);
+  });
+});
