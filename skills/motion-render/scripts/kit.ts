@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { loadScript, loadTiming, type Script } from "./work.ts";
+import { kitApiPage } from "./kitapi.ts";
 import { readJson } from "./json.ts";
 import { pageWords } from "./words.ts";
 
@@ -140,7 +141,9 @@ export function writeKit(work: string): string {
   ])
     copyFileSync(join(KIT, f), join(kit, f));
   copyLibraries(kit);
-  writeFileSync(join(kit, "fonts.css"), FONT_CSS.map((f) => fontCss(f, kit)).join("\n"));
+  const fontsCss = FONT_CSS.map((f) => fontCss(f, kit)).join("\n");
+  writeFileSync(join(kit, "fonts.css"), fontsCss);
+  writeFileSync(join(kit, "API.md"), kitApiPage(join(KIT, ".."), fontsCss));
   writeKitTiming(work);
   writeFileSync(join(film, "film.json"), JSON.stringify({ kind: "html" }) + "\n");
   return film;
