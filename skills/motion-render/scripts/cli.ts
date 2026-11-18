@@ -52,7 +52,7 @@ import { checkSfx, makeSfx, narrationLevel, previewSfx, sfxTrack } from "./sfx.t
 import { prepare } from "./store.ts";
 import { errorMessage, field, readJson } from "./json.ts";
 import { stepsTable, timed, workOf } from "./steps.ts";
-import { resolveSfxTimes, writeWords } from "./words.ts";
+import { ranOnLines, resolveSfxTimes, writeWords } from "./words.ts";
 import { mp4Picture, writeSheet } from "./sheet.ts";
 
 const USAGE = `usage (one work dir per video; see SKILL.md for its layout):
@@ -212,6 +212,7 @@ async function runNarrate(work: string): Promise<void> {
   console.log(
     `words: times for ${timed} of ${script.scenes.length} scenes -> ${join(work, "words.json")}`
   );
+  for (const line of ranOnLines(work, script)) console.log(line);
   if (timing.bpm) {
     console.log(timingTable(timing));
     for (const line of stopBarLines(timing, script)) console.log(line);

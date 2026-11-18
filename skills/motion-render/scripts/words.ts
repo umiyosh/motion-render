@@ -39,22 +39,88 @@ function voicedRuns(x: Float32Array): [number, number][] {
   return runs;
 }
 
-// Joins neighboring runs across their shortest gaps until there are `n`: a breath or a pause the text
-// does not mark splits a phrase in two.
-function joinRuns(runs: [number, number][], n: number): [number, number][] {
-  const r = runs.map(([a, b]): [number, number] => [a, b]);
-  while (r.length > n) {
-    let g = 1;
-    for (let j = 2; j < r.length; j++) if (r[j]![0] - r[j - 1]![1] < r[g]![0] - r[g - 1]![1]) g = j;
-    r[g - 1]![1] = r[g]![1];
-    r.splice(g, 1);
-  }
-  return r;
+// Matches the text's pauses (、。) to the silences between runs of voice, by position (#71). Each
+// pause is expected where its share of the scene's voiced characters falls on the voiced time (the
+// time with the silences taken out). A pause takes the silence nearest that place, in order, or none
+// when the voice ran on through it; a silence left unused (a small っ, a breath) costs its length, so a
+// long silence is rarely left out. Joining runs across their shortest gaps alone, as before, put a
+// phrase 1 s late when a っ and a skipped pause met in one scene.
+const RAN_ON = 0.15; // s of mismatch a pause with no silence costs
+const UNUSED = 1; // cost per second of a silence that ends no phrase
+
+interface Voiced {
+  runs: [number, number][];
+  cum: number[]; // voiced seconds before each run
+  total: number;
 }
 
-// [start, end] in seconds into the samples for each character of `text` (by code point). A
-// character that is not voiced (punctuation, spaces) gets the moment between its neighbors.
-export function charTimes(x: Float32Array, text: string): [number, number][] {
+function voicedTime(runs: [number, number][]): Voiced {
+  const cum: number[] = [];
+  let total = 0;
+  for (const [a, b] of runs) {
+    cum.push(total);
+    total += b - a;
+  }
+  return { runs, cum, total };
+}
+
+// Seconds into the samples at voiced time v. At a silence, a start goes after it and an end before.
+function realAt(v: Voiced, t: number, side: "start" | "end"): number {
+  for (let i = 0; i < v.runs.length; i++) {
+    const [a, b] = v.runs[i]!;
+    const until = v.cum[i]! + (b - a);
+    if (side === "start" ? t < until : t <= until) return a + (t - v.cum[i]!);
+  }
+  return v.runs.at(-1)![1];
+}
+
+// The voiced time each pause falls on: the end of a silence it took, or where it was expected.
+function matchPauses(v: Voiced, shares: number[]): { at: number[]; ranOn: number } {
+  const gaps = v.runs.slice(1).map((r, g) => ({ at: v.cum[g + 1]!, len: r[0] - v.runs[g]![1] }));
+  const want = shares.map((f) => f * v.total);
+  const m = want.length,
+    k = gaps.length;
+  // cost[b][g]: the best cost of placing pauses b.. with silences g.. still free
+  const cost: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(k + 1).fill(0));
+  const pick: string[][] = Array.from({ length: m + 1 }, () => new Array<string>(k + 1).fill(""));
+  for (let g = k - 1; g >= 0; g--) cost[m]![g] = cost[m]![g + 1]! + UNUSED * gaps[g]!.len;
+  for (let b = m - 1; b >= 0; b--) {
+    cost[b]![k] = cost[b + 1]![k]! + RAN_ON;
+    pick[b]![k] = "none";
+    for (let g = k - 1; g >= 0; g--) {
+      const take = Math.abs(gaps[g]!.at - want[b]!) + cost[b + 1]![g + 1]!;
+      const skip = UNUSED * gaps[g]!.len + cost[b]![g + 1]!;
+      const none = RAN_ON + cost[b + 1]![g]!;
+      const best = Math.min(take, skip, none);
+      cost[b]![g] = best;
+      pick[b]![g] = best === take ? "take" : best === skip ? "skip" : "none";
+    }
+  }
+  const at: number[] = [];
+  let ranOn = 0;
+  for (let b = 0, g = 0; b < m;) {
+    const p = pick[b]![g];
+    if (p === "take") {
+      at.push(gaps[g]!.at);
+      b++;
+      g++;
+    } else if (p === "skip") g++;
+    else {
+      at.push(want[b]!);
+      ranOn++;
+      b++;
+    }
+  }
+  return { at, ranOn };
+}
+
+// [start, end] in seconds into the samples for each character of `text` (by code point), and how many
+// of its pauses the voice ran on through. A character that is not voiced (punctuation, spaces) gets
+// the moment between its neighbors.
+export function charTiming(
+  x: Float32Array,
+  text: string
+): { times: [number, number][]; ranOn: number } {
   const ch = [...text];
   const phrases: number[][] = [[]];
   ch.forEach((c, i) => {
@@ -63,22 +129,25 @@ export function charTimes(x: Float32Array, text: string): [number, number][] {
   });
   const ph = phrases.filter((p) => p.length);
   const found = voicedRuns(x);
-  if (!ph.length || !found.length) return ch.map(() => [0, 0]);
-  // When the voice ran on where the text marks a pause, its phrases cannot be told apart: the
-  // whole voice is spread as one.
-  const runs =
-    found.length >= ph.length
-      ? joinRuns(found, ph.length)
-      : [[found[0]![0], found.at(-1)![1]] as [number, number]];
-  const groups = runs.length === ph.length ? ph : [ph.flat()];
+  if (!ph.length || !found.length) return { times: ch.map(() => [0, 0]), ranOn: 0 };
+  const v = voicedTime(found);
+  const all = ph.reduce((n, p) => n + p.length, 0);
+  let seen = 0;
+  const shares = ph.slice(0, -1).map((p) => (seen += p.length) / all);
+  const { at, ranOn } = matchPauses(v, shares);
+  const bounds = [0, ...at, v.total];
   const out: [number, number][] = ch.map(() => [NaN, NaN]);
-  groups.forEach((p, j) => {
-    const [a, b] = runs[j]!;
-    p.forEach(
-      (i, n) => (out[i] = [a + ((b - a) * n) / p.length, a + ((b - a) * (n + 1)) / p.length])
-    );
+  ph.forEach((p, j) => {
+    const a = bounds[j]!,
+      b = bounds[j + 1]!;
+    p.forEach((i, n) => {
+      out[i] = [
+        realAt(v, a + ((b - a) * n) / p.length, "start"),
+        realAt(v, a + ((b - a) * (n + 1)) / p.length, "end"),
+      ];
+    });
   });
-  let last = runs[0]![0];
+  let last = found[0]![0];
   for (let i = 0; i < out.length; i++) {
     if (Number.isNaN(out[i]![0])) {
       const next = out.slice(i + 1).find((t) => !Number.isNaN(t[0]))?.[0] ?? last;
@@ -86,7 +155,11 @@ export function charTimes(x: Float32Array, text: string): [number, number][] {
     }
     last = out[i]![1];
   }
-  return out;
+  return { times: out, ranOn };
+}
+
+export function charTimes(x: Float32Array, text: string): [number, number][] {
+  return charTiming(x, text).times;
 }
 
 const sceneAudio = (work: string, id: string): string => join(work, "audio", `${id}.wav`);
@@ -265,4 +338,21 @@ function nearestHit(h: SnapHits, t: number): number | null {
     if (Math.abs(x - t) <= h.bar / 8 && (best === null || Math.abs(x - t) < Math.abs(best - t)))
       best = x;
   return best;
+}
+
+// One line per scene whose voice ran on through a pause of its text: the phrases after that pause are
+// placed by their length, not on a rise of the voice, so a word that must land with the voice belongs
+// at the head of a phrase the voice stops before (#71).
+export function ranOnLines(work: string, script: Pick<Script, "scenes">): string[] {
+  return script.scenes.flatMap((s) => {
+    const wav = sceneAudio(work, s.id);
+    if (!existsSync(wav)) return [];
+    const { ranOn } = charTiming(decodeMono(wav), s.narration);
+    if (!ranOn) return [];
+    const pauses =
+      s.narration.split(PAUSE).filter((p) => [...p].some((c) => !QUIET.test(c))).length - 1;
+    return [
+      `words: the voice of "${s.id}" ran on through ${ranOn} of ${pauses} pauses; the phrases after them are placed by their length, not on the voice (move a word that must land with the voice to a phrase the voice stops before)`,
+    ];
+  });
 }
