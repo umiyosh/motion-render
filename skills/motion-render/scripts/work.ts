@@ -33,6 +33,7 @@ interface Scene {
   narration: string;
   sfx: Sfx[];
   section?: Section;
+  stop?: true; // the music stops in the bar before this scene, so that bar is kept free of voice
 }
 
 // Which generated take scores the film, and which of its bars play at each bar of the film
@@ -69,6 +70,7 @@ export interface TimingScene {
   dur: number;
   speech: number;
   section?: Section;
+  stop?: true;
 }
 
 export interface Timing {
@@ -139,10 +141,20 @@ function isSection(v: unknown): v is Section {
   return typeof v === "string" && (SECTIONS as readonly string[]).includes(v);
 }
 
+// A stop is a bar of silence before a section head, so it needs a scene before it and a section.
+function parseStop(stop: unknown, section: unknown, i: number): boolean {
+  if (stop === undefined) return false;
+  if (stop !== true) fail(`scenes[${i}].stop must be true`);
+  if (i === 0) fail("scenes[0].stop: the first scene has no bar before it to stop the music in");
+  if (section === undefined)
+    fail(`scenes[${i}].stop needs a "section": the music stops in the bar before a section head`);
+  return true;
+}
+
 function parseScenes(value: unknown, sfxVolume: number): Scene[] {
   if (!Array.isArray(value) || !value.length) fail('"scenes" must be a non-empty array');
   const seen = new Set<string>();
-  return value.map((sc: unknown, i) => {
+  const scenes = value.map((sc: unknown, i) => {
     if (!isRecord(sc)) fail(`scenes[${i}] must be an object`);
     const { id, name, narration, section } = sc;
     if (typeof id !== "string" || !ID.test(id)) fail(`scenes[${i}].id must match ${ID}`);
@@ -157,14 +169,20 @@ function parseScenes(value: unknown, sfxVolume: number): Scene[] {
     if (section !== undefined && !isSection(section))
       fail(`scenes[${i}].section must be one of ${SECTIONS.join(", ")}`);
     const sfx = parseSfx(sc.sfx, `scenes[${i}].sfx`, sfxVolume);
+    const stop = parseStop(sc.stop, section, i);
     return {
       id,
       narration,
       sfx,
       ...(typeof name === "string" ? { name } : {}),
       ...(section ? { section } : {}),
+      ...(stop ? { stop: true as const } : {}),
     };
   });
+  // "score" warns from the second stop on; a second mark would only lay out a bar for it.
+  if (scenes.filter((s) => s.stop).length > 1)
+    fail('only one scene may have "stop": one stop per film, where the story holds its breath');
+  return scenes;
 }
 
 function parseScore(v: unknown): ScoreCut | undefined {
@@ -252,7 +270,10 @@ const r3 = (t: number): number => Math.round(t * 1000) / 1000;
 const up = (t: number, unit: number): number => Math.ceil(t / unit - 1e-6) * unit;
 
 // Beat-synced lengths: every scene starts on a beat, a scene that starts a section on a bar line, and
-// the last scene's narration ends before the final hit, which falls on the next bar line.
+// the last scene's narration ends before the final hit, which falls on the next bar line. A scene
+// with "stop" starts a whole bar after that bar line, so the bar where the music stops holds no
+// voice whatever length the take came out at (#111: cutting the line moved the section a bar
+// earlier, and the stop with it).
 function gridScenes(script: Script, speeches: number[], bpm: number): Timing {
   const beat = 60 / bpm,
     bar = 4 * beat;
@@ -261,7 +282,7 @@ function gridScenes(script: Script, speeches: number[], bpm: number): Timing {
   const scenes = script.scenes.map((sc, i) => {
     const need = start + script.lead + speeches[i]! + script.tail;
     const next = script.scenes[i + 1];
-    end = next ? up(need, next.section ? bar : beat) : up(need, bar);
+    end = next ? up(need, next.section ? bar : beat) + (next.stop ? bar : 0) : up(need, bar);
     const row = {
       id: sc.id,
       name: sc.name ?? sc.id,
@@ -269,6 +290,7 @@ function gridScenes(script: Script, speeches: number[], bpm: number): Timing {
       dur: r3(end - start + (next ? 0 : script.endHold)),
       speech: Math.round(speeches[i]! * 100) / 100,
       ...(sc.section ? { section: sc.section } : {}),
+      ...(sc.stop ? { stop: true as const } : {}),
     };
     start = end;
     return row;
@@ -307,11 +329,19 @@ export function writeTiming(work: string, script: Script): Timing {
 
 function parseTimingScene(row: unknown): TimingScene | null {
   if (!isRecord(row)) return null;
-  const { id, name, start, dur, speech, section } = row;
+  const { id, name, start, dur, speech, section, stop } = row;
   if (typeof id !== "string" || typeof name !== "string") return null;
   if (typeof start !== "number" || typeof dur !== "number" || typeof speech !== "number")
     return null;
-  return { id, name, start, dur, speech, ...(isSection(section) ? { section } : {}) };
+  return {
+    id,
+    name,
+    start,
+    dur,
+    speech,
+    ...(isSection(section) ? { section } : {}),
+    ...(stop === true ? { stop } : {}),
+  };
 }
 
 export function loadTiming(work: string): Timing {
