@@ -36,34 +36,30 @@ export function timingTable(t: Timing): string {
   return lines.join("\n");
 }
 
-// Where the voice before each drop ends against the bar before the drop. When the music stops in that
-// bar, it must hold no voice (skills/rich/SKILL.md), so an overrun is given with the characters to
-// cut at that scene's own speaking rate. Found by hand in #87: 1:31 reading the bar code, then 40 s.
-const QUIET_CHARS = /[\s、。，．！？!?「」『』（）()・…ー]/g;
-export function stopBarLines(
-  t: Timing,
-  script: Pick<Script, "lead"> & { scenes: { id: string; narration: string }[] }
-): string[] {
+// Where the voice before each drop (and the scene with "stop") ends against the bar before it. When
+// the music stops in that bar, it must hold no voice (skills/rich/SKILL.md). Cutting the line does not
+// clear it: the section moves a bar earlier with a shorter voice, and a new take speaks at its own
+// pace (#111). "stop" lays a whole bar out before the scene instead (gridScenes in work.ts).
+export function stopBarLines(t: Timing, script: Pick<Script, "lead">): string[] {
   if (!t.bpm) return [];
   const bar = 240 / t.bpm;
   const lines: string[] = [];
   t.scenes.forEach((s, i) => {
     const prev = t.scenes[i - 1];
-    if (s.section !== "drop" || !prev) return;
-    const from = s.start - bar;
+    if ((s.section !== "drop" && !s.stop) || !prev) return;
+    const from = s.start - bar,
+      part = s.section ?? "scene";
     const voiceEnd = prev.start + script.lead + prev.speech;
-    const head = `bar before drop "${s.id}" (${clock(from)}-${clock(s.start)}): the voice of "${prev.id}"`;
+    const head = `bar before ${part} "${s.id}" (${clock(from)}-${clock(s.start)}): the voice of "${prev.id}"`;
     const over = voiceEnd - from;
-    if (over <= 0) {
-      lines.push(`${head} ends ${(-over).toFixed(2)} s before it`);
-      return;
-    }
-    const text = script.scenes.find((sc) => sc.id === prev.id)?.narration ?? "";
-    const voiced = text.replace(QUIET_CHARS, "").length;
-    const cut = Math.max(1, Math.ceil((over * voiced) / Math.max(prev.speech, 0.1)));
-    lines.push(
-      `${head} runs ${over.toFixed(2)} s into it; if the music stops there, cut about ${cut} character${cut > 1 ? "s" : ""}`
-    );
+    if (over <= 0)
+      lines.push(
+        `${head} ends ${(-over).toFixed(2)} s before it${s.stop ? "; the music stops there" : ""}`
+      );
+    else
+      lines.push(
+        `${head} runs ${over.toFixed(2)} s into it; to stop the music there, give "${s.id}" "stop": true (a shorter line would move the ${part} a bar earlier with it)`
+      );
   });
   return lines;
 }

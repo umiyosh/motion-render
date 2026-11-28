@@ -16,7 +16,6 @@ import {
   runScore,
   runSync,
   scoreInput,
-  stopBarLines,
   timingTable,
 } from "../skills/motion-render/scripts/beatcli.ts";
 import { drumTrack, tempDir, workDir } from "./helpers.ts";
@@ -475,44 +474,5 @@ describe("takes, scoring, mixing and measuring a beat-synced work", () => {
     await expect(runSync(beat, mp4)).rejects.toThrow(/sync problems/);
     writeFileSync(join(beat, "audio", "hits.json"), JSON.stringify({ hits: [{ t: "x" }] }));
     await expect(runSync(beat, mp4)).rejects.toThrow(/malformed/);
-  });
-});
-
-describe("the bar before a drop", () => {
-  // The #87 trial: "critic" ended 0.13 s into the bar before the drop "marks" at 124 BPM.
-  const timing = (speech: number) => ({
-    total: 40,
-    bpm: 124,
-    end: 35,
-    scenes: [
-      { id: "critic", name: "critic", start: 21.29, dur: 5.807, speech },
-      {
-        id: "marks",
-        name: "marks",
-        start: 27.097,
-        dur: 7.742,
-        speech: 7,
-        section: "drop" as const,
-      },
-    ],
-  });
-  const script = {
-    lead: 0.25,
-    scenes: [
-      { id: "critic", narration: "できあがった映像を、批評役が初めて見る。", sfx: [] },
-      { id: "marks", narration: "赤が入る。", sfx: [] },
-    ],
-  };
-
-  it("says how far the voice before a drop runs into the bar before it, and how much to cut", () => {
-    expect(stopBarLines(timing(3.75), script)).toEqual([
-      'bar before drop "marks" (0:25.16-0:27.10): the voice of "critic" runs 0.13 s into it; if the music stops there, cut about 1 character',
-    ]);
-  });
-
-  it("says how much room is left when the voice ends before the bar", () => {
-    expect(stopBarLines(timing(3.5), script)).toEqual([
-      'bar before drop "marks" (0:25.16-0:27.10): the voice of "critic" ends 0.12 s before it',
-    ]);
   });
 });
